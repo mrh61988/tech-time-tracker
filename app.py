@@ -398,17 +398,30 @@ if time_file and ops_file:
             else:
                 st.success("No techs with unaccounted time!")
                 
-        # 2. Workflow Violations (Skipped Status)
+        # 2. Workflow Violations (Skipped Status explicitly showing what was missed)
         with colB:
             st.subheader("⚠️ Workflow Violations")
-            st.markdown("*(Tech skipped 'On The Way' status)*")
+            st.markdown("*(Jobs with missed status updates)*")
             
-            skipped_df = ops_df[(ops_df['In Progress - Completed Total Time in Status'] > 0) & 
-                                (ops_df['On The Way - Completed Total Time in Status'] == 0)].copy()
+            violations = []
             
-            if not skipped_df.empty:
-                skipped_df['Wrench Time'] = skipped_df['Wrench_Time_Hrs'].apply(format_hm)
-                show_skipped = skipped_df[['Assigned Team Members', 'Short_Date', 'Wrench Time']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
+            # Condition A: Skipped On The Way
+            otw_skip = ops_df[(ops_df['In Progress - Completed Total Time in Status'] > 0) & 
+                              (ops_df['On The Way - Completed Total Time in Status'] == 0)].copy()
+            if not otw_skip.empty:
+                otw_skip['Missed Status'] = "Did not log 'On The Way'"
+                violations.append(otw_skip)
+                
+            # Condition B: Skipped In Progress
+            ip_skip = ops_df[(ops_df['On The Way - Completed Total Time in Status'] > 0) & 
+                             (ops_df['In Progress - Completed Total Time in Status'] == 0)].copy()
+            if not ip_skip.empty:
+                ip_skip['Missed Status'] = "Did not log 'In Progress'"
+                violations.append(ip_skip)
+
+            if violations:
+                skipped_df = pd.concat(violations, ignore_index=True)
+                show_skipped = skipped_df[['Assigned Team Members', 'Short_Date', 'Missed Status']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
                 st.dataframe(show_skipped, use_container_width=True)
             else:
                 st.success("Great job! No skipped statuses detected.")
