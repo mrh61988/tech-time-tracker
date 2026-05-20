@@ -110,7 +110,6 @@ def highlight_bench_col(s):
             tech_str, div_str = val.split(' (Div: ')
             t_h = parse_hm(tech_str)
             d_h = parse_hm(div_str.replace(')', ''))
-            # If the tech is > 25% higher than the division average, highlight red
             if t_h > d_h * 1.25 and t_h > 0:
                 styles.append('background-color: #ffcccc; color: #990000;')
             else:
@@ -147,8 +146,26 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
 
     st.markdown("<br>", unsafe_allow_html=True)
     
-    colA, colB = st.columns(2)
-    with colA:
+    trend_col, leaderboard_col = st.columns(2)
+    
+    with trend_col:
+        st.subheader("📈 Daily Division Health Trend")
+        st.markdown("*(Combined team efficiency analyzed day-by-day)*")
+        trend_data = []
+        for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
+            day_clocked = final_df[f'{d}_Clocked_Hrs'].sum()
+            day_job = final_df[f'{d}_Job_Hrs'].sum()
+            day_eff = (day_job / day_clocked * 100) if day_clocked > 0 else 0.0
+            trend_data.append({
+                "Day": d, 
+                "Total Clocked": format_hm(day_clocked), 
+                "Total Job Time": format_hm(day_job), 
+                "Efficiency Score": f"{day_eff:.1f}%"
+            })
+        trend_df = pd.DataFrame(trend_data)
+        st.dataframe(trend_df, use_container_width=True)
+
+    with leaderboard_col:
         st.subheader("🚨 Team Leaderboard")
         st.markdown("*(Whole team sorted by highest unaccounted time)*")
         leaderboard_df = final_df.sort_values(by='Total_Weekly_Diff_Hrs', ascending=False).copy()
@@ -171,50 +188,67 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         else:
             st.info("No tech data available to display.")
             
-    with colB:
-        st.subheader("💾 1-Click Payroll Export")
-        st.markdown("*(Download the clean, finalized weekly calculations)*")
-        csv_data = export_df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="Download Final Weekly Report (CSV)",
-            data=csv_data,
-            file_name="Tech_Time_Weekly_Summary.csv",
-            mime="text/csv",
-            key=f"download_{tab_key}"
-        )
+    st.markdown("<br>", unsafe_allow_html=True)
+    csv_data = export_df.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="💾 Download Final Weekly Report (CSV for Payroll/HR)",
+        data=csv_data,
+        file_name="Tech_Time_Weekly_Summary.csv",
+        mime="text/csv",
+        key=f"download_{tab_key}"
+    )
 
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
-    # === OPS MANAGER TOOLS (BENCHMARKING) ===
-    st.header("📊 Ops Manager Tools (Benchmarking)")
-    st.markdown("*(Compare individual average times per job against the division average. Red highlights flag techs >25% slower than the company baseline)*")
+    # === OPS MANAGER TOOLS (BENCHMARKING & REWARDS) ===
+    st.header("📊 Ops Manager Tools (Benchmarking & Performance)")
     
-    valid_jobs = ops_df[ops_df['Total_Job_Time_Hours'] > 0]
-    div_avg_drive = valid_jobs['Drive_Time_Hrs'].mean()
-    div_avg_store = valid_jobs['Store_Time_Hrs'].mean()
-    div_avg_ip = valid_jobs['In_Progress_Time_Hrs'].mean()
+    bench_col, gold_star_col = st.columns(2)
     
-    tech_avg = valid_jobs.groupby('Assigned Team Members')[['Drive_Time_Hrs', 'Store_Time_Hrs', 'In_Progress_Time_Hrs']].mean().reset_index()
-    
-    def format_bench(val, div_val):
-        if pd.isna(val): return "-"
-        return f"{format_hm(val)} (Div: {format_hm(div_val)})"
+    with bench_col:
+        st.subheader("📋 Team Processing Baselines")
+        st.markdown("*(Individual average vs. Division baseline. Red flags show techs >25% slower than average)*")
+        valid_jobs = ops_df[ops_df['Total_Job_Time_Hours'] > 0]
+        div_avg_drive = valid_jobs['Drive_Time_Hrs'].mean()
+        div_avg_store = valid_jobs['Store_Time_Hrs'].mean()
+        div_avg_ip = valid_jobs['In_Progress_Time_Hrs'].mean()
         
-    tech_avg['Avg Drive/Job'] = tech_avg['Drive_Time_Hrs'].apply(lambda x: format_bench(x, div_avg_drive))
-    tech_avg['Avg Store/Job'] = tech_avg['Store_Time_Hrs'].apply(lambda x: format_bench(x, div_avg_store))
-    tech_avg['Avg In-Progress/Job'] = tech_avg['In_Progress_Time_Hrs'].apply(lambda x: format_bench(x, div_avg_ip))
-    
-    show_bench = tech_avg[['Assigned Team Members', 'Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job']].rename(columns={'Assigned Team Members': 'Name'})
-    
-    try:
-        styled_bench = show_bench.style.hide(axis="index").apply(highlight_bench_col, subset=['Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job'])
-    except Exception:
-        try:
-            styled_bench = show_bench.style.hide_index().apply(highlight_bench_col, subset=['Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job'])
-        except:
-            styled_bench = show_bench.style.apply(highlight_bench_col, subset=['Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job'])
+        tech_avg = valid_jobs.groupby('Assigned Team Members')[['Drive_Time_Hrs', 'Store_Time_Hrs', 'In_Progress_Time_Hrs']].mean().reset_index()
+        
+        def format_bench(val, div_val):
+            if pd.isna(val): return "-"
+            return f"{format_hm(val)} (Div: {format_hm(div_val)})"
             
-    st.dataframe(styled_bench, use_container_width=True)
+        tech_avg['Avg Drive/Job'] = tech_avg['Drive_Time_Hrs'].apply(lambda x: format_bench(x, div_avg_drive))
+        tech_avg['Avg Store/Job'] = tech_avg['Store_Time_Hrs'].apply(lambda x: format_bench(x, div_avg_store))
+        tech_avg['Avg In-Original/Job'] = tech_avg['In_Progress_Time_Hrs'].apply(lambda x: format_bench(x, div_avg_ip))
+        
+        show_bench = tech_avg[['Assigned Team Members', 'Avg Drive/Job', 'Avg Store/Job', 'Avg In-Original/Job']].rename(columns={'Assigned Team Members': 'Name', 'Avg In-Original/Job': 'Avg In-Progress/Job'})
+        try:
+            styled_bench = show_bench.style.hide(axis="index").apply(highlight_bench_col, subset=['Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job'])
+        except Exception:
+            styled_bench = show_bench.style.apply(highlight_bench_col, subset=['Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job'])
+        st.dataframe(styled_bench, use_container_width=True)
+
+    with gold_star_col:
+        st.subheader("⭐ The \"Gold Star\" High-Performer List")
+        st.markdown("*(Technicians with ≤ 1 hour of total unaccounted time. Store delays do NOT penalize techs)*")
+        
+        # FIXED: Removed the excessive store time filter so slow store trips do not knock technicians off their awards list
+        gold_star_df = final_df[(final_df['Total_Weekly_Diff_Hrs'] <= 1.0) & (final_df['Days_Worked'] > 0)].copy()
+        
+        if not gold_star_df.empty:
+            gold_star_df['Total Clocked'] = gold_star_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
+            gold_star_df['Total Job Time'] = gold_star_df['Total_Weekly_Job_Hrs'].apply(format_hm)
+            gold_star_df['Total Diff'] = gold_star_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
+            show_gold = gold_star_df[['Name', 'Total Clocked', 'Total Job Time', 'Total Diff']].copy()
+            try:
+                styled_gold = show_gold.style.hide(axis="index").set_properties(**{'background-color': '#e6f4ea', 'color': '#137333'})
+            except Exception:
+                styled_gold = show_gold.style.set_properties(**{'background-color': '#e6f4ea', 'color': '#137333'})
+            st.dataframe(styled_gold, use_container_width=True)
+        else:
+            st.info("No technicians qualified for the Gold Star list this week.")
 
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
@@ -257,16 +291,22 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     st.markdown("<br>", unsafe_allow_html=True)
     
     colC, colD = st.columns(2)
+    
+    # REBRANDED: Framed to highlight store operational inefficiencies and metrics for ammunition against Lowe's delays
     with colC:
-        st.subheader("🛑 Excessive Store Time")
-        st.markdown("*(Jobs where tech spent > 60 minutes in Lowe's Status)*")
+        st.subheader("🛒 Lowe's Operational Delays")
+        st.markdown("*(Visits where the store took > 60 minutes, delaying your tech's schedule)*")
         excessive_df = ops_df[ops_df['Store_Time_Hrs'] > 1.0].copy()
         if not excessive_df.empty:
+            total_delayed_store_hrs = excessive_df['Store_Time_Hrs'].sum()
+            store_loss_cost = total_delayed_store_hrs * rate
+            st.markdown(f"⏱️ **Total Field Hours Lost at Lowe's:** `{total_delayed_store_hrs:.1f} hrs` | 💸 **Cost of Store Inefficiencies:** `${store_loss_cost:,.2f}`")
+            
             excessive_df['Store Time'] = excessive_df['Store_Time_Hrs'].apply(format_hm)
             show_excessive = excessive_df[['Assigned Team Members', 'Short_Date', 'Store Time']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
             st.dataframe(show_excessive, use_container_width=True)
         else:
-            st.success("No excessive store times detected.")
+            st.success("Great job! No store operational delays detected this week.")
             
     with colD:
         st.subheader("⏱️ Weekly Status Breakdown")
@@ -285,7 +325,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         st.subheader("🔮 Predictive Planning")
         st.markdown("*(Average total turnaround time per job to help block future calendar schedules)*")
         avg_job_len = ops_df[ops_df['Total_Job_Time_Hours'] > 0].groupby('Assigned Team Members')['Total_Job_Time_Hours'].mean().reset_index()
-        
         if not avg_job_len.empty:
             avg_job_len['Avg Total Job Length'] = avg_job_len['Total_Job_Time_Hours'].apply(format_hm)
             show_avg_len = avg_job_len[['Assigned Team Members', 'Avg Total Job Length']].rename(columns={'Assigned Team Members': 'Name'})
@@ -296,8 +335,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     with colF:
         st.subheader("🗺️ Route Optimization Flags")
         st.markdown("*(Days where > 40% of job time was driving. Shows Job Count, Drive Time, and Work Time for context)*")
-        
-        # Aggregate Job count, Drive time, Work time, and Total job time per day
         daily_route = ops_df.groupby(['Assigned Team Members', 'Short_Date']).agg(
             Drive_Time_Hrs=('Drive_Time_Hrs', 'sum'),
             In_Progress_Time_Hrs=('In_Progress_Time_Hrs', 'sum'),
@@ -305,10 +342,8 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
             Job_Count=('Total_Job_Time_Hours', 'size')
         ).reset_index()
         
-        # Filter out days with zero total job time to avoid division by zero
         daily_route = daily_route[daily_route['Total_Job_Time_Hours'] > 0].copy()
         daily_route['Drive %'] = (daily_route['Drive_Time_Hrs'] / daily_route['Total_Job_Time_Hours']) * 100
-        
         poor_routes = daily_route[daily_route['Drive %'] > 40.0].copy()
         
         if not poor_routes.empty:
@@ -324,7 +359,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
             st.dataframe(show_poor_routes, use_container_width=True)
         else:
             st.success("Great routing! No days hit > 40% drive time.")
-
 # ------------------------------
 
 if time_file and ops_file:
@@ -385,7 +419,6 @@ if time_file and ops_file:
         ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
         ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On The Way - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
-        
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
         
         ts_cols = [
@@ -397,7 +430,6 @@ if time_file and ops_file:
         ]
         
         available_ts_cols = [c for c in ts_cols if c in ops_df.columns]
-        
         ops_df['Job_Date'] = ops_df[available_ts_cols].bfill(axis=1).iloc[:, 0]
         
         for c in available_ts_cols:
@@ -405,7 +437,6 @@ if time_file and ops_file:
         
         ops_df['Earliest_Start'] = ops_df[[c + '_dt' for c in available_ts_cols]].min(axis=1)
         ops_df['Estimated_End'] = ops_df['Earliest_Start'] + pd.to_timedelta(ops_df['Total_Job_Time_Hours'] * 3600, unit='s')
-        
         ops_df['Job_Date_Parsed'] = pd.to_datetime(ops_df['Job_Date'].astype(str).str.split(' GMT').str[0], errors='coerce')
         ops_df['Day_of_Week'] = ops_df['Job_Date_Parsed'].dt.day_name().str[:3]
         ops_df['Short_Date'] = ops_df['Job_Date_Parsed'].dt.strftime('%m-%d-%Y')
@@ -495,7 +526,6 @@ if time_file and ops_file:
             st.markdown('<h3 class="hide-on-print">Weekly Summary</h3>', unsafe_allow_html=True)
             styled_weekly = display_dfs['Weekly'].style.apply(highlight_weekly_row, axis=1)
             st.dataframe(styled_weekly, use_container_width=True)
-            
             show_advanced_reporting(ops_df, final_df, export_df, tab_key="summary_tab")
             
         with tabs[1]:
@@ -510,7 +540,6 @@ if time_file and ops_file:
                 
                 report_data = []
                 day_mapping_long = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
-                
                 for full_day, short_day in day_mapping_long.items():
                     report_data.append({
                         "Day": full_day,
@@ -554,7 +583,6 @@ if time_file and ops_file:
                 
                 report_data = []
                 day_mapping_long = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
-                
                 for full_day, short_day in day_mapping_long.items():
                     report_data.append({
                         "Day": full_day,
