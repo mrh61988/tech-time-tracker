@@ -136,21 +136,34 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     
     colA, colB = st.columns(2)
     with colA:
-        st.subheader("🚨 Top 5 Offenders Leaderboard")
-        st.markdown("*(Highest unaccounted time for the week)*")
-        leaderboard_df = final_df[final_df['Total_Weekly_Diff_Hrs'] > 0].sort_values(by='Total_Weekly_Diff_Hrs', ascending=False).head(5).copy()
+        st.subheader("🚨 Team Leaderboard")
+        st.markdown("*(Whole team sorted by highest unaccounted time)*")
+        
+        # Sort the entire team by difference, removing the .head(5) limitation
+        leaderboard_df = final_df.sort_values(by='Total_Weekly_Diff_Hrs', ascending=False).copy()
+        
         if not leaderboard_df.empty:
             leaderboard_df['Total Clocked'] = leaderboard_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
             leaderboard_df['Total Job Time'] = leaderboard_df['Total_Weekly_Job_Hrs'].apply(format_hm)
             leaderboard_df['Total Diff'] = leaderboard_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
+            
             show_leaderboard = leaderboard_df[['Name', 'Total Clocked', 'Total Job Time', 'Total Diff']].copy()
+            
+            # Custom function to only paint rows red if their unaccounted time is greater than zero
+            def highlight_leaderboard(row):
+                val = parse_diff_to_hours(row['Total Diff'])
+                if val > 0:
+                    return ['background-color: #ffcccc; color: #990000;'] * len(row)
+                return [''] * len(row)
+                
             try:
-                styled_leaderboard = show_leaderboard.style.hide(axis="index").set_properties(**{'background-color': '#ffcccc', 'color': '#990000'})
+                styled_leaderboard = show_leaderboard.style.hide(axis="index").apply(highlight_leaderboard, axis=1)
             except Exception:
-                styled_leaderboard = show_leaderboard.style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000'})
+                styled_leaderboard = show_leaderboard.style.apply(highlight_leaderboard, axis=1)
+                
             st.dataframe(styled_leaderboard, use_container_width=True)
         else:
-            st.success("No techs with unaccounted time!")
+            st.info("No tech data available to display.")
             
     with colB:
         st.subheader("💾 1-Click Payroll Export")
