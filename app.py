@@ -248,7 +248,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
                 return "⚠️ Low Consistency"
             return "⭐ High Consistency"
             
-        # FIXED: Completed syntax closures for all string mutations below
         tech_stats['Avg Drive/Job'] = tech_stats['Drive_Avg'].apply(lambda x: format_bench(x, div_avg_drive))
         tech_stats['Avg Store/Job'] = tech_stats['Store_Avg'].apply(lambda x: format_bench(x, div_avg_store))
         tech_stats['Avg In-Progress/Job'] = tech_stats['IP_Avg'].apply(lambda x: format_bench(x, div_avg_ip))
@@ -332,8 +331,9 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     
     with colC:
         st.subheader("🛒 Lowe's Operational Delays")
-        st.markdown("*(Visits where the store took > 60 minutes, delaying your tech's schedule)*")
-        excessive_df = ops_df[ops_df['Store_Time_Hrs'] > 1.0].copy()
+        # FIXED: Shifted threshold from 1.0 (60 mins) to 0.75 (45 mins) per request
+        st.markdown("*(Visits where the store took > 45 minutes, delaying your tech's schedule)*")
+        excessive_df = ops_df[ops_df['Store_Time_Hrs'] > 0.75].copy()
         if not excessive_df.empty:
             total_delayed_store_hrs = excessive_df['Store_Time_Hrs'].sum()
             store_loss_cost = total_delayed_store_hrs * rate
