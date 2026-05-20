@@ -319,7 +319,11 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         bounds_df['Last Status Update'] = bounds_df['Last_Punch'].dt.strftime('%I:%M %p')
         bounds_df['Total_Span_Hrs'] = (bounds_df['Last_Punch'] - bounds_df['First_Punch']).dt.total_seconds() / 3600.0
         bounds_df['Total Time'] = bounds_df['Total_Span_Hrs'].apply(format_hm)
-        show_bounds = bounds_df[['Assigned Team Members', 'Short_Date', 'First Status Update', 'Last Status Update', 'Total Time']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
+        
+        # FIXED: Sort the daily bounds dataframe by Total_Span_Hrs from highest to lowest
+        bounds_sorted_df = bounds_df.sort_values(by='Total_Span_Hrs', ascending=False).copy()
+        
+        show_bounds = bounds_sorted_df[['Assigned Team Members', 'Short_Date', 'First Status Update', 'Last Status Update', 'Total Time']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
         st.dataframe(show_bounds, use_container_width=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
