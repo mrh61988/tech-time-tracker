@@ -225,12 +225,14 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         div_avg_drive = valid_jobs['Drive_Time_Hrs'].mean()
         div_avg_store = valid_jobs['Store_Time_Hrs'].mean()
         div_avg_ip = valid_jobs['In_Progress_Time_Hrs'].mean()
+        div_avg_total = valid_jobs['Total_Job_Time_Hours'].mean()
         
         # Calculate consistency metrics based on the standard deviation of In Progress times
         tech_stats = valid_jobs.groupby('Assigned Team Members').agg(
             Drive_Avg=('Drive_Time_Hrs', 'mean'),
             Store_Avg=('Store_Time_Hrs', 'mean'),
             IP_Avg=('In_Progress_Time_Hrs', 'mean'),
+            Total_Avg=('Total_Job_Time_Hours', 'mean'),
             IP_Std=('In_Progress_Time_Hrs', 'std'),
             Job_Count=('Total_Job_Time_Hours', 'size')
         ).reset_index()
@@ -242,7 +244,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         def assign_predictability(row):
             if row['Job_Count'] < 2 or pd.isna(row['IP_Std']):
                 return "Establishing Baseline"
-            # High standard deviation (greater than 45 minutes of variance) flags low consistency
             if row['IP_Std'] > 0.75:
                 return "⚠️ Low Consistency"
             return "⭐ High Consistency"
@@ -250,16 +251,17 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         tech_stats['Avg Drive/Job'] = tech_stats['Drive_Avg'].apply(lambda x: format_bench(x, div_avg_drive))
         tech_stats['Avg Store/Job'] = tech_stats['Store_Avg'].apply(lambda x: format_bench(x, div_avg_store))
         tech_stats['Avg In-Progress/Job'] = tech_stats['IP_Avg'].apply(lambda x: format_bench(x, div_avg_ip))
+        tech_stats['Avg Total Job Length'] = tech_stats['Total_Avg'].apply(lambda x: format_bench(x, div_avg_total))
         tech_stats['Predictability Index'] = tech_stats.apply(assign_predictability, axis=1)
         
-        show_bench = tech_stats[['Assigned Team Members', 'Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job', 'Predictability Index']].rename(columns={'Assigned Team Members': 'Name'})
+        show_bench = tech_stats[['Assigned Team Members', 'Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job', 'Avg Total Job Length', 'Predictability Index']].rename(columns={'Assigned Team Members': 'Name'})
         try:
             styled_bench = show_bench.style.hide(axis="index")\
-                .apply(highlight_bench_col, subset=['Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job'])\
+                .apply(highlight_bench_col, subset=['Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job', 'Avg Total Job Length'])\
                 .apply(highlight_consistency, subset=['Predictability Index'])
         except Exception:
             styled_bench = show_bench.style\
-                .apply(highlight_bench_col, subset=['Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job'])\
+                .apply(highlight_bench_col, subset=['Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job', 'Avg Total Job Length'])\
                 .apply(highlight_consistency, subset=['Predictability Index'])
         st.dataframe(styled_bench, use_container_width=True)
 
