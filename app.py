@@ -186,7 +186,7 @@ if time_file and ops_file:
         # Breakdown columns for Advanced Reporting
         ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
         ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On The Way - Completed Total Time in Status.1', 0)) / 3600.0
-        ops_df['Wrench_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
+        ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
         
@@ -373,7 +373,7 @@ if time_file and ops_file:
         # ADVANCED DIAGNOSTICS SECTION
         # ---------------------------------------------------------
         st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
-        st.header("🔍 Workflow Diagnostics & Advanced Reporting")
+        st.header("🔍 Advanced Reporting")
         
         colA, colB = st.columns(2)
         
@@ -398,39 +398,8 @@ if time_file and ops_file:
             else:
                 st.success("No techs with unaccounted time!")
                 
-        # 2. Workflow Violations (Skipped Status explicitly showing what was missed)
+        # 2. Excessive Store Time Flags
         with colB:
-            st.subheader("⚠️ Workflow Violations")
-            st.markdown("*(Jobs with missed status updates)*")
-            
-            violations = []
-            
-            # Condition A: Skipped On The Way
-            otw_skip = ops_df[(ops_df['In Progress - Completed Total Time in Status'] > 0) & 
-                              (ops_df['On The Way - Completed Total Time in Status'] == 0)].copy()
-            if not otw_skip.empty:
-                otw_skip['Missed Status'] = "Did not log 'On The Way'"
-                violations.append(otw_skip)
-                
-            # Condition B: Skipped In Progress
-            ip_skip = ops_df[(ops_df['On The Way - Completed Total Time in Status'] > 0) & 
-                             (ops_df['In Progress - Completed Total Time in Status'] == 0)].copy()
-            if not ip_skip.empty:
-                ip_skip['Missed Status'] = "Did not log 'In Progress'"
-                violations.append(ip_skip)
-
-            if violations:
-                skipped_df = pd.concat(violations, ignore_index=True)
-                show_skipped = skipped_df[['Assigned Team Members', 'Short_Date', 'Missed Status']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
-                st.dataframe(show_skipped, use_container_width=True)
-            else:
-                st.success("Great job! No skipped statuses detected.")
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        colC, colD = st.columns(2)
-
-        # 3. Excessive Store Time Flags
-        with colC:
             st.subheader("🛑 Excessive Store Time")
             st.markdown("*(Jobs where tech spent > 60 minutes in Lowe's Status)*")
             
@@ -443,19 +412,20 @@ if time_file and ops_file:
             else:
                 st.success("No excessive store times detected.")
                 
-        # 4. Status Breakdown Table (Weekly Sums)
-        with colD:
-            st.subheader("⏱️ Weekly Status Breakdown")
-            st.markdown("*(Drive vs. Store vs. Wrench Time)*")
-            
-            breakdown_agg = ops_df.groupby('Assigned Team Members')[['Drive_Time_Hrs', 'Store_Time_Hrs', 'Wrench_Time_Hrs']].sum().reset_index()
-            
-            breakdown_agg['Drive Time'] = breakdown_agg['Drive_Time_Hrs'].apply(format_hm)
-            breakdown_agg['Store Time'] = breakdown_agg['Store_Time_Hrs'].apply(format_hm)
-            breakdown_agg['Wrench Time'] = breakdown_agg['Wrench_Time_Hrs'].apply(format_hm)
-            
-            show_breakdown = breakdown_agg[['Assigned Team Members', 'Drive Time', 'Store Time', 'Wrench Time']].rename(columns={'Assigned Team Members': 'Name'})
-            st.dataframe(show_breakdown, use_container_width=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # 3. Status Breakdown Table (Weekly Sums)
+        st.subheader("⏱️ Weekly Status Breakdown")
+        st.markdown("*(Drive vs. Store vs. In Progress Time)*")
+        
+        breakdown_agg = ops_df.groupby('Assigned Team Members')[['Drive_Time_Hrs', 'Store_Time_Hrs', 'In_Progress_Time_Hrs']].sum().reset_index()
+        
+        breakdown_agg['Drive Time'] = breakdown_agg['Drive_Time_Hrs'].apply(format_hm)
+        breakdown_agg['Store Time'] = breakdown_agg['Store_Time_Hrs'].apply(format_hm)
+        breakdown_agg['In Progress Time'] = breakdown_agg['In_Progress_Time_Hrs'].apply(format_hm)
+        
+        show_breakdown = breakdown_agg[['Assigned Team Members', 'Drive Time', 'Store Time', 'In Progress Time']].rename(columns={'Assigned Team Members': 'Name'})
+        st.dataframe(show_breakdown, use_container_width=True)
             
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
