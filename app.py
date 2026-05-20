@@ -107,14 +107,27 @@ def highlight_bench_col(s):
     styles = []
     for val in s:
         try:
-            tech_str, div_str = val.split(' (Div: ')
-            t_h = parse_hm(tech_str)
-            d_h = parse_hm(div_str.replace(')', ''))
-            if t_h > d_h * 1.25 and t_h > 0:
-                styles.append('background-color: #ffcccc; color: #990000;')
-            else:
-                styles.append('')
+            if ' (Div: ' in str(val):
+                tech_str, div_str = val.split(' (Div: ')
+                t_h = parse_hm(tech_str)
+                d_h = parse_hm(div_str.replace(')', ''))
+                if t_h > d_h * 1.25 and t_h > 0:
+                    styles.append('background-color: #ffcccc; color: #990000;')
+                    continue
+            styles.append('')
         except:
+            styles.append('')
+    return styles
+
+# Custom highlight rule for consistency grades
+def highlight_consistency(s):
+    styles = []
+    for val in s:
+        if val == "⚠️ Low Consistency":
+            styles.append('background-color: #ffcccc; color: #990000; font-weight: bold;')
+        elif val == "⭐ High Consistency":
+            styles.append('background-color: #e6f4ea; color: #137333; font-weight: bold;')
+        else:
             styles.append('')
     return styles
 
@@ -206,35 +219,54 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     bench_col, gold_star_col = st.columns(2)
     
     with bench_col:
-        st.subheader("📋 Team Processing Baselines")
+        st.subheader("📋 Team Processing Baselines & Predictability")
         st.markdown("*(Individual average vs. Division baseline. Red flags show techs >25% slower than average)*")
         valid_jobs = ops_df[ops_df['Total_Job_Time_Hours'] > 0]
         div_avg_drive = valid_jobs['Drive_Time_Hrs'].mean()
         div_avg_store = valid_jobs['Store_Time_Hrs'].mean()
         div_avg_ip = valid_jobs['In_Progress_Time_Hrs'].mean()
         
-        tech_avg = valid_jobs.groupby('Assigned Team Members')[['Drive_Time_Hrs', 'Store_Time_Hrs', 'In_Progress_Time_Hrs']].mean().reset_index()
+        # Calculate consistency metrics based on the standard deviation of In Progress times
+        tech_stats = valid_jobs.groupby('Assigned Team Members').agg(
+            Drive_Avg=('Drive_Time_Hrs', 'mean'),
+            Store_Avg=('Store_Time_Hrs', 'mean'),
+            IP_Avg=('In_Progress_Time_Hrs', 'mean'),
+            IP_Std=('In_Progress_Time_Hrs', 'std'),
+            Job_Count=('Total_Job_Time_Hours', 'size')
+        ).reset_index()
         
         def format_bench(val, div_val):
             if pd.isna(val): return "-"
             return f"{format_hm(val)} (Div: {format_hm(div_val)})"
             
-        tech_avg['Avg Drive/Job'] = tech_avg['Drive_Time_Hrs'].apply(lambda x: format_bench(x, div_avg_drive))
-        tech_avg['Avg Store/Job'] = tech_avg['Store_Time_Hrs'].apply(lambda x: format_bench(x, div_avg_store))
-        tech_avg['Avg In-Original/Job'] = tech_avg['In_Progress_Time_Hrs'].apply(lambda x: format_bench(x, div_avg_ip))
+        def assign_predictability(row):
+            if row['Job_Count'] < 2 or pd.isna(row['IP_Std']):
+                return "Establishing Baseline"
+            # High standard deviation (greater than 45 minutes of variance) flags low consistency
+            if row['IP_Std'] > 0.75:
+                return "⚠️ Low Consistency"
+            return "⭐ High Consistency"
+            
+        tech_stats['Avg Drive/Job'] = tech_stats['Drive_Avg'].apply(lambda x: format_bench(x, div_avg_drive))
+        tech_stats['Avg Store/Job'] = tech_stats['Store_Avg'].apply(lambda x: format_bench(x, div_avg_store))
+        tech_stats['Avg In-Progress/Job'] = tech_stats['IP_Avg'].apply(lambda x: format_bench(x, div_avg_ip))
+        tech_stats['Predictability Index'] = tech_stats.apply(assign_predictability, axis=1)
         
-        show_bench = tech_avg[['Assigned Team Members', 'Avg Drive/Job', 'Avg Store/Job', 'Avg In-Original/Job']].rename(columns={'Assigned Team Members': 'Name', 'Avg In-Original/Job': 'Avg In-Progress/Job'})
+        show_bench = tech_stats[['Assigned Team Members', 'Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job', 'Predictability Index']].rename(columns={'Assigned Team Members': 'Name'})
         try:
-            styled_bench = show_bench.style.hide(axis="index").apply(highlight_bench_col, subset=['Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job'])
+            styled_bench = show_bench.style.hide(axis="index")\
+                .apply(highlight_bench_col, subset=['Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job'])\
+                .apply(highlight_consistency, subset=['Predictability Index'])
         except Exception:
-            styled_bench = show_bench.style.apply(highlight_bench_col, subset=['Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job'])
+            styled_bench = show_bench.style\
+                .apply(highlight_bench_col, subset=['Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job'])\
+                .apply(highlight_consistency, subset=['Predictability Index'])
         st.dataframe(styled_bench, use_container_width=True)
 
     with gold_star_col:
         st.subheader("⭐ The \"Gold Star\" High-Performer List")
         st.markdown("*(Technicians with ≤ 1 hour of total unaccounted time. Store delays do NOT penalize techs)*")
         
-        # FIXED: Removed the excessive store time filter so slow store trips do not knock technicians off their awards list
         gold_star_df = final_df[(final_df['Total_Weekly_Diff_Hrs'] <= 1.0) & (final_df['Days_Worked'] > 0)].copy()
         
         if not gold_star_df.empty:
@@ -292,7 +324,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     
     colC, colD = st.columns(2)
     
-    # REBRANDED: Framed to highlight store operational inefficiencies and metrics for ammunition against Lowe's delays
     with colC:
         st.subheader("🛒 Lowe's Operational Delays")
         st.markdown("*(Visits where the store took > 60 minutes, delaying your tech's schedule)*")
