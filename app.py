@@ -219,7 +219,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
     # === DISPATCHER TOOLS SECTION ===
-    st.header("🛠️ Dispatcher Tools (Daily Accountability)")
+    st.header("🛠️ Dispatcher Tools (Daily Accountability & Planning)")
     
     d_col1, d_col2 = st.columns(2)
     
@@ -277,6 +277,40 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         breakdown_agg['In Progress Time'] = breakdown_agg['In_Progress_Time_Hrs'].apply(format_hm)
         show_breakdown = breakdown_agg[['Assigned Team Members', 'Drive Time', 'Store Time', 'In Progress Time']].rename(columns={'Assigned Team Members': 'Name'})
         st.dataframe(show_breakdown, use_container_width=True)
+        
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    colE, colF = st.columns(2)
+    with colE:
+        st.subheader("🔮 Predictive Planning")
+        st.markdown("*(Average total turnaround time per job to help block future calendar schedules)*")
+        avg_job_len = ops_df[ops_df['Total_Job_Time_Hours'] > 0].groupby('Assigned Team Members')['Total_Job_Time_Hours'].mean().reset_index()
+        
+        if not avg_job_len.empty:
+            avg_job_len['Avg Total Job Length'] = avg_job_len['Total_Job_Time_Hours'].apply(format_hm)
+            show_avg_len = avg_job_len[['Assigned Team Members', 'Avg Total Job Length']].rename(columns={'Assigned Team Members': 'Name'})
+            st.dataframe(show_avg_len, use_container_width=True)
+        else:
+            st.info("No average job lengths to display.")
+
+    with colF:
+        st.subheader("🗺️ Route Optimization Flags")
+        st.markdown("*(Days where a technician spent > 40% of their total job time driving)*")
+        
+        daily_route = ops_df.groupby(['Assigned Team Members', 'Short_Date'])[['Drive_Time_Hrs', 'Total_Job_Time_Hours']].sum().reset_index()
+        # Filter out days with zero total job time to avoid division by zero
+        daily_route = daily_route[daily_route['Total_Job_Time_Hours'] > 0].copy()
+        daily_route['Drive %'] = (daily_route['Drive_Time_Hrs'] / daily_route['Total_Job_Time_Hours']) * 100
+        
+        poor_routes = daily_route[daily_route['Drive %'] > 40.0].copy()
+        
+        if not poor_routes.empty:
+            poor_routes['Drive %'] = poor_routes['Drive %'].apply(lambda x: f"{x:.1f}%")
+            show_poor_routes = poor_routes[['Assigned Team Members', 'Short_Date', 'Drive %']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
+            st.dataframe(show_poor_routes, use_container_width=True)
+        else:
+            st.success("Great routing! No days hit > 40% drive time.")
+
 # ------------------------------
 
 if time_file and ops_file:
@@ -352,11 +386,9 @@ if time_file and ops_file:
         
         ops_df['Job_Date'] = ops_df[available_ts_cols].bfill(axis=1).iloc[:, 0]
         
-        # safely parse timestamps by chopping off the timezone string
         for c in available_ts_cols:
             ops_df[c + '_dt'] = pd.to_datetime(ops_df[c].astype(str).str.split(' GMT').str[0], errors='coerce')
         
-        # Calculate start and end times for gap analysis
         ops_df['Earliest_Start'] = ops_df[[c + '_dt' for c in available_ts_cols]].min(axis=1)
         ops_df['Estimated_End'] = ops_df['Earliest_Start'] + pd.to_timedelta(ops_df['Total_Job_Time_Hours'] * 3600, unit='s')
         
@@ -403,7 +435,6 @@ if time_file and ops_file:
             diff_col = day + '_Diff_Hrs'
             final_df[diff_col] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
             
-            # --- FIX: explicitly assign the formatted job counts to the main DF ---
             final_df[f'{day} Jobs'] = final_df[day + '_Job_Count'].astype(int)
             final_df[f'{day} Clocked'] = final_df[day + '_Clocked_Hrs'].apply(format_hm)
             final_df[f'{day} Job Time'] = final_df[day + '_Job_Hrs'].apply(format_hm)
@@ -436,7 +467,6 @@ if time_file and ops_file:
         weekly_df['Total Diff'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
         display_dfs['Weekly'] = weekly_df
         
-        # Build Export DF for the boss
         export_df = weekly_df.copy()
         for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
             export_df[f'{d} Diff'] = final_df[f'{d} Diff']
