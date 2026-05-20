@@ -103,7 +103,7 @@ def highlight_individual_report(row, days_worked):
     return styles
 
 # --- Advanced Reporting Block Function ---
-def show_advanced_reporting(ops_df, final_df, export_df):
+def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
     # === BOSS TOOLS SECTION ===
@@ -113,7 +113,8 @@ def show_advanced_reporting(ops_df, final_df, export_df):
     
     with b_col1:
         st.markdown("**Calculate Lost Revenue**")
-        rate = st.number_input("Average Tech Hourly Rate ($)", value=25.0, step=1.0)
+        # Added a unique key here to prevent Streamlit duplicate ID error
+        rate = st.number_input("Average Tech Hourly Rate ($)", value=25.0, step=1.0, key=f"rate_{tab_key}")
         
     # Calculate Metrics
     total_clocked = final_df['Total_Weekly_Clocked_Hrs'].sum()
@@ -155,11 +156,13 @@ def show_advanced_reporting(ops_df, final_df, export_df):
         st.subheader("💾 1-Click Payroll Export")
         st.markdown("*(Download the clean, finalized weekly calculations)*")
         csv_data = export_df.to_csv(index=False).encode('utf-8')
+        # Added a unique key here as well to prevent download button duplicate error
         st.download_button(
             label="Download Final Weekly Report (CSV)",
             data=csv_data,
             file_name="Tech_Time_Weekly_Summary.csv",
             mime="text/csv",
+            key=f"download_{tab_key}"
         )
 
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
@@ -301,7 +304,6 @@ if time_file and ops_file:
         
         available_ts_cols = [c for c in ts_cols if c in ops_df.columns]
         
-        # Restore the missing Job_Date column creation step
         ops_df['Job_Date'] = ops_df[available_ts_cols].bfill(axis=1).iloc[:, 0]
         
         # safely parse timestamps by chopping off the timezone string
@@ -385,7 +387,9 @@ if time_file and ops_file:
             st.markdown('<h3 class="hide-on-print">Weekly Summary</h3>', unsafe_allow_html=True)
             styled_weekly = display_dfs['Weekly'].style.apply(highlight_weekly_row, axis=1)
             st.dataframe(styled_weekly, use_container_width=True)
-            show_advanced_reporting(ops_df, final_df, export_df)
+            
+            # Pass a unique key for the widgets on this tab
+            show_advanced_reporting(ops_df, final_df, export_df, tab_key="summary_tab")
             
         with tabs[1]:
             st.markdown('<h3 class="hide-on-print">Manager Overview - All Techs</h3>', unsafe_allow_html=True)
@@ -425,7 +429,9 @@ if time_file and ops_file:
                         styled_report = report_df.style.apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
                 st.table(styled_report)
                 st.markdown("---")
-            show_advanced_reporting(ops_df, final_df, export_df)
+                
+            # Pass a different unique key for the widgets on this tab
+            show_advanced_reporting(ops_df, final_df, export_df, tab_key="manager_tab")
             
         with tabs[2]:
             st.markdown('<h3 class="hide-on-print">Printable Individual Report</h3>', unsafe_allow_html=True)
