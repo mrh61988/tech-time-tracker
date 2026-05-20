@@ -171,10 +171,10 @@ if time_file and ops_file:
             else:
                 ops_df[col] = 0
         
-        # Breakdown columns for Advanced Reporting
-        ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time'] / 3600.0
-        ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time'] + ops_df.get('On The Way - Completed Total Time.1', 0)) / 3600.0
-        ops_df['Wrench_Time_Hrs'] = (ops_df['In Progress - Completed Total Time'] + ops_df.get('In Progress - Completed Total Time.1', 0)) / 3600.0
+        # Breakdown columns for Advanced Reporting (FIXED NAMES)
+        ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
+        ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On The Way - Completed Total Time in Status.1', 0)) / 3600.0
+        ops_df['Wrench_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
         
@@ -355,7 +355,7 @@ if time_file and ops_file:
                 st.dataframe(styled_daily, use_container_width=True)
 
         # ---------------------------------------------------------
-        # NEW SECTION: ADVANCED DIAGNOSTICS (Placed below the tabs)
+        # ADVANCED DIAGNOSTICS SECTION
         # ---------------------------------------------------------
         st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
         st.header("🔍 Workflow Diagnostics & Advanced Reporting")
@@ -371,7 +371,6 @@ if time_file and ops_file:
             
             if not leaderboard_df.empty:
                 show_leaderboard = leaderboard_df[['Name', 'Total Clocked', 'Total Job Time', 'Total Diff']].copy()
-                # Paint it all light red to emphasize attention needed
                 try:
                     styled_leaderboard = show_leaderboard.style.hide(axis="index").set_properties(**{'background-color': '#ffcccc', 'color': '#990000'})
                 except Exception:
@@ -380,14 +379,13 @@ if time_file and ops_file:
             else:
                 st.success("No techs with unaccounted time!")
                 
-        # 2. Workflow Violations (Skipped Status)
+        # 2. Workflow Violations (Skipped Status) - FIXED COLUMN NAMES
         with colB:
             st.subheader("⚠️ Workflow Violations")
             st.markdown("*(Tech skipped 'On The Way' status)*")
             
-            # Logic: Has "In Progress" time but 0 "On The Way" time
-            skipped_df = ops_df[(ops_df['In Progress - Completed Total Time'] > 0) & 
-                                (ops_df['On The Way - Completed Total Time'] == 0)].copy()
+            skipped_df = ops_df[(ops_df['In Progress - Completed Total Time in Status'] > 0) & 
+                                (ops_df['On The Way - Completed Total Time in Status'] == 0)].copy()
             
             if not skipped_df.empty:
                 skipped_df['Wrench Time'] = skipped_df['Wrench_Time_Hrs'].apply(format_hm)
