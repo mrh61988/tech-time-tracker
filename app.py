@@ -271,10 +271,10 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
 
     with gold_star_col:
         st.subheader("⭐ The \"Gold Star\" High-Performer List")
-        # FIXED: Loosened threshold description and logic filter down to 2 hours per request
-        st.markdown("*(Technicians with less than or equal to 2 hours of total unaccounted time. Store delays do NOT penalize techs)*")
+        # UPDATED: Changed threshold description and logic parameter to 6.0 hours
+        st.markdown("*(Technicians with less than or equal to 6 hours of total unaccounted time. Store delays do NOT penalize techs)*")
         
-        gold_star_df = final_df[(final_df['Total_Weekly_Diff_Hrs'] <= 2.0) & (final_df['Days_Worked'] > 0)].copy()
+        gold_star_df = final_df[(final_df['Total_Weekly_Diff_Hrs'] <= 6.0) & (final_df['Days_Worked'] > 0)].copy()
         
         if not gold_star_df.empty:
             gold_star_df['Total Clocked'] = gold_star_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
