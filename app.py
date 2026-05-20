@@ -36,9 +36,10 @@ def parse_hm(time_str):
     except:
         return 0.0
 
-# --- NEW: Styling Functions ---
+# --- Styling Functions ---
 def parse_diff_to_hours(val):
-    """Converts the H:MM string back to a float so we can check if it's over 1 or 5 hours"""
+    """Converts the H:MM string back to a float so we can check the hours"""
+    if val == '-' or pd.isna(val): return 0.0
     try:
         sign = -1 if str(val).startswith('-') else 1
         clean_val = str(val).replace('-', '')
@@ -52,16 +53,22 @@ def parse_diff_to_hours(val):
 def highlight_daily(val):
     """Highlights daily differences strictly greater than 1 hour"""
     hrs = parse_diff_to_hours(val)
-    if hrs > 1.0:  # Over 1 hour of unaccounted time
+    if hrs > 1.0:  # Over 1 hour of unaccounted time for a single day
         return 'background-color: #ffcccc; color: #990000;'
     return ''
 
-def highlight_weekly(val):
-    """Highlights weekly differences strictly greater than 5 hours"""
-    hrs = parse_diff_to_hours(val)
-    if hrs > 5.0:  # Over 5 hours of unaccounted time
-        return 'background-color: #ffcccc; color: #990000;'
-    return ''
+def highlight_weekly_row(row):
+    """Highlights weekly diff if it exceeds (1 hour * Days Worked)"""
+    styles = [''] * len(row)
+    if 'Total Diff' in row and 'Days Worked' in row:
+        diff_idx = row.index.get_loc('Total Diff')
+        diff_hrs = parse_diff_to_hours(row['Total Diff'])
+        days_worked = row['Days Worked']
+        
+        # If unaccounted time is greater than 1 hour per day worked
+        if diff_hrs > (days_worked * 1.0):
+            styles[diff_idx] = 'background-color: #ffcccc; color: #990000;'
+    return styles
 # ------------------------------
 
 # Only run the processing if both files are uploaded
@@ -90,6 +97,9 @@ if time_file and ops_file:
         days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
         for col in days + ['Total_Weekly']:
             time_df[col + '_Clocked_Hrs'] = time_df[col].apply(parse_hm)
+            
+        # Calculate how many days they actually clocked in for
+        time_df['Days_Worked'] = (time_df[[f'{d}_Clocked_Hrs' for d in days]] > 0).sum(axis=1)
         
         # --- 2. Parse Ops Sheet ---
         ops_df = pd.read_csv(ops_file, header=1)
@@ -159,6 +169,7 @@ if time_file and ops_file:
         
         weekly_df = pd.DataFrame()
         weekly_df['Name'] = final_df['Name']
+        weekly_df['Days Worked'] = final_df['Days_Worked']  # Added for clarity
         weekly_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
         weekly_df['Total Job Time'] = final_df['Total_Weekly_Job_Hrs'].apply(format_hm)
         weekly_df['Total Diff'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
@@ -166,19 +177,14 @@ if time_file and ops_file:
         
         st.success("Files processed successfully!")
         
-        # --- 4. Display Results in Tabs (WITH HIGHLIGHTING) ---
+        # --- 4. Display Results in Tabs (WITH DYNAMIC HIGHLIGHTING) ---
         tab_names = ["Weekly Summary", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         tabs = st.tabs(tab_names)
         
         with tabs[0]:
             st.subheader("Weekly Summary")
-            # Apply the weekly style (Red if > 5 hours)
-            try:
-                styled_weekly = display_dfs['Weekly'].style.map(highlight_weekly, subset=['Total Diff'])
-            except AttributeError:
-                # Fallback for older pandas versions
-                styled_weekly = display_dfs['Weekly'].style.applymap(highlight_weekly, subset=['Total Diff'])
-                
+            # Apply the dynamic weekly style (Red if Diff > 1 hr * Days Worked)
+            styled_weekly = display_dfs['Weekly'].style.apply(highlight_weekly_row, axis=1)
             st.dataframe(styled_weekly, use_container_width=True)
             
         day_mapping = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
