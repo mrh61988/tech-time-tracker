@@ -102,6 +102,23 @@ def highlight_individual_report(row, days_worked):
             if diff_hrs > 1.0: styles[diff_idx] = 'background-color: #ffcccc; color: #990000;'
     return styles
 
+# Style function specifically for parsing the benchmarking columns
+def highlight_bench_col(s):
+    styles = []
+    for val in s:
+        try:
+            tech_str, div_str = val.split(' (Div: ')
+            t_h = parse_hm(tech_str)
+            d_h = parse_hm(div_str.replace(')', ''))
+            # If the tech is > 25% higher than the division average, highlight red
+            if t_h > d_h * 1.25 and t_h > 0:
+                styles.append('background-color: #ffcccc; color: #990000;')
+            else:
+                styles.append('')
+        except:
+            styles.append('')
+    return styles
+
 # --- Advanced Reporting Block Function ---
 def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
@@ -113,15 +130,11 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     
     with b_col1:
         st.markdown("**Calculate Lost Revenue**")
-        # Added a unique key here to prevent Streamlit duplicate ID error
         rate = st.number_input("Average Tech Hourly Rate ($)", value=25.0, step=1.0, key=f"rate_{tab_key}")
         
-    # Calculate Metrics
     total_clocked = final_df['Total_Weekly_Clocked_Hrs'].sum()
     total_job = final_df['Total_Weekly_Job_Hrs'].sum()
     efficiency = (total_job / total_clocked * 100) if total_clocked > 0 else 0
-    
-    # Only calculate lost hours for techs who have a POSITIVE difference (unaccounted time)
     lost_hrs = final_df[final_df['Total_Weekly_Diff_Hrs'] > 0]['Total_Weekly_Diff_Hrs'].sum()
     lost_money = lost_hrs * rate
     
@@ -138,29 +151,22 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     with colA:
         st.subheader("🚨 Team Leaderboard")
         st.markdown("*(Whole team sorted by highest unaccounted time)*")
-        
-        # Sort the entire team by difference, removing the .head(5) limitation
         leaderboard_df = final_df.sort_values(by='Total_Weekly_Diff_Hrs', ascending=False).copy()
-        
         if not leaderboard_df.empty:
             leaderboard_df['Total Clocked'] = leaderboard_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
             leaderboard_df['Total Job Time'] = leaderboard_df['Total_Weekly_Job_Hrs'].apply(format_hm)
             leaderboard_df['Total Diff'] = leaderboard_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
             
             show_leaderboard = leaderboard_df[['Name', 'Total Clocked', 'Total Job Time', 'Total Diff']].copy()
-            
-            # Custom function to only paint rows red if their unaccounted time is greater than zero
             def highlight_leaderboard(row):
                 val = parse_diff_to_hours(row['Total Diff'])
                 if val > 0:
                     return ['background-color: #ffcccc; color: #990000;'] * len(row)
                 return [''] * len(row)
-                
             try:
                 styled_leaderboard = show_leaderboard.style.hide(axis="index").apply(highlight_leaderboard, axis=1)
             except Exception:
                 styled_leaderboard = show_leaderboard.style.apply(highlight_leaderboard, axis=1)
-                
             st.dataframe(styled_leaderboard, use_container_width=True)
         else:
             st.info("No tech data available to display.")
@@ -169,7 +175,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         st.subheader("💾 1-Click Payroll Export")
         st.markdown("*(Download the clean, finalized weekly calculations)*")
         csv_data = export_df.to_csv(index=False).encode('utf-8')
-        # Added a unique key here as well to prevent download button duplicate error
         st.download_button(
             label="Download Final Weekly Report (CSV)",
             data=csv_data,
@@ -177,6 +182,39 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
             mime="text/csv",
             key=f"download_{tab_key}"
         )
+
+    st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
+    
+    # === OPS MANAGER TOOLS (BENCHMARKING) ===
+    st.header("📊 Ops Manager Tools (Benchmarking)")
+    st.markdown("*(Compare individual average times per job against the division average. Red highlights flag techs >25% slower than the company baseline)*")
+    
+    valid_jobs = ops_df[ops_df['Total_Job_Time_Hours'] > 0]
+    div_avg_drive = valid_jobs['Drive_Time_Hrs'].mean()
+    div_avg_store = valid_jobs['Store_Time_Hrs'].mean()
+    div_avg_ip = valid_jobs['In_Progress_Time_Hrs'].mean()
+    
+    tech_avg = valid_jobs.groupby('Assigned Team Members')[['Drive_Time_Hrs', 'Store_Time_Hrs', 'In_Progress_Time_Hrs']].mean().reset_index()
+    
+    def format_bench(val, div_val):
+        if pd.isna(val): return "-"
+        return f"{format_hm(val)} (Div: {format_hm(div_val)})"
+        
+    tech_avg['Avg Drive/Job'] = tech_avg['Drive_Time_Hrs'].apply(lambda x: format_bench(x, div_avg_drive))
+    tech_avg['Avg Store/Job'] = tech_avg['Store_Time_Hrs'].apply(lambda x: format_bench(x, div_avg_store))
+    tech_avg['Avg In-Progress/Job'] = tech_avg['In_Progress_Time_Hrs'].apply(lambda x: format_bench(x, div_avg_ip))
+    
+    show_bench = tech_avg[['Assigned Team Members', 'Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job']].rename(columns={'Assigned Team Members': 'Name'})
+    
+    try:
+        styled_bench = show_bench.style.hide(axis="index").apply(highlight_bench_col, subset=['Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job'])
+    except Exception:
+        try:
+            styled_bench = show_bench.style.hide_index().apply(highlight_bench_col, subset=['Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job'])
+        except:
+            styled_bench = show_bench.style.apply(highlight_bench_col, subset=['Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job'])
+            
+    st.dataframe(styled_bench, use_container_width=True)
 
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
@@ -188,15 +226,11 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     with d_col1:
         st.subheader("🕳️ 'Black Hole' Gap Finder")
         st.markdown("*(Gaps between jobs larger than 45 minutes)*")
-        
-        # Calculate gaps
         ops_sorted = ops_df.dropna(subset=['Earliest_Start']).sort_values(['Assigned Team Members', 'Earliest_Start'])
-        # Shift the start time of the NEXT job up one row (grouped by tech and day)
         ops_sorted['Next_Job_Start'] = ops_sorted.groupby(['Assigned Team Members', 'Short_Date'])['Earliest_Start'].shift(-1)
         ops_sorted['Gap_Hrs'] = (ops_sorted['Next_Job_Start'] - ops_sorted['Estimated_End']).dt.total_seconds() / 3600.0
         
-        gaps_df = ops_sorted[ops_sorted['Gap_Hrs'] > 0.75].copy() # > 45 mins
-        
+        gaps_df = ops_sorted[ops_sorted['Gap_Hrs'] > 0.75].copy()
         if not gaps_df.empty:
             gaps_df['Gap Length'] = gaps_df['Gap_Hrs'].apply(format_hm)
             gaps_df['End of Job 1'] = gaps_df['Estimated_End'].dt.strftime('%I:%M %p')
@@ -209,19 +243,14 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     with d_col2:
         st.subheader("🌅 First Job vs. Last Job")
         st.markdown("*(First punch of the morning, last punch of the afternoon)*")
-        
         bounds_df = ops_sorted.groupby(['Assigned Team Members', 'Short_Date']).agg(
             First_Punch=('Earliest_Start', 'min'),
             Last_Punch=('Estimated_End', 'max')
         ).reset_index()
-        
         bounds_df['First Status Update'] = bounds_df['First_Punch'].dt.strftime('%I:%M %p')
         bounds_df['Last Status Update'] = bounds_df['Last_Punch'].dt.strftime('%I:%M %p')
-        
-        # New Column: Calculate total span from first punch to last punch
         bounds_df['Total_Span_Hrs'] = (bounds_df['Last_Punch'] - bounds_df['First_Punch']).dt.total_seconds() / 3600.0
         bounds_df['Total Time'] = bounds_df['Total_Span_Hrs'].apply(format_hm)
-        
         show_bounds = bounds_df[['Assigned Team Members', 'Short_Date', 'First Status Update', 'Last Status Update', 'Total Time']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
         st.dataframe(show_bounds, use_container_width=True)
 
@@ -250,7 +279,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         st.dataframe(show_breakdown, use_container_width=True)
 # ------------------------------
 
-# Only run the processing if both files are uploaded
 if time_file and ops_file:
     try:
         EXCLUDE_NAMES = [
@@ -324,11 +352,9 @@ if time_file and ops_file:
         
         ops_df['Job_Date'] = ops_df[available_ts_cols].bfill(axis=1).iloc[:, 0]
         
-        # safely parse timestamps by chopping off the timezone string
         for c in available_ts_cols:
             ops_df[c + '_dt'] = pd.to_datetime(ops_df[c].astype(str).str.split(' GMT').str[0], errors='coerce')
         
-        # Calculate start and end times for gap analysis
         ops_df['Earliest_Start'] = ops_df[[c + '_dt' for c in available_ts_cols]].min(axis=1)
         ops_df['Estimated_End'] = ops_df['Earliest_Start'] + pd.to_timedelta(ops_df['Total_Job_Time_Hours'] * 3600, unit='s')
         
@@ -353,8 +379,22 @@ if time_file and ops_file:
         job_time_pivot = job_time_pivot.rename(columns=rename_dict)
         job_time_pivot['Total_Weekly_Job_Hrs'] = job_time_pivot[[d + '_Job_Hrs' for d in days]].sum(axis=1)
         
+        # --- Create Daily Job Counts ---
+        job_count_agg = ops_df.groupby(['Assigned Team Members', 'Day_of_Week']).size().reset_index(name='Job_Count')
+        job_count_pivot = job_count_agg.pivot(index='Assigned Team Members', columns='Day_of_Week', values='Job_Count').reset_index()
+        job_count_pivot = job_count_pivot.rename(columns={'Assigned Team Members': 'Name'}).fillna(0)
+        
+        for day in days:
+            if day not in job_count_pivot.columns:
+                job_count_pivot[day] = 0
+                
+        rename_dict_counts = {day: day + '_Job_Count' for day in days}
+        job_count_pivot = job_count_pivot.rename(columns=rename_dict_counts)
+        job_count_pivot['Total_Weekly_Job_Count'] = job_count_pivot[[d + '_Job_Count' for d in days]].sum(axis=1)
+        
         # --- 3. Merge and Calculate Differences ---
         final_df = pd.merge(time_df, job_time_pivot, on='Name', how='left').fillna(0)
+        final_df = pd.merge(final_df, job_count_pivot, on='Name', how='left').fillna(0)
         
         display_dfs = {}
         for day in days:
@@ -366,6 +406,7 @@ if time_file and ops_file:
             
             day_df = pd.DataFrame()
             day_df['Name'] = final_df['Name']
+            day_df[f'{day} Jobs'] = final_df[day + '_Job_Count'].astype(int)
             day_df[f'{day} Clocked'] = final_df[f'{day} Clocked']
             day_df[f'{day} Job Time'] = final_df[f'{day} Job Time']
             day_df[f'{day} Diff'] = final_df[f'{day} Diff']
@@ -374,7 +415,7 @@ if time_file and ops_file:
         manager_cols = ['Name']
         diff_cols_for_style = []
         for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
-            manager_cols.extend([f'{d} Clocked', f'{d} Job Time', f'{d} Diff'])
+            manager_cols.extend([f'{d} Jobs', f'{d} Clocked', f'{d} Job Time', f'{d} Diff'])
             diff_cols_for_style.append(f'{d} Diff')
             
         manager_df = final_df[manager_cols]
@@ -406,7 +447,6 @@ if time_file and ops_file:
             styled_weekly = display_dfs['Weekly'].style.apply(highlight_weekly_row, axis=1)
             st.dataframe(styled_weekly, use_container_width=True)
             
-            # Pass a unique key for the widgets on this tab
             show_advanced_reporting(ops_df, final_df, export_df, tab_key="summary_tab")
             
         with tabs[1]:
@@ -425,6 +465,7 @@ if time_file and ops_file:
                 for full_day, short_day in day_mapping_long.items():
                     report_data.append({
                         "Day": full_day,
+                        "Jobs": int(tech_data[short_day + '_Job_Count']),
                         "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']),
                         "Job Time": format_hm(tech_data[short_day + '_Job_Hrs']),
                         "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])
@@ -432,6 +473,7 @@ if time_file and ops_file:
                 
                 report_data.append({
                     "Day": "TOTAL WEEKLY",
+                    "Jobs": int(tech_data['Total_Weekly_Job_Count']),
                     "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']),
                     "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']),
                     "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])
@@ -448,7 +490,6 @@ if time_file and ops_file:
                 st.table(styled_report)
                 st.markdown("---")
                 
-            # Pass a different unique key for the widgets on this tab
             show_advanced_reporting(ops_df, final_df, export_df, tab_key="manager_tab")
             
         with tabs[2]:
@@ -468,6 +509,7 @@ if time_file and ops_file:
                 for full_day, short_day in day_mapping_long.items():
                     report_data.append({
                         "Day": full_day,
+                        "Jobs": int(tech_data[short_day + '_Job_Count']),
                         "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']),
                         "Job Time": format_hm(tech_data[short_day + '_Job_Hrs']),
                         "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])
@@ -475,6 +517,7 @@ if time_file and ops_file:
                 
                 report_data.append({
                     "Day": "TOTAL WEEKLY",
+                    "Jobs": int(tech_data['Total_Weekly_Job_Count']),
                     "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']),
                     "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']),
                     "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])
