@@ -127,6 +127,15 @@ def highlight_individual_report(row, days_worked):
 # Only run the processing if both files are uploaded
 if time_file and ops_file:
     try:
+        # Define people to exclude (helpers and contractors)
+        EXCLUDE_NAMES = [
+            'Luis Ortiz', 
+            'Roman Twardoz',
+            'Dave Barber Show Low (Contactor)',
+            'Oak Wrench AZ Jarrod Scully (Contractor)',
+            'Presidio Plumbing Eric (Contractor)'
+        ]
+        
         # --- 1. Parse Time Sheet ---
         time_content = time_file.getvalue().decode("utf-8").splitlines()
         time_lines = time_content[1:] 
@@ -146,6 +155,9 @@ if time_file and ops_file:
                 data.append([name, sun, mon, tue, wed, thu, fri, sat, total])
         
         time_df = pd.DataFrame(data, columns=['Name', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Total_Weekly'])
+        
+        # Exclude selected names from time data
+        time_df = time_df[~time_df['Name'].isin(EXCLUDE_NAMES)]
         
         days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
         for col in days + ['Total_Weekly']:
@@ -195,6 +207,9 @@ if time_file and ops_file:
         ops_df['Assigned Team Members'] = ops_df['Assigned Team Members'].astype(str).str.split(',')
         ops_df = ops_df.explode('Assigned Team Members')
         ops_df['Assigned Team Members'] = ops_df['Assigned Team Members'].str.strip()
+        
+        # Exclude selected names from Ops data
+        ops_df = ops_df[~ops_df['Assigned Team Members'].isin(EXCLUDE_NAMES)]
         
         job_time_agg = ops_df.groupby(['Assigned Team Members', 'Day_of_Week'])['Total_Job_Time_Hours'].sum().reset_index()
         job_time_pivot = job_time_agg.pivot(index='Assigned Team Members', columns='Day_of_Week', values='Total_Job_Time_Hours').reset_index()
@@ -370,7 +385,6 @@ if time_file and ops_file:
             leaderboard_df = final_df[final_df['Total_Weekly_Diff_Hrs'] > 0].sort_values(by='Total_Weekly_Diff_Hrs', ascending=False).head(3).copy()
             
             if not leaderboard_df.empty:
-                # Format the columns specifically for the leaderboard display
                 leaderboard_df['Total Clocked'] = leaderboard_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
                 leaderboard_df['Total Job Time'] = leaderboard_df['Total_Weekly_Job_Hrs'].apply(format_hm)
                 leaderboard_df['Total Diff'] = leaderboard_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
