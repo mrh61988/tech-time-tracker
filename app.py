@@ -36,6 +36,34 @@ def parse_hm(time_str):
     except:
         return 0.0
 
+# --- NEW: Styling Functions ---
+def parse_diff_to_hours(val):
+    """Converts the H:MM string back to a float so we can check if it's over 1 or 5 hours"""
+    try:
+        sign = -1 if str(val).startswith('-') else 1
+        clean_val = str(val).replace('-', '')
+        if ':' in clean_val:
+            h, m = map(int, clean_val.split(':'))
+            return sign * (h + m / 60.0)
+    except:
+        pass
+    return 0.0
+
+def highlight_daily(val):
+    """Highlights daily differences strictly greater than 1 hour"""
+    hrs = parse_diff_to_hours(val)
+    if hrs > 1.0:  # Over 1 hour of unaccounted time
+        return 'background-color: #ffcccc; color: #990000;'
+    return ''
+
+def highlight_weekly(val):
+    """Highlights weekly differences strictly greater than 5 hours"""
+    hrs = parse_diff_to_hours(val)
+    if hrs > 5.0:  # Over 5 hours of unaccounted time
+        return 'background-color: #ffcccc; color: #990000;'
+    return ''
+# ------------------------------
+
 # Only run the processing if both files are uploaded
 if time_file and ops_file:
     try:
@@ -75,7 +103,6 @@ if time_file and ops_file:
             'In Progress - Completed Total Time in Status.1'
         ]
         
-        # Ensure columns exist and convert to numeric
         for col in time_cols:
             if col in ops_df.columns:
                 ops_df[col] = pd.to_numeric(ops_df[col], errors='coerce').fillna(0)
@@ -97,17 +124,14 @@ if time_file and ops_file:
         ops_df['Job_Date_Parsed'] = pd.to_datetime(ops_df['Job_Date'].astype(str).str.replace(' GMT-0700', ''), errors='coerce')
         ops_df['Day_of_Week'] = ops_df['Job_Date_Parsed'].dt.day_name().str[:3]
         
-        # Split names if multiple techs are on the same job
         ops_df['Assigned Team Members'] = ops_df['Assigned Team Members'].astype(str).str.split(',')
         ops_df = ops_df.explode('Assigned Team Members')
         ops_df['Assigned Team Members'] = ops_df['Assigned Team Members'].str.strip()
         
-        # Aggregate Job Status Time
         job_time_agg = ops_df.groupby(['Assigned Team Members', 'Day_of_Week'])['Total_Job_Time_Hours'].sum().reset_index()
         job_time_pivot = job_time_agg.pivot(index='Assigned Team Members', columns='Day_of_Week', values='Total_Job_Time_Hours').reset_index()
         job_time_pivot = job_time_pivot.rename(columns={'Assigned Team Members': 'Name'}).fillna(0)
         
-        # Ensure all days exist in the pivot table
         for day in days:
             if day not in job_time_pivot.columns:
                 job_time_pivot[day] = 0.0
@@ -120,7 +144,6 @@ if time_file and ops_file:
         final_df = pd.merge(time_df, job_time_pivot, on='Name', how='left').fillna(0)
         
         display_dfs = {}
-        # Calculate daily differences
         for day in days:
             diff_col = day + '_Diff_Hrs'
             final_df[diff_col] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
@@ -132,7 +155,6 @@ if time_file and ops_file:
             day_df[f'{day} Diff'] = final_df[diff_col].apply(format_hm)
             display_dfs[day] = day_df
         
-        # Calculate weekly differences
         final_df['Total_Weekly_Diff_Hrs'] = final_df['Total_Weekly_Clocked_Hrs'] - final_df['Total_Weekly_Job_Hrs']
         
         weekly_df = pd.DataFrame()
@@ -144,21 +166,35 @@ if time_file and ops_file:
         
         st.success("Files processed successfully!")
         
-        # --- 4. Display Results in Tabs ---
+        # --- 4. Display Results in Tabs (WITH HIGHLIGHTING) ---
         tab_names = ["Weekly Summary", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         tabs = st.tabs(tab_names)
         
         with tabs[0]:
             st.subheader("Weekly Summary")
-            st.dataframe(display_dfs['Weekly'], use_container_width=True)
+            # Apply the weekly style (Red if > 5 hours)
+            try:
+                styled_weekly = display_dfs['Weekly'].style.map(highlight_weekly, subset=['Total Diff'])
+            except AttributeError:
+                # Fallback for older pandas versions
+                styled_weekly = display_dfs['Weekly'].style.applymap(highlight_weekly, subset=['Total Diff'])
+                
+            st.dataframe(styled_weekly, use_container_width=True)
             
-        # Display the specific days in the remaining tabs
         day_mapping = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
-        for i, full_day in enumerate(tab_names[1:]): # Start from index 1 (Monday)
+        for i, full_day in enumerate(tab_names[1:]): 
             with tabs[i+1]:
                 short_day = day_mapping[full_day]
                 st.subheader(f"{full_day} Breakdown")
-                st.dataframe(display_dfs[short_day], use_container_width=True)
+                
+                # Apply the daily style (Red if > 1 hour)
+                try:
+                    styled_daily = display_dfs[short_day].style.map(highlight_daily, subset=[f'{short_day} Diff'])
+                except AttributeError:
+                    # Fallback for older pandas versions
+                    styled_daily = display_dfs[short_day].style.applymap(highlight_daily, subset=[f'{short_day} Diff'])
+                    
+                st.dataframe(styled_daily, use_container_width=True)
                 
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
