@@ -171,6 +171,11 @@ if time_file and ops_file:
             else:
                 ops_df[col] = 0
         
+        # Breakdown columns for Advanced Reporting
+        ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time'] / 3600.0
+        ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time'] + ops_df.get('On The Way - Completed Total Time.1', 0)) / 3600.0
+        ops_df['Wrench_Time_Hrs'] = (ops_df['In Progress - Completed Total Time'] + ops_df.get('In Progress - Completed Total Time.1', 0)) / 3600.0
+        
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
         
         ts_cols = [
@@ -185,6 +190,7 @@ if time_file and ops_file:
         ops_df['Job_Date'] = ops_df[available_ts_cols].bfill(axis=1).iloc[:, 0]
         ops_df['Job_Date_Parsed'] = pd.to_datetime(ops_df['Job_Date'].astype(str).str.replace(' GMT-0700', ''), errors='coerce')
         ops_df['Day_of_Week'] = ops_df['Job_Date_Parsed'].dt.day_name().str[:3]
+        ops_df['Short_Date'] = ops_df['Job_Date_Parsed'].dt.strftime('%m-%d-%Y')
         
         ops_df['Assigned Team Members'] = ops_df['Assigned Team Members'].astype(str).str.split(',')
         ops_df = ops_df.explode('Assigned Team Members')
@@ -210,12 +216,25 @@ if time_file and ops_file:
             diff_col = day + '_Diff_Hrs'
             final_df[diff_col] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
             
+            final_df[f'{day} Clocked'] = final_df[day + '_Clocked_Hrs'].apply(format_hm)
+            final_df[f'{day} Job Time'] = final_df[day + '_Job_Hrs'].apply(format_hm)
+            final_df[f'{day} Diff'] = final_df[diff_col].apply(format_hm)
+            
             day_df = pd.DataFrame()
             day_df['Name'] = final_df['Name']
-            day_df[f'{day} Clocked'] = final_df[day + '_Clocked_Hrs'].apply(format_hm)
-            day_df[f'{day} Job Time'] = final_df[day + '_Job_Hrs'].apply(format_hm)
-            day_df[f'{day} Diff'] = final_df[diff_col].apply(format_hm)
+            day_df[f'{day} Clocked'] = final_df[f'{day} Clocked']
+            day_df[f'{day} Job Time'] = final_df[f'{day} Job Time']
+            day_df[f'{day} Diff'] = final_df[f'{day} Diff']
             display_dfs[day] = day_df
+            
+        manager_cols = ['Name']
+        diff_cols_for_style = []
+        for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
+            manager_cols.extend([f'{d} Clocked', f'{d} Job Time', f'{d} Diff'])
+            diff_cols_for_style.append(f'{d} Diff')
+            
+        manager_df = final_df[manager_cols]
+        display_dfs['Manager'] = manager_df
         
         final_df['Total_Weekly_Diff_Hrs'] = final_df['Total_Weekly_Clocked_Hrs'] - final_df['Total_Weekly_Job_Hrs']
         
@@ -237,7 +256,6 @@ if time_file and ops_file:
             st.markdown('<h3 class="hide-on-print">Manager Overview - All Techs</h3>', unsafe_allow_html=True)
             st.markdown('<p class="hide-on-print"><em>Scroll down to see the breakdown for every technician.</em></p>', unsafe_allow_html=True)
             
-            # Loop through all techs and display their individual table
             tech_list = final_df['Name'].unique()
             for tech in tech_list:
                 st.markdown(f"#### **{tech}**")
@@ -274,7 +292,7 @@ if time_file and ops_file:
                         styled_report = report_df.style.apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
                 
                 st.table(styled_report)
-                st.markdown("---") # Adds a nice horizontal dividing line between each tech
+                st.markdown("---")
             
         with tabs[1]:
             st.markdown('<h3 class="hide-on-print">Weekly Summary</h3>', unsafe_allow_html=True)
@@ -335,6 +353,79 @@ if time_file and ops_file:
                     styled_daily = display_dfs[short_day].style.applymap(highlight_daily, subset=[f'{short_day} Diff'])
                     
                 st.dataframe(styled_daily, use_container_width=True)
+
+        # ---------------------------------------------------------
+        # NEW SECTION: ADVANCED DIAGNOSTICS (Placed below the tabs)
+        # ---------------------------------------------------------
+        st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
+        st.header("🔍 Workflow Diagnostics & Advanced Reporting")
+        
+        colA, colB = st.columns(2)
+        
+        # 1. Top Offenders Leaderboard
+        with colA:
+            st.subheader("🚨 Top Offenders Leaderboard")
+            st.markdown("*(Top 3 highest unaccounted time for the week)*")
+            
+            leaderboard_df = final_df[final_df['Total_Weekly_Diff_Hrs'] > 0].sort_values(by='Total_Weekly_Diff_Hrs', ascending=False).head(3)
+            
+            if not leaderboard_df.empty:
+                show_leaderboard = leaderboard_df[['Name', 'Total Clocked', 'Total Job Time', 'Total Diff']].copy()
+                # Paint it all light red to emphasize attention needed
+                try:
+                    styled_leaderboard = show_leaderboard.style.hide(axis="index").set_properties(**{'background-color': '#ffcccc', 'color': '#990000'})
+                except Exception:
+                    styled_leaderboard = show_leaderboard.style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000'})
+                st.dataframe(styled_leaderboard, use_container_width=True)
+            else:
+                st.success("No techs with unaccounted time!")
                 
+        # 2. Workflow Violations (Skipped Status)
+        with colB:
+            st.subheader("⚠️ Workflow Violations")
+            st.markdown("*(Tech skipped 'On The Way' status)*")
+            
+            # Logic: Has "In Progress" time but 0 "On The Way" time
+            skipped_df = ops_df[(ops_df['In Progress - Completed Total Time'] > 0) & 
+                                (ops_df['On The Way - Completed Total Time'] == 0)].copy()
+            
+            if not skipped_df.empty:
+                skipped_df['Wrench Time'] = skipped_df['Wrench_Time_Hrs'].apply(format_hm)
+                show_skipped = skipped_df[['Assigned Team Members', 'Short_Date', 'Wrench Time']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
+                st.dataframe(show_skipped, use_container_width=True)
+            else:
+                st.success("Great job! No skipped statuses detected.")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        colC, colD = st.columns(2)
+
+        # 3. Excessive Store Time Flags
+        with colC:
+            st.subheader("🛑 Excessive Store Time")
+            st.markdown("*(Jobs where tech spent > 60 minutes in Lowe's Status)*")
+            
+            excessive_df = ops_df[ops_df['Store_Time_Hrs'] > 1.0].copy()
+            
+            if not excessive_df.empty:
+                excessive_df['Store Time'] = excessive_df['Store_Time_Hrs'].apply(format_hm)
+                show_excessive = excessive_df[['Assigned Team Members', 'Short_Date', 'Store Time']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
+                st.dataframe(show_excessive, use_container_width=True)
+            else:
+                st.success("No excessive store times detected.")
+                
+        # 4. Status Breakdown Table (Weekly Sums)
+        with colD:
+            st.subheader("⏱️ Weekly Status Breakdown")
+            st.markdown("*(Drive vs. Store vs. Wrench Time)*")
+            
+            breakdown_agg = ops_df.groupby('Assigned Team Members')[['Drive_Time_Hrs', 'Store_Time_Hrs', 'Wrench_Time_Hrs']].sum().reset_index()
+            
+            breakdown_agg['Drive Time'] = breakdown_agg['Drive_Time_Hrs'].apply(format_hm)
+            breakdown_agg['Store Time'] = breakdown_agg['Store_Time_Hrs'].apply(format_hm)
+            breakdown_agg['Wrench Time'] = breakdown_agg['Wrench_Time_Hrs'].apply(format_hm)
+            
+            show_breakdown = breakdown_agg[['Assigned Team Members', 'Drive Time', 'Store Time', 'Wrench Time']].rename(columns={'Assigned Team Members': 'Name'})
+            st.dataframe(show_breakdown, use_container_width=True)
+            
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
