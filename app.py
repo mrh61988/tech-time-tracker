@@ -352,9 +352,11 @@ if time_file and ops_file:
         
         ops_df['Job_Date'] = ops_df[available_ts_cols].bfill(axis=1).iloc[:, 0]
         
+        # safely parse timestamps by chopping off the timezone string
         for c in available_ts_cols:
             ops_df[c + '_dt'] = pd.to_datetime(ops_df[c].astype(str).str.split(' GMT').str[0], errors='coerce')
         
+        # Calculate start and end times for gap analysis
         ops_df['Earliest_Start'] = ops_df[[c + '_dt' for c in available_ts_cols]].min(axis=1)
         ops_df['Estimated_End'] = ops_df['Earliest_Start'] + pd.to_timedelta(ops_df['Total_Job_Time_Hours'] * 3600, unit='s')
         
@@ -400,13 +402,16 @@ if time_file and ops_file:
         for day in days:
             diff_col = day + '_Diff_Hrs'
             final_df[diff_col] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
+            
+            # --- FIX: explicitly assign the formatted job counts to the main DF ---
+            final_df[f'{day} Jobs'] = final_df[day + '_Job_Count'].astype(int)
             final_df[f'{day} Clocked'] = final_df[day + '_Clocked_Hrs'].apply(format_hm)
             final_df[f'{day} Job Time'] = final_df[day + '_Job_Hrs'].apply(format_hm)
             final_df[f'{day} Diff'] = final_df[diff_col].apply(format_hm)
             
             day_df = pd.DataFrame()
             day_df['Name'] = final_df['Name']
-            day_df[f'{day} Jobs'] = final_df[day + '_Job_Count'].astype(int)
+            day_df[f'{day} Jobs'] = final_df[f'{day} Jobs']
             day_df[f'{day} Clocked'] = final_df[f'{day} Clocked']
             day_df[f'{day} Job Time'] = final_df[f'{day} Job Time']
             day_df[f'{day} Diff'] = final_df[f'{day} Diff']
