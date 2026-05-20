@@ -198,7 +198,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
                     return ['background-color: #ffcccc; color: #990000;'] * len(row)
                 return [''] * len(row)
             try:
-                # ADDED: .reset_index(drop=True) to fix pandas styling error
                 styled_leaderboard = show_leaderboard.reset_index(drop=True).style.hide(axis="index").apply(highlight_leaderboard, axis=1)
             except Exception:
                 styled_leaderboard = show_leaderboard.reset_index(drop=True).style.apply(highlight_leaderboard, axis=1)
@@ -261,7 +260,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         
         show_bench = tech_stats[['Assigned Team Members', 'Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job', 'Avg Total Job Length', 'Predictability Index']].rename(columns={'Assigned Team Members': 'Name'})
         try:
-            # ADDED: .reset_index(drop=True) to fix pandas styling error
             styled_bench = show_bench.reset_index(drop=True).style.hide(axis="index")\
                 .apply(highlight_bench_col, subset=['Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job', 'Avg Total Job Length'])\
                 .apply(highlight_consistency, subset=['Predictability Index'])
@@ -273,7 +271,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
 
     with gold_star_col:
         st.subheader("⭐ The \"Gold Star\" High-Performer List")
-        st.markdown("*(Technicians with ≤ 1 hour of total unaccounted time. Store delays do NOT penalize techs)*")
+        st.markdown("*(Technicians with less than or equal to 1 hour of total unaccounted time. Store delays do NOT penalize techs)*")
         
         gold_star_df = final_df[(final_df['Total_Weekly_Diff_Hrs'] <= 1.0) & (final_df['Days_Worked'] > 0)].copy()
         
@@ -283,7 +281,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
             gold_star_df['Total Diff'] = gold_star_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
             show_gold = gold_star_df[['Name', 'Total Clocked', 'Total Job Time', 'Total Diff']].copy()
             try:
-                # ADDED: .reset_index(drop=True) to fix pandas styling error
                 styled_gold = show_gold.reset_index(drop=True).style.hide(axis="index").set_properties(**{'background-color': '#e6f4ea', 'color': '#137333'})
             except Exception:
                 styled_gold = show_gold.reset_index(drop=True).style.set_properties(**{'background-color': '#e6f4ea', 'color': '#137333'})
@@ -338,7 +335,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     
     with colC:
         st.subheader("🛒 Lowe's Operational Delays")
-        st.markdown("*(All logged store visits. Rows highlighted in red show specific jobs that took > 45 minutes)*")
+        st.markdown("*(All logged store visits. Rows highlighted in red show specific jobs that took greater than 45 minutes)*")
         
         # Calculate summary metrics strictly on jobs over 45 minutes
         excessive_df = ops_df[ops_df['Store_Time_Hrs'] > 0.75].copy()
@@ -360,7 +357,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
                 return [''] * len(row)
                 
             try:
-                # ADDED: .reset_index(drop=True) to fix pandas styling error
                 styled_store = show_store.reset_index(drop=True).style.hide(axis="index").apply(highlight_store_jobs, axis=1)
             except Exception:
                 styled_store = show_store.reset_index(drop=True).style.apply(highlight_store_jobs, axis=1)
@@ -394,7 +390,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
 
     with colF:
         st.subheader("🗺️ Route Optimization Flags")
-        st.markdown("*(Days where > 40% of job time was driving. Shows Job Count, Drive Time, and Work Time for context)*")
+        st.markdown("*(Days where greater than 40% of job time was driving. Shows Job Count, Drive Time, and Work Time for context)*")
         daily_route = ops_df.groupby(['Assigned Team Members', 'Short_Date']).agg(
             Drive_Time_Hrs=('Drive_Time_Hrs', 'sum'),
             In_Progress_Time_Hrs=('In_Progress_Time_Hrs', 'sum'),
@@ -418,17 +414,20 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
             })
             st.dataframe(show_poor_routes, use_container_width=True)
         else:
-            st.success("Great routing! No days hit > 40% drive time.")
+            st.success("Great routing! No days hit greater than 40% drive time.")
 # ------------------------------
 
 if time_file and ops_file:
     try:
+        # UPDATED: Added Steve Walpole to the core data exclusions array
         EXCLUDE_NAMES = [
             'Luis Ortiz', 
             'Roman Twardoz',
             'Dave Barber Show Low (Contactor)',
             'Oak Wrench AZ Jarrod Scully (Contractor)',
-            'Presidio Plumbing Eric (Contractor)'
+            'Presidio Plumbing Eric (Contractor)',
+            'AtoZ Remodel LLC Ken (Contractor)',
+            'Steve Walpole'
         ]
         
         # --- 1. Parse Time Sheet ---
@@ -584,7 +583,6 @@ if time_file and ops_file:
         
         with tabs[0]:
             st.markdown('<h3 class="hide-on-print">Weekly Summary</h3>', unsafe_allow_html=True)
-            # ADDED: .reset_index(drop=True) to guarantee single range index before style execution
             styled_weekly = display_dfs['Weekly'].reset_index(drop=True).style.apply(highlight_weekly_row, axis=1)
             st.dataframe(styled_weekly, use_container_width=True)
             show_advanced_reporting(ops_df, final_df, export_df, tab_key="summary_tab")
@@ -620,7 +618,6 @@ if time_file and ops_file:
                 
                 report_df = pd.DataFrame(report_data)
                 try:
-                    # ADDED: .reset_index(drop=True) to guarantee single range index before style execution
                     styled_report = report_df.reset_index(drop=True).style.hide(axis="index").apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
                 except Exception:
                     try:
@@ -629,7 +626,7 @@ if time_file and ops_file:
                         styled_report = report_df.reset_index(drop=True).style.apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
                 st.table(styled_report)
                 st.markdown("---")
-                
+            
             show_advanced_reporting(ops_df, final_df, export_df, tab_key="manager_tab")
             
         with tabs[2]:
@@ -664,7 +661,6 @@ if time_file and ops_file:
                 
                 report_df = pd.DataFrame(report_data)
                 try:
-                    # ADDED: .reset_index(drop=True) to guarantee single range index before style execution
                     styled_report = report_df.reset_index(drop=True).style.hide(axis="index").apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
                 except Exception:
                     try:
@@ -680,7 +676,6 @@ if time_file and ops_file:
                 short_day = day_mapping[full_day]
                 st.markdown(f'<h3 class="hide-on-print">{full_day} Breakdown</h3>', unsafe_allow_html=True)
                 try:
-                    # ADDED: .reset_index(drop=True) to guarantee single range index before style execution
                     styled_daily = display_dfs[short_day].reset_index(drop=True).style.map(highlight_daily, subset=[f'{short_day} Diff'])
                 except AttributeError:
                     styled_daily = display_dfs[short_day].reset_index(drop=True).style.applymap(highlight_daily, subset=[f'{short_day} Diff'])
