@@ -53,7 +53,7 @@ def parse_diff_to_hours(val):
 def highlight_daily(val):
     """Highlights daily differences strictly greater than 1 hour"""
     hrs = parse_diff_to_hours(val)
-    if hrs > 1.0:  # Over 1 hour of unaccounted time for a single day
+    if hrs > 1.0:  
         return 'background-color: #ffcccc; color: #990000;'
     return ''
 
@@ -65,9 +65,23 @@ def highlight_weekly_row(row):
         diff_hrs = parse_diff_to_hours(row['Total Diff'])
         days_worked = row['Days Worked']
         
-        # If unaccounted time is greater than 1 hour per day worked
         if diff_hrs > (days_worked * 1.0):
             styles[diff_idx] = 'background-color: #ffcccc; color: #990000;'
+    return styles
+
+def highlight_individual_report(row, days_worked):
+    """Highlights the individual tech report based on daily/weekly rules"""
+    styles = [''] * len(row)
+    if 'Difference' in row and 'Day' in row:
+        diff_idx = row.index.get_loc('Difference')
+        diff_hrs = parse_diff_to_hours(row['Difference'])
+        
+        if row['Day'] == "TOTAL WEEKLY":
+            if diff_hrs > (days_worked * 1.0):
+                styles[diff_idx] = 'background-color: #ffcccc; color: #990000;'
+        else:
+            if diff_hrs > 1.0:
+                styles[diff_idx] = 'background-color: #ffcccc; color: #990000;'
     return styles
 # ------------------------------
 
@@ -76,7 +90,7 @@ if time_file and ops_file:
     try:
         # --- 1. Parse Time Sheet ---
         time_content = time_file.getvalue().decode("utf-8").splitlines()
-        time_lines = time_content[1:] # skip header 
+        time_lines = time_content[1:] 
         
         data = []
         for i in range(0, len(time_lines), 9):
@@ -98,7 +112,6 @@ if time_file and ops_file:
         for col in days + ['Total_Weekly']:
             time_df[col + '_Clocked_Hrs'] = time_df[col].apply(parse_hm)
             
-        # Calculate how many days they actually clocked in for
         time_df['Days_Worked'] = (time_df[[f'{d}_Clocked_Hrs' for d in days]] > 0).sum(axis=1)
         
         # --- 2. Parse Ops Sheet ---
@@ -169,7 +182,7 @@ if time_file and ops_file:
         
         weekly_df = pd.DataFrame()
         weekly_df['Name'] = final_df['Name']
-        weekly_df['Days Worked'] = final_df['Days_Worked']  # Added for clarity
+        weekly_df['Days Worked'] = final_df['Days_Worked']
         weekly_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
         weekly_df['Total Job Time'] = final_df['Total_Weekly_Job_Hrs'].apply(format_hm)
         weekly_df['Total Diff'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
@@ -177,30 +190,28 @@ if time_file and ops_file:
         
         st.success("Files processed successfully!")
         
-        # --- 4. Display Results in Tabs (WITH DYNAMIC HIGHLIGHTING) ---
-        tab_names = ["Weekly Summary", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        # --- 4. Display Results in Tabs ---
+        tab_names = ["Weekly Summary", "Individual Tech Report", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         tabs = st.tabs(tab_names)
         
         with tabs[0]:
             st.subheader("Weekly Summary")
-            # Apply the dynamic weekly style (Red if Diff > 1 hr * Days Worked)
             styled_weekly = display_dfs['Weekly'].style.apply(highlight_weekly_row, axis=1)
             st.dataframe(styled_weekly, use_container_width=True)
             
-        day_mapping = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
-        for i, full_day in enumerate(tab_names[1:]): 
-            with tabs[i+1]:
-                short_day = day_mapping[full_day]
-                st.subheader(f"{full_day} Breakdown")
+        with tabs[1]:
+            st.subheader("Printable Individual Report")
+            tech_list = final_df['Name'].unique()
+            selected_tech = st.selectbox("Select a Technician:", tech_list)
+            
+            if selected_tech:
+                st.markdown(f"### Time Report for: **{selected_tech}**")
+                st.markdown("*(Tip: To print this report for the technician, press **Ctrl + P** or **Cmd + P**)*")
                 
-                # Apply the daily style (Red if > 1 hour)
-                try:
-                    styled_daily = display_dfs[short_day].style.map(highlight_daily, subset=[f'{short_day} Diff'])
-                except AttributeError:
-                    # Fallback for older pandas versions
-                    styled_daily = display_dfs[short_day].style.applymap(highlight_daily, subset=[f'{short_day} Diff'])
-                    
-                st.dataframe(styled_daily, use_container_width=True)
+                tech_data = final_df[final_df['Name'] == selected_tech].iloc[0]
+                tech_days_worked = tech_data['Days_Worked']
                 
-    except Exception as e:
-        st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
+                report_data = []
+                day_mapping_long = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
+                
+                #
