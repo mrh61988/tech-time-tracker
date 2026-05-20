@@ -54,7 +54,7 @@ def format_hm(hrs):
         m = 0
     return f"{sign}{h}:{m:02d}"
 
-# FIXED: Helper function rewritten to safely handle seconds (e.g., 37:10:00)
+# Helper function to parse HH:MM strings to decimal hours
 def parse_hm(time_str):
     if pd.isna(time_str) or time_str == '-' or time_str == '':
         return 0.0
@@ -335,18 +335,35 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     
     with colC:
         st.subheader("🛒 Lowe's Operational Delays")
-        st.markdown("*(Visits where the store took > 45 minutes, delaying your tech's schedule)*")
+        st.markdown("*(All logged store visits. Rows highlighted in red show specific jobs that took > 45 minutes)*")
+        
+        # Calculate summary metrics strictly on jobs over 45 minutes
         excessive_df = ops_df[ops_df['Store_Time_Hrs'] > 0.75].copy()
-        if not excessive_df.empty:
-            total_delayed_store_hrs = excessive_df['Store_Time_Hrs'].sum()
-            store_loss_cost = total_delayed_store_hrs * rate
-            st.markdown(f"⏱️ **Total Field Hours Lost at Lowe's:** `{total_delayed_store_hrs:.1f} hrs` | 💸 **Cost of Store Inefficiencies:** `${store_loss_cost:,.2f}`")
+        total_delayed_store_hrs = excessive_df['Store_Time_Hrs'].sum()
+        store_loss_cost = total_delayed_store_hrs * rate
+        st.markdown(f"⏱ hemisphere **Total Field Hours Lost at Lowe's:** `{total_delayed_store_hrs:.1f} hrs` | 💸 **Cost of Store Inefficiencies:** `${store_loss_cost:,.2f}`")
+        
+        # FIXED: Pull ALL jobs with a store visit and group/sort descending so worst delays bubble up
+        all_store_df = ops_df[ops_df['Store_Time_Hrs'] > 0].sort_values(by='Store_Time_Hrs', ascending=False).copy()
+        
+        if not all_store_df.empty:
+            all_store_df['Store Time'] = all_store_df['Store_Time_Hrs'].apply(format_hm)
+            show_store = all_store_df[['Assigned Team Members', 'Short_Date', 'Store Time']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
             
-            excessive_df['Store Time'] = excessive_df['Store_Time_Hrs'].apply(format_hm)
-            show_excessive = excessive_df[['Assigned Team Members', 'Short_Date', 'Store Time']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
-            st.dataframe(show_excessive, use_container_width=True)
+            # Highlight function targeting rows where time > 45 mins
+            def highlight_store_jobs(row):
+                hrs = parse_hm(row['Store Time'])
+                if hrs > 0.75:
+                    return ['background-color: #ffcccc; color: #990000;'] * len(row)
+                return [''] * len(row)
+                
+            try:
+                styled_store = show_store.style.hide(axis="index").apply(highlight_store_jobs, axis=1)
+            except Exception:
+                styled_store = show_store.style.apply(highlight_store_jobs, axis=1)
+            st.dataframe(styled_store, use_container_width=True)
         else:
-            st.success("Great job! No store operational delays detected this week.")
+            st.success("Great job! No store operational visits logged this week.")
             
     with colD:
         st.subheader("⏱️ Weekly Status Breakdown")
