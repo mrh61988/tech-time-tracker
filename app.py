@@ -171,7 +171,7 @@ if time_file and ops_file:
             else:
                 ops_df[col] = 0
         
-        # Breakdown columns for Advanced Reporting (FIXED NAMES)
+        # Breakdown columns for Advanced Reporting
         ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
         ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On The Way - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Wrench_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
@@ -367,9 +367,14 @@ if time_file and ops_file:
             st.subheader("🚨 Top Offenders Leaderboard")
             st.markdown("*(Top 3 highest unaccounted time for the week)*")
             
-            leaderboard_df = final_df[final_df['Total_Weekly_Diff_Hrs'] > 0].sort_values(by='Total_Weekly_Diff_Hrs', ascending=False).head(3)
+            leaderboard_df = final_df[final_df['Total_Weekly_Diff_Hrs'] > 0].sort_values(by='Total_Weekly_Diff_Hrs', ascending=False).head(3).copy()
             
             if not leaderboard_df.empty:
+                # Format the columns specifically for the leaderboard display
+                leaderboard_df['Total Clocked'] = leaderboard_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
+                leaderboard_df['Total Job Time'] = leaderboard_df['Total_Weekly_Job_Hrs'].apply(format_hm)
+                leaderboard_df['Total Diff'] = leaderboard_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
+                
                 show_leaderboard = leaderboard_df[['Name', 'Total Clocked', 'Total Job Time', 'Total Diff']].copy()
                 try:
                     styled_leaderboard = show_leaderboard.style.hide(axis="index").set_properties(**{'background-color': '#ffcccc', 'color': '#990000'})
@@ -379,7 +384,7 @@ if time_file and ops_file:
             else:
                 st.success("No techs with unaccounted time!")
                 
-        # 2. Workflow Violations (Skipped Status) - FIXED COLUMN NAMES
+        # 2. Workflow Violations (Skipped Status)
         with colB:
             st.subheader("⚠️ Workflow Violations")
             st.markdown("*(Tech skipped 'On The Way' status)*")
