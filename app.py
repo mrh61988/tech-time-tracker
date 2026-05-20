@@ -210,12 +210,28 @@ if time_file and ops_file:
             diff_col = day + '_Diff_Hrs'
             final_df[diff_col] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
             
+            # Store formatted values back to final_df for the Manager Overview tab
+            final_df[f'{day} Clocked'] = final_df[day + '_Clocked_Hrs'].apply(format_hm)
+            final_df[f'{day} Job Time'] = final_df[day + '_Job_Hrs'].apply(format_hm)
+            final_df[f'{day} Diff'] = final_df[diff_col].apply(format_hm)
+            
             day_df = pd.DataFrame()
             day_df['Name'] = final_df['Name']
-            day_df[f'{day} Clocked'] = final_df[day + '_Clocked_Hrs'].apply(format_hm)
-            day_df[f'{day} Job Time'] = final_df[day + '_Job_Hrs'].apply(format_hm)
-            day_df[f'{day} Diff'] = final_df[diff_col].apply(format_hm)
+            day_df[f'{day} Clocked'] = final_df[f'{day} Clocked']
+            day_df[f'{day} Job Time'] = final_df[f'{day} Job Time']
+            day_df[f'{day} Diff'] = final_df[f'{day} Diff']
             display_dfs[day] = day_df
+            
+        # Build the Manager Overview DataFrame
+        manager_cols = ['Name']
+        diff_cols_for_style = []
+        # Reordering to start from Monday for a standard work-week view
+        for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
+            manager_cols.extend([f'{d} Clocked', f'{d} Job Time', f'{d} Diff'])
+            diff_cols_for_style.append(f'{d} Diff')
+            
+        manager_df = final_df[manager_cols]
+        display_dfs['Manager'] = manager_df
         
         final_df['Total_Weekly_Diff_Hrs'] = final_df['Total_Weekly_Clocked_Hrs'] - final_df['Total_Weekly_Job_Hrs']
         
@@ -230,15 +246,23 @@ if time_file and ops_file:
         st.success("Files processed successfully!")
         
         # --- 4. Display Results in Tabs ---
-        tab_names = ["Weekly Summary", "Individual Tech Report", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        tab_names = ["Manager Overview", "Weekly Summary", "Individual Tech Report", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         tabs = st.tabs(tab_names)
         
         with tabs[0]:
+            st.markdown('<h3 class="hide-on-print">Manager Overview - All Techs Daily Breakdown</h3>', unsafe_allow_html=True)
+            try:
+                styled_manager = display_dfs['Manager'].style.map(highlight_daily, subset=diff_cols_for_style)
+            except AttributeError:
+                styled_manager = display_dfs['Manager'].style.applymap(highlight_daily, subset=diff_cols_for_style)
+            st.dataframe(styled_manager, use_container_width=True)
+            
+        with tabs[1]:
             st.markdown('<h3 class="hide-on-print">Weekly Summary</h3>', unsafe_allow_html=True)
             styled_weekly = display_dfs['Weekly'].style.apply(highlight_weekly_row, axis=1)
             st.dataframe(styled_weekly, use_container_width=True)
             
-        with tabs[1]:
+        with tabs[2]:
             st.markdown('<h3 class="hide-on-print">Printable Individual Report</h3>', unsafe_allow_html=True)
             tech_list = final_df['Name'].unique()
             selected_tech = st.selectbox("Select a Technician:", tech_list)
@@ -286,8 +310,8 @@ if time_file and ops_file:
                 st.markdown(f"**Total Days Clocked In:** {tech_days_worked}")
 
         day_mapping = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
-        for i, full_day in enumerate(tab_names[2:]): 
-            with tabs[i+2]:
+        for i, full_day in enumerate(tab_names[3:]): 
+            with tabs[i+3]:
                 short_day = day_mapping[full_day]
                 st.markdown(f'<h3 class="hide-on-print">{full_day} Breakdown</h3>', unsafe_allow_html=True)
                 try:
