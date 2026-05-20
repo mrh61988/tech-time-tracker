@@ -174,4 +174,104 @@ if time_file and ops_file:
         
         ops_df['Assigned Team Members'] = ops_df['Assigned Team Members'].astype(str).str.split(',')
         ops_df = ops_df.explode('Assigned Team Members')
-        ops_df['Assigned Team Members'] = ops
+        ops_df['Assigned Team Members'] = ops_df['Assigned Team Members'].str.strip()
+        
+        job_time_agg = ops_df.groupby(['Assigned Team Members', 'Day_of_Week'])['Total_Job_Time_Hours'].sum().reset_index()
+        job_time_pivot = job_time_agg.pivot(index='Assigned Team Members', columns='Day_of_Week', values='Total_Job_Time_Hours').reset_index()
+        job_time_pivot = job_time_pivot.rename(columns={'Assigned Team Members': 'Name'}).fillna(0)
+        
+        for day in days:
+            if day not in job_time_pivot.columns:
+                job_time_pivot[day] = 0.0
+        
+        rename_dict = {day: day + '_Job_Hrs' for day in days}
+        job_time_pivot = job_time_pivot.rename(columns=rename_dict)
+        job_time_pivot['Total_Weekly_Job_Hrs'] = job_time_pivot[[d + '_Job_Hrs' for d in days]].sum(axis=1)
+        
+        # --- 3. Merge and Calculate Differences ---
+        final_df = pd.merge(time_df, job_time_pivot, on='Name', how='left').fillna(0)
+        
+        display_dfs = {}
+        for day in days:
+            diff_col = day + '_Diff_Hrs'
+            final_df[diff_col] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
+            
+            day_df = pd.DataFrame()
+            day_df['Name'] = final_df['Name']
+            day_df[f'{day} Clocked'] = final_df[day + '_Clocked_Hrs'].apply(format_hm)
+            day_df[f'{day} Job Time'] = final_df[day + '_Job_Hrs'].apply(format_hm)
+            day_df[f'{day} Diff'] = final_df[diff_col].apply(format_hm)
+            display_dfs[day] = day_df
+        
+        final_df['Total_Weekly_Diff_Hrs'] = final_df['Total_Weekly_Clocked_Hrs'] - final_df['Total_Weekly_Job_Hrs']
+        
+        weekly_df = pd.DataFrame()
+        weekly_df['Name'] = final_df['Name']
+        weekly_df['Days Worked'] = final_df['Days_Worked']
+        weekly_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
+        weekly_df['Total Job Time'] = final_df['Total_Weekly_Job_Hrs'].apply(format_hm)
+        weekly_df['Total Diff'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
+        display_dfs['Weekly'] = weekly_df
+        
+        st.success("Files processed successfully!")
+        
+        # --- 4. Display Results in Tabs ---
+        tab_names = ["Weekly Summary", "Individual Tech Report", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        tabs = st.tabs(tab_names)
+        
+        with tabs[0]:
+            st.markdown('<h3 class="hide-on-print">Weekly Summary</h3>', unsafe_allow_html=True)
+            styled_weekly = display_dfs['Weekly'].style.apply(highlight_weekly_row, axis=1)
+            st.dataframe(styled_weekly, use_container_width=True)
+            
+        with tabs[1]:
+            st.markdown('<h3 class="hide-on-print">Printable Individual Report</h3>', unsafe_allow_html=True)
+            tech_list = final_df['Name'].unique()
+            selected_tech = st.selectbox("Select a Technician:", tech_list)
+            
+            if selected_tech:
+                st.markdown(f"### Time Report for: **{selected_tech}**")
+                st.markdown('<p class="hide-on-print"><em>(Tip: To print this report for the technician, press <strong>Ctrl + P</strong> or <strong>Cmd + P</strong>)</em></p>', unsafe_allow_html=True)
+                
+                tech_data = final_df[final_df['Name'] == selected_tech].iloc[0]
+                tech_days_worked = tech_data['Days_Worked']
+                
+                report_data = []
+                day_mapping_long = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
+                
+                for full_day, short_day in day_mapping_long.items():
+                    report_data.append({
+                        "Day": full_day,
+                        "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']),
+                        "Job Time": format_hm(tech_data[short_day + '_Job_Hrs']),
+                        "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])
+                    })
+                
+                report_data.append({
+                    "Day": "TOTAL WEEKLY",
+                    "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']),
+                    "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']),
+                    "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])
+                })
+                
+                report_df = pd.DataFrame(report_data)
+                
+                styled_report = report_df.style.apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
+                st.dataframe(styled_report, use_container_width=True, hide_index=True)
+                
+                st.markdown(f"**Total Days Clocked In:** {tech_days_worked}")
+
+        day_mapping = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
+        for i, full_day in enumerate(tab_names[2:]): 
+            with tabs[i+2]:
+                short_day = day_mapping[full_day]
+                st.markdown(f'<h3 class="hide-on-print">{full_day} Breakdown</h3>', unsafe_allow_html=True)
+                try:
+                    styled_daily = display_dfs[short_day].style.map(highlight_daily, subset=[f'{short_day} Diff'])
+                except AttributeError:
+                    styled_daily = display_dfs[short_day].style.applymap(highlight_daily, subset=[f'{short_day} Diff'])
+                    
+                st.dataframe(styled_daily, use_container_width=True)
+                
+    except Exception as e:
+        st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
