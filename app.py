@@ -54,12 +54,14 @@ def format_hm(hrs):
         m = 0
     return f"{sign}{h}:{m:02d}"
 
-# Helper function to parse HH:MM strings to decimal hours
+# FIXED: Helper function rewritten to safely handle seconds (e.g., 37:10:00)
 def parse_hm(time_str):
     if pd.isna(time_str) or time_str == '-' or time_str == '':
         return 0.0
     try:
-        h, m = map(int, str(time_str).split(':'))
+        parts = str(time_str).strip().split(':')
+        h = int(parts[0])
+        m = int(parts[1]) if len(parts) > 1 else 0
         return h + m / 60.0
     except:
         return 0.0
@@ -70,7 +72,9 @@ def parse_diff_to_hours(val):
         sign = -1 if str(val).startswith('-') else 1
         clean_val = str(val).replace('-', '')
         if ':' in clean_val:
-            h, m = map(int, clean_val.split(':'))
+            parts = clean_val.split(':')
+            h = int(parts[0])
+            m = int(parts[1]) if len(parts) > 1 else 0
             return sign * (h + m / 60.0)
     except:
         pass
@@ -331,7 +335,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     
     with colC:
         st.subheader("🛒 Lowe's Operational Delays")
-        # FIXED: Shifted threshold from 1.0 (60 mins) to 0.75 (45 mins) per request
         st.markdown("*(Visits where the store took > 45 minutes, delaying your tech's schedule)*")
         excessive_df = ops_df[ops_df['Store_Time_Hrs'] > 0.75].copy()
         if not excessive_df.empty:
