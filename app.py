@@ -122,6 +122,63 @@ def highlight_individual_report(row, days_worked):
             if diff_hrs > 1.0:
                 styles[diff_idx] = 'background-color: #ffcccc; color: #990000;'
     return styles
+
+# --- Advanced Reporting Block Function ---
+def show_advanced_reporting(ops_df, final_df):
+    st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
+    st.header("🔍 Advanced Reporting")
+    
+    colA, colB = st.columns(2)
+    
+    # 1. Top Offenders Leaderboard (TOP 5)
+    with colA:
+        st.subheader("🚨 Top Offenders Leaderboard")
+        st.markdown("*(Top 5 highest unaccounted time for the week)*")
+        
+        leaderboard_df = final_df[final_df['Total_Weekly_Diff_Hrs'] > 0].sort_values(by='Total_Weekly_Diff_Hrs', ascending=False).head(5).copy()
+        
+        if not leaderboard_df.empty:
+            leaderboard_df['Total Clocked'] = leaderboard_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
+            leaderboard_df['Total Job Time'] = leaderboard_df['Total_Weekly_Job_Hrs'].apply(format_hm)
+            leaderboard_df['Total Diff'] = leaderboard_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
+            
+            show_leaderboard = leaderboard_df[['Name', 'Total Clocked', 'Total Job Time', 'Total Diff']].copy()
+            try:
+                styled_leaderboard = show_leaderboard.style.hide(axis="index").set_properties(**{'background-color': '#ffcccc', 'color': '#990000'})
+            except Exception:
+                styled_leaderboard = show_leaderboard.style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000'})
+            st.dataframe(styled_leaderboard, use_container_width=True)
+        else:
+            st.success("No techs with unaccounted time!")
+            
+    # 2. Excessive Store Time Flags
+    with colB:
+        st.subheader("🛑 Excessive Store Time")
+        st.markdown("*(Jobs where tech spent > 60 minutes in Lowe's Status)*")
+        
+        excessive_df = ops_df[ops_df['Store_Time_Hrs'] > 1.0].copy()
+        
+        if not excessive_df.empty:
+            excessive_df['Store Time'] = excessive_df['Store_Time_Hrs'].apply(format_hm)
+            show_excessive = excessive_df[['Assigned Team Members', 'Short_Date', 'Store Time']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
+            st.dataframe(show_excessive, use_container_width=True)
+        else:
+            st.success("No excessive store times detected.")
+            
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # 3. Status Breakdown Table (Weekly Sums)
+    st.subheader("⏱️ Weekly Status Breakdown")
+    st.markdown("*(Drive vs. Store vs. In Progress Time)*")
+    
+    breakdown_agg = ops_df.groupby('Assigned Team Members')[['Drive_Time_Hrs', 'Store_Time_Hrs', 'In_Progress_Time_Hrs']].sum().reset_index()
+    
+    breakdown_agg['Drive Time'] = breakdown_agg['Drive_Time_Hrs'].apply(format_hm)
+    breakdown_agg['Store Time'] = breakdown_agg['Store_Time_Hrs'].apply(format_hm)
+    breakdown_agg['In Progress Time'] = breakdown_agg['In_Progress_Time_Hrs'].apply(format_hm)
+    
+    show_breakdown = breakdown_agg[['Assigned Team Members', 'Drive Time', 'Store Time', 'In Progress Time']].rename(columns={'Assigned Team Members': 'Name'})
+    st.dataframe(show_breakdown, use_container_width=True)
 # ------------------------------
 
 # Only run the processing if both files are uploaded
@@ -264,10 +321,20 @@ if time_file and ops_file:
         st.success("Files processed successfully!")
         
         # --- 4. Display Results in Tabs ---
-        tab_names = ["Manager Overview", "Weekly Summary", "Individual Tech Report", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        # Note: "Weekly Summary" is now the first tab so it opens by default
+        tab_names = ["Weekly Summary", "Manager Overview", "Individual Tech Report", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         tabs = st.tabs(tab_names)
         
+        # TAB 0: Weekly Summary
         with tabs[0]:
+            st.markdown('<h3 class="hide-on-print">Weekly Summary</h3>', unsafe_allow_html=True)
+            styled_weekly = display_dfs['Weekly'].style.apply(highlight_weekly_row, axis=1)
+            st.dataframe(styled_weekly, use_container_width=True)
+            # Show Advanced Reporting only on this tab
+            show_advanced_reporting(ops_df, final_df)
+            
+        # TAB 1: Manager Overview
+        with tabs[1]:
             st.markdown('<h3 class="hide-on-print">Manager Overview - All Techs</h3>', unsafe_allow_html=True)
             st.markdown('<p class="hide-on-print"><em>Scroll down to see the breakdown for every technician.</em></p>', unsafe_allow_html=True)
             
@@ -308,12 +375,11 @@ if time_file and ops_file:
                 
                 st.table(styled_report)
                 st.markdown("---")
+                
+            # Show Advanced Reporting only on this tab
+            show_advanced_reporting(ops_df, final_df)
             
-        with tabs[1]:
-            st.markdown('<h3 class="hide-on-print">Weekly Summary</h3>', unsafe_allow_html=True)
-            styled_weekly = display_dfs['Weekly'].style.apply(highlight_weekly_row, axis=1)
-            st.dataframe(styled_weekly, use_container_width=True)
-            
+        # TAB 2: Individual Tech Report
         with tabs[2]:
             st.markdown('<h3 class="hide-on-print">Printable Individual Report</h3>', unsafe_allow_html=True)
             tech_list = final_df['Name'].unique()
@@ -357,6 +423,7 @@ if time_file and ops_file:
                 st.table(styled_report)
                 st.markdown(f"**Total Days Clocked In:** {tech_days_worked}")
 
+        # TABS 3-9: Monday through Sunday Breakdown
         day_mapping = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
         for i, full_day in enumerate(tab_names[3:]): 
             with tabs[i+3]:
@@ -368,65 +435,6 @@ if time_file and ops_file:
                     styled_daily = display_dfs[short_day].style.applymap(highlight_daily, subset=[f'{short_day} Diff'])
                     
                 st.dataframe(styled_daily, use_container_width=True)
-
-        # ---------------------------------------------------------
-        # ADVANCED DIAGNOSTICS SECTION
-        # ---------------------------------------------------------
-        st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
-        st.header("🔍 Advanced Reporting")
-        
-        colA, colB = st.columns(2)
-        
-        # 1. Top Offenders Leaderboard (TOP 5)
-        with colA:
-            st.subheader("🚨 Top Offenders Leaderboard")
-            st.markdown("*(Top 5 highest unaccounted time for the week)*")
-            
-            # Adjusted to .head(5) to pull top 5 offenders
-            leaderboard_df = final_df[final_df['Total_Weekly_Diff_Hrs'] > 0].sort_values(by='Total_Weekly_Diff_Hrs', ascending=False).head(5).copy()
-            
-            if not leaderboard_df.empty:
-                leaderboard_df['Total Clocked'] = leaderboard_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
-                leaderboard_df['Total Job Time'] = leaderboard_df['Total_Weekly_Job_Hrs'].apply(format_hm)
-                leaderboard_df['Total Diff'] = leaderboard_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
-                
-                show_leaderboard = leaderboard_df[['Name', 'Total Clocked', 'Total Job Time', 'Total Diff']].copy()
-                try:
-                    styled_leaderboard = show_leaderboard.style.hide(axis="index").set_properties(**{'background-color': '#ffcccc', 'color': '#990000'})
-                except Exception:
-                    styled_leaderboard = show_leaderboard.style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000'})
-                st.dataframe(styled_leaderboard, use_container_width=True)
-            else:
-                st.success("No techs with unaccounted time!")
-                
-        # 2. Excessive Store Time Flags
-        with colB:
-            st.subheader("🛑 Excessive Store Time")
-            st.markdown("*(Jobs where tech spent > 60 minutes in Lowe's Status)*")
-            
-            excessive_df = ops_df[ops_df['Store_Time_Hrs'] > 1.0].copy()
-            
-            if not excessive_df.empty:
-                excessive_df['Store Time'] = excessive_df['Store_Time_Hrs'].apply(format_hm)
-                show_excessive = excessive_df[['Assigned Team Members', 'Short_Date', 'Store Time']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
-                st.dataframe(show_excessive, use_container_width=True)
-            else:
-                st.success("No excessive store times detected.")
-                
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # 3. Status Breakdown Table (Weekly Sums)
-        st.subheader("⏱️ Weekly Status Breakdown")
-        st.markdown("*(Drive vs. Store vs. In Progress Time)*")
-        
-        breakdown_agg = ops_df.groupby('Assigned Team Members')[['Drive_Time_Hrs', 'Store_Time_Hrs', 'In_Progress_Time_Hrs']].sum().reset_index()
-        
-        breakdown_agg['Drive Time'] = breakdown_agg['Drive_Time_Hrs'].apply(format_hm)
-        breakdown_agg['Store Time'] = breakdown_agg['Store_Time_Hrs'].apply(format_hm)
-        breakdown_agg['In Progress Time'] = breakdown_agg['In_Progress_Time_Hrs'].apply(format_hm)
-        
-        show_breakdown = breakdown_agg[['Assigned Team Members', 'Drive Time', 'Store Time', 'In Progress Time']].rename(columns={'Assigned Team Members': 'Name'})
-        st.dataframe(show_breakdown, use_container_width=True)
             
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
