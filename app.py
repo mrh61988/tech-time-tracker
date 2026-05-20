@@ -210,28 +210,12 @@ if time_file and ops_file:
             diff_col = day + '_Diff_Hrs'
             final_df[diff_col] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
             
-            # Store formatted values back to final_df for the Manager Overview tab
-            final_df[f'{day} Clocked'] = final_df[day + '_Clocked_Hrs'].apply(format_hm)
-            final_df[f'{day} Job Time'] = final_df[day + '_Job_Hrs'].apply(format_hm)
-            final_df[f'{day} Diff'] = final_df[diff_col].apply(format_hm)
-            
             day_df = pd.DataFrame()
             day_df['Name'] = final_df['Name']
-            day_df[f'{day} Clocked'] = final_df[f'{day} Clocked']
-            day_df[f'{day} Job Time'] = final_df[f'{day} Job Time']
-            day_df[f'{day} Diff'] = final_df[f'{day} Diff']
+            day_df[f'{day} Clocked'] = final_df[day + '_Clocked_Hrs'].apply(format_hm)
+            day_df[f'{day} Job Time'] = final_df[day + '_Job_Hrs'].apply(format_hm)
+            day_df[f'{day} Diff'] = final_df[diff_col].apply(format_hm)
             display_dfs[day] = day_df
-            
-        # Build the Manager Overview DataFrame
-        manager_cols = ['Name']
-        diff_cols_for_style = []
-        # Reordering to start from Monday for a standard work-week view
-        for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
-            manager_cols.extend([f'{d} Clocked', f'{d} Job Time', f'{d} Diff'])
-            diff_cols_for_style.append(f'{d} Diff')
-            
-        manager_df = final_df[manager_cols]
-        display_dfs['Manager'] = manager_df
         
         final_df['Total_Weekly_Diff_Hrs'] = final_df['Total_Weekly_Clocked_Hrs'] - final_df['Total_Weekly_Job_Hrs']
         
@@ -250,12 +234,47 @@ if time_file and ops_file:
         tabs = st.tabs(tab_names)
         
         with tabs[0]:
-            st.markdown('<h3 class="hide-on-print">Manager Overview - All Techs Daily Breakdown</h3>', unsafe_allow_html=True)
-            try:
-                styled_manager = display_dfs['Manager'].style.map(highlight_daily, subset=diff_cols_for_style)
-            except AttributeError:
-                styled_manager = display_dfs['Manager'].style.applymap(highlight_daily, subset=diff_cols_for_style)
-            st.dataframe(styled_manager, use_container_width=True)
+            st.markdown('<h3 class="hide-on-print">Manager Overview - All Techs</h3>', unsafe_allow_html=True)
+            st.markdown('<p class="hide-on-print"><em>Scroll down to see the breakdown for every technician.</em></p>', unsafe_allow_html=True)
+            
+            # Loop through all techs and display their individual table
+            tech_list = final_df['Name'].unique()
+            for tech in tech_list:
+                st.markdown(f"#### **{tech}**")
+                
+                tech_data = final_df[final_df['Name'] == tech].iloc[0]
+                tech_days_worked = tech_data['Days_Worked']
+                
+                report_data = []
+                day_mapping_long = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
+                
+                for full_day, short_day in day_mapping_long.items():
+                    report_data.append({
+                        "Day": full_day,
+                        "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']),
+                        "Job Time": format_hm(tech_data[short_day + '_Job_Hrs']),
+                        "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])
+                    })
+                
+                report_data.append({
+                    "Day": "TOTAL WEEKLY",
+                    "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']),
+                    "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']),
+                    "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])
+                })
+                
+                report_df = pd.DataFrame(report_data)
+                
+                try:
+                    styled_report = report_df.style.hide(axis="index").apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
+                except Exception:
+                    try:
+                        styled_report = report_df.style.hide_index().apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
+                    except:
+                        styled_report = report_df.style.apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
+                
+                st.table(styled_report)
+                st.markdown("---") # Adds a nice horizontal dividing line between each tech
             
         with tabs[1]:
             st.markdown('<h3 class="hide-on-print">Weekly Summary</h3>', unsafe_allow_html=True)
@@ -294,19 +313,15 @@ if time_file and ops_file:
                 
                 report_df = pd.DataFrame(report_data)
                 
-                # Apply styles and hide the row index column to make it look clean
                 try:
                     styled_report = report_df.style.hide(axis="index").apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
                 except Exception:
-                    # Fallback for slightly older pandas versions
                     try:
                         styled_report = report_df.style.hide_index().apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
                     except:
                         styled_report = report_df.style.apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
                 
-                # Use st.table() instead of st.dataframe() so it prints out identically to a standard HTML table
                 st.table(styled_report)
-                
                 st.markdown(f"**Total Days Clocked In:** {tech_days_worked}")
 
         day_mapping = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
