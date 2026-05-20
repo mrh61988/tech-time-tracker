@@ -301,6 +301,9 @@ if time_file and ops_file:
         
         available_ts_cols = [c for c in ts_cols if c in ops_df.columns]
         
+        # Restore the missing Job_Date column creation step
+        ops_df['Job_Date'] = ops_df[available_ts_cols].bfill(axis=1).iloc[:, 0]
+        
         # safely parse timestamps by chopping off the timezone string
         for c in available_ts_cols:
             ops_df[c + '_dt'] = pd.to_datetime(ops_df[c].astype(str).str.split(' GMT').str[0], errors='coerce')
