@@ -295,9 +295,16 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
 
     with colF:
         st.subheader("🗺️ Route Optimization Flags")
-        st.markdown("*(Days where a technician spent > 40% of their total job time driving)*")
+        st.markdown("*(Days where > 40% of job time was driving. Shows Job Count, Drive Time, and Work Time for context)*")
         
-        daily_route = ops_df.groupby(['Assigned Team Members', 'Short_Date'])[['Drive_Time_Hrs', 'Total_Job_Time_Hours']].sum().reset_index()
+        # Aggregate Job count, Drive time, Work time, and Total job time per day
+        daily_route = ops_df.groupby(['Assigned Team Members', 'Short_Date']).agg(
+            Drive_Time_Hrs=('Drive_Time_Hrs', 'sum'),
+            In_Progress_Time_Hrs=('In_Progress_Time_Hrs', 'sum'),
+            Total_Job_Time_Hours=('Total_Job_Time_Hours', 'sum'),
+            Job_Count=('Total_Job_Time_Hours', 'size')
+        ).reset_index()
+        
         # Filter out days with zero total job time to avoid division by zero
         daily_route = daily_route[daily_route['Total_Job_Time_Hours'] > 0].copy()
         daily_route['Drive %'] = (daily_route['Drive_Time_Hrs'] / daily_route['Total_Job_Time_Hours']) * 100
@@ -306,7 +313,14 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         
         if not poor_routes.empty:
             poor_routes['Drive %'] = poor_routes['Drive %'].apply(lambda x: f"{x:.1f}%")
-            show_poor_routes = poor_routes[['Assigned Team Members', 'Short_Date', 'Drive %']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
+            poor_routes['Drive Time'] = poor_routes['Drive_Time_Hrs'].apply(format_hm)
+            poor_routes['Work Time'] = poor_routes['In_Progress_Time_Hrs'].apply(format_hm)
+            
+            show_poor_routes = poor_routes[['Assigned Team Members', 'Short_Date', 'Job_Count', 'Drive Time', 'Work Time', 'Drive %']].rename(columns={
+                'Assigned Team Members': 'Name', 
+                'Short_Date': 'Date',
+                'Job_Count': 'Jobs'
+            })
             st.dataframe(show_poor_routes, use_container_width=True)
         else:
             st.success("Great routing! No days hit > 40% drive time.")
