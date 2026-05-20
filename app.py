@@ -377,12 +377,13 @@ if time_file and ops_file:
         
         colA, colB = st.columns(2)
         
-        # 1. Top Offenders Leaderboard
+        # 1. Top Offenders Leaderboard (TOP 5)
         with colA:
             st.subheader("🚨 Top Offenders Leaderboard")
-            st.markdown("*(Top 3 highest unaccounted time for the week)*")
+            st.markdown("*(Top 5 highest unaccounted time for the week)*")
             
-            leaderboard_df = final_df[final_df['Total_Weekly_Diff_Hrs'] > 0].sort_values(by='Total_Weekly_Diff_Hrs', ascending=False).head(3).copy()
+            # Adjusted to .head(5) to pull top 5 offenders
+            leaderboard_df = final_df[final_df['Total_Weekly_Diff_Hrs'] > 0].sort_values(by='Total_Weekly_Diff_Hrs', ascending=False).head(5).copy()
             
             if not leaderboard_df.empty:
                 leaderboard_df['Total Clocked'] = leaderboard_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
