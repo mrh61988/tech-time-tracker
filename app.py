@@ -170,7 +170,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     total_job = final_df['Total_Weekly_Job_Hrs'].sum()
     efficiency = (total_job / total_clocked * 100) if total_clocked > 0 else 0
     
-    # ADDED: Total Division BU extraction for master metrics
     total_lsi = final_df.get('Simple_Installs_Hrs', pd.Series([0])).sum()
     total_wh = final_df.get('Water_Heaters_Hrs', pd.Series([0])).sum()
     lsi_eff = (total_lsi / total_clocked * 100) if total_clocked > 0 else 0
@@ -186,7 +185,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     with b_col4:
         st.metric(label="Overall Div Efficiency", value=f"{efficiency:.1f}%")
 
-    # ADDED: New sub-row for Business Unit Breakout
     st.markdown("<br>", unsafe_allow_html=True)
     bu_col1, bu_col2, bu_col3 = st.columns(3)
     with bu_col1:
@@ -200,7 +198,8 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     
     with trend_col:
         st.subheader("📈 Daily Division Health Trend")
-        st.markdown("*(Combined team efficiency analyzed day-by-day)*")
+        # UPDATED: Description explicitly notes this includes all raw logs independent of separate BU paths
+        st.markdown("*(Combined team efficiency analyzed day-by-day across all business units)*")
         trend_data = []
         for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
             day_clocked = final_df[f'{d}_Clocked_Hrs'].sum()
@@ -209,7 +208,8 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
             trend_data.append({
                 "Day": d, 
                 "Total Clocked": format_hm(day_clocked), 
-                "Total Job Time": format_hm(day_job), 
+                # UPDATED: Renamed payload row label to match explicit language requirements
+                "Job Status Time": format_hm(day_job), 
                 "Efficiency Score": f"{day_eff:.1f}%"
             })
         trend_df = pd.DataFrame(trend_data)
@@ -458,6 +458,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     st.markdown("<br>", unsafe_allow_html=True)
     launch_col, launch_empty_col = st.columns(2)
     
+    # Filter bounds to capture any day where the first status update punch was at or after 8:30 AM
     delayed_launches_df = bounds_df[
         (bounds_df['First_Punch'].dt.hour > 8) | 
         ((bounds_df['First_Punch'].dt.hour == 8) & (bounds_df['First_Punch'].dt.minute >= 30))
@@ -468,6 +469,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         st.markdown("*(Total number of delayed launches tracked for each technician)*")
         if not delayed_launches_df.empty:
             launch_counts = delayed_launches_df.groupby('Assigned Team Members').size().reset_index(name='Total Late Days')
+            # Sorted by total late days descending (highest at top)
             launch_counts = launch_counts.sort_values(by='Total Late Days', ascending=False).rename(columns={'Assigned Team Members': 'Name'})
             try:
                 styled_counts = launch_counts.reset_index(drop=True).style.hide(axis="index").set_properties(**{'background-color': '#fff3cd', 'color': '#856404;', 'font-weight': 'bold'})
@@ -483,6 +485,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         
         if not delayed_launches_df.empty:
             tech_late_list = sorted(delayed_launches_df['Assigned Team Members'].unique())
+            # Bound selection dropdown selector to dynamic tab_key configurations to ensure separate instances across tabs
             selected_late_tech = st.selectbox("Select Tech to view launch times:", tech_late_list, key=f"late_launch_tech_select_{tab_key}")
             
             if selected_late_tech:
@@ -710,7 +713,7 @@ if time_file and ops_file:
         weekly_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
         weekly_df['Total Job Time'] = final_df['Total_Weekly_Job_Hrs'].apply(format_hm)
         
-        # UPDATED: Changed SI Acronym to LSI (Lowe's Simple Installs)
+        # Changed SI Acronym to LSI (Lowe's Simple Installs)
         weekly_df['LSI Time (Eff %)'] = final_df['Simple Installs'] + " (" + final_df['Simple Installs Eff'] + ")"
         weekly_df['WH Time (Eff %)'] = final_df['Water Heaters'] + " (" + final_df['Water Heaters Eff'] + ")"
         
@@ -723,7 +726,7 @@ if time_file and ops_file:
         for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
             export_df[f'{d} Diff'] = final_df[f'{d} Diff']
         
-        # UPDATED: Swapped SI strings to LSI in the final CSV data payload
+        # Swapped SI strings to LSI in the final CSV data payload
         export_df['LSI Job Hours'] = final_df['Simple Installs']
         export_df['LSI Efficiency %'] = final_df['Simple Installs Eff']
         export_df['WH Job Hours'] = final_df['Water Heaters']
@@ -779,7 +782,7 @@ if time_file and ops_file:
                     except:
                         styled_report = report_df.reset_index(drop=True).style.apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
                 st.table(styled_report)
-                # UPDATED: Swapped out SI for LSI below individual tech data table
+                # Swapped out SI for LSI below individual tech data table
                 st.markdown(f"**Business Unit Efficiency Breakdown:** LSI: `{tech_data['Simple Installs']}` hrs ({tech_data['Simple Installs Eff']}) &nbsp;&nbsp;|&nbsp;&nbsp; Water Heaters: `{tech_data['Water Heaters']}` hrs ({tech_data['Water Heaters Eff']})")
                 st.markdown("---")
             
@@ -829,7 +832,7 @@ if time_file and ops_file:
                 with a_col:
                     st.markdown(f"**Total Days Clocked In:** {tech_days_worked}")
                 with b_col:
-                    # UPDATED: Swapped SI out for LSI in the printable tech report printout
+                    # Swapped SI out for LSI in the printable tech report printout
                     st.markdown(f"**LSI (Simple Installs):** `{tech_data['Simple Installs']}` hrs ({tech_data['Simple Installs Eff']})  \n**Water Heaters:** `{tech_data['Water Heaters']}` hrs ({tech_data['Water Heaters Eff']})")
 
         day_mapping = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
