@@ -169,6 +169,12 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     total_clocked = final_df['Total_Weekly_Clocked_Hrs'].sum()
     total_job = final_df['Total_Weekly_Job_Hrs'].sum()
     efficiency = (total_job / total_clocked * 100) if total_clocked > 0 else 0
+    
+    total_lsi = final_df.get('Simple_Installs_Hrs', pd.Series([0])).sum()
+    total_wh = final_df.get('Water_Heaters_Hrs', pd.Series([0])).sum()
+    lsi_eff = (total_lsi / total_clocked * 100) if total_clocked > 0 else 0
+    wh_eff = (total_wh / total_clocked * 100) if total_clocked > 0 else 0
+    
     lost_hrs = final_df[final_df['Total_Weekly_Diff_Hrs'] > 0]['Total_Weekly_Diff_Hrs'].sum()
     lost_money = lost_hrs * rate
     
@@ -177,7 +183,14 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     with b_col3:
         st.metric(label="Financial Leakage (Loss)", value=f"${lost_money:,.2f}")
     with b_col4:
-        st.metric(label="Division Efficiency Score", value=f"{efficiency:.1f}%")
+        st.metric(label="Overall Div Efficiency", value=f"{efficiency:.1f}%")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    bu_col1, bu_col2, bu_col3 = st.columns(3)
+    with bu_col1:
+        st.metric(label="LSI (Simple Installs) Efficiency", value=f"{lsi_eff:.1f}%", delta=f"{total_lsi:.1f} Job Hrs", delta_color="off")
+    with bu_col2:
+        st.metric(label="Water Heaters Efficiency", value=f"{wh_eff:.1f}%", delta=f"{total_wh:.1f} Job Hrs", delta_color="off")
 
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -185,7 +198,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     
     with trend_col:
         st.subheader("📈 Daily Division Health Trend")
-        st.markdown("*(Combined team efficiency analyzed day-by-day)*")
+        st.markdown("*(Combined team efficiency analyzed day-by-day across all business units)*")
         trend_data = []
         for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
             day_clocked = final_df[f'{d}_Clocked_Hrs'].sum()
@@ -194,7 +207,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
             trend_data.append({
                 "Day": d, 
                 "Total Clocked": format_hm(day_clocked), 
-                "Total Job Time": format_hm(day_job), 
+                "Job Status Time": format_hm(day_job), 
                 "Efficiency Score": f"{day_eff:.1f}%"
             })
         trend_df = pd.DataFrame(trend_data)
@@ -439,7 +452,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         else:
             st.success("Great routing! No days hit greater than 40% drive time.")
 
-    # === MORNING MOMENTUM DELAYED LAUNCH AUDIT (ADJUSTED TO 8:30 AM) ===
+    # === MORNING MOMENTUM DELAYED LAUNCH AUDIT ===
     st.markdown("<br>", unsafe_allow_html=True)
     launch_col, launch_empty_col = st.columns(2)
     
@@ -470,7 +483,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         
         if not delayed_launches_df.empty:
             tech_late_list = sorted(delayed_launches_df['Assigned Team Members'].unique())
-            # FIXED: Bound selection dropdown selector to dynamic tab_key configurations to ensure separate instances across tabs
+            # Bound selection dropdown selector to dynamic tab_key configurations to ensure separate instances across tabs
             selected_late_tech = st.selectbox("Select Tech to view launch times:", tech_late_list, key=f"late_launch_tech_select_{tab_key}")
             
             if selected_late_tech:
@@ -575,6 +588,26 @@ if time_file and ops_file:
         ops_df['Assigned Team Members'] = ops_df['Assigned Team Members'].str.strip()
         ops_df = ops_df[~ops_df['Assigned Team Members'].isin(EXCLUDE_NAMES)]
         
+        # --- NEW 2.5: Parse Business Units ---
+        if 'Business Unit' in ops_df.columns:
+            bu_agg = ops_df.groupby(['Assigned Team Members', 'Business Unit'])['Total_Job_Time_Hours'].sum().reset_index()
+            bu_pivot = bu_agg.pivot(index='Assigned Team Members', columns='Business Unit', values='Total_Job_Time_Hours').reset_index().fillna(0)
+            bu_pivot = bu_pivot.rename(columns={'Assigned Team Members': 'Name'})
+            
+            # Make sure these columns exist even if the upload file is missing a certain ticket type
+            if 'Lowes - Simple Installs' not in bu_pivot.columns:
+                bu_pivot['Lowes - Simple Installs'] = 0.0
+            if 'Lowes - Water Heaters' not in bu_pivot.columns:
+                bu_pivot['Lowes - Water Heaters'] = 0.0
+                
+            bu_pivot = bu_pivot.rename(columns={
+                'Lowes - Simple Installs': 'Simple_Installs_Hrs',
+                'Lowes - Water Heaters': 'Water_Heaters_Hrs'
+            })
+        else:
+            # Fallback if an older CSV layout without Business Unit is uploaded
+            bu_pivot = pd.DataFrame(columns=['Name', 'Simple_Installs_Hrs', 'Water_Heaters_Hrs'])
+
         job_time_agg = ops_df.groupby(['Assigned Team Members', 'Day_of_Week'])['Total_Job_Time_Hours'].sum().reset_index()
         job_time_pivot = job_time_agg.pivot(index='Assigned Team Members', columns='Day_of_Week', values='Total_Job_Time_Hours').reset_index()
         job_time_pivot = job_time_pivot.rename(columns={'Assigned Team Members': 'Name'}).fillna(0)
@@ -603,6 +636,12 @@ if time_file and ops_file:
         # --- 3. Merge and Calculate Differences ---
         final_df = pd.merge(time_df, job_time_pivot, on='Name', how='left').fillna(0)
         final_df = pd.merge(final_df, job_count_pivot, on='Name', how='left').fillna(0)
+        # Add the Business Unit aggregates to our final core engine
+        if not bu_pivot.empty:
+            final_df = pd.merge(final_df, bu_pivot[['Name', 'Simple_Installs_Hrs', 'Water_Heaters_Hrs']], on='Name', how='left').fillna(0)
+        else:
+            final_df['Simple_Installs_Hrs'] = 0.0
+            final_df['Water_Heaters_Hrs'] = 0.0
         
         # --- 3.5 Tablet Adjustments Sidebar UI ---
         st.sidebar.header("🔧 Tablet Time Adjustments")
@@ -654,6 +693,15 @@ if time_file and ops_file:
         # Core math engine computes Daily Avg Diff based purely on days worked before layout builds
         final_df['Daily_Avg_Diff_Hrs'] = np.where(final_df['Days_Worked'] > 0, final_df['Total_Weekly_Diff_Hrs'] / final_df['Days_Worked'], 0.0)
         
+        # Calculate Business Unit Efficiency (% of total clocked time spent in specific units)
+        final_df['Simple_Installs_Eff'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, (final_df['Simple_Installs_Hrs'] / final_df['Total_Weekly_Clocked_Hrs']) * 100, 0.0)
+        final_df['Water_Heaters_Eff'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, (final_df['Water_Heaters_Hrs'] / final_df['Total_Weekly_Clocked_Hrs']) * 100, 0.0)
+        
+        final_df['Simple Installs'] = final_df['Simple_Installs_Hrs'].apply(format_hm)
+        final_df['Water Heaters'] = final_df['Water_Heaters_Hrs'].apply(format_hm)
+        final_df['Simple Installs Eff'] = final_df['Simple_Installs_Eff'].apply(lambda x: f"{x:.1f}%")
+        final_df['Water Heaters Eff'] = final_df['Water_Heaters_Eff'].apply(lambda x: f"{x:.1f}%")
+        
         # Core system now sorts final_df by Daily_Avg_Diff_Hrs descending so Weekly Summary is automatically organized
         final_df = final_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=False)
         
@@ -662,6 +710,11 @@ if time_file and ops_file:
         weekly_df['Days Worked'] = final_df['Days_Worked']
         weekly_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
         weekly_df['Total Job Time'] = final_df['Total_Weekly_Job_Hrs'].apply(format_hm)
+        
+        # Business Unit metrics tracking
+        weekly_df['LSI Time (Eff %)'] = final_df['Simple Installs'] + " (" + final_df['Simple Installs Eff'] + ")"
+        weekly_df['WH Time (Eff %)'] = final_df['Water Heaters'] + " (" + final_df['Water Heaters Eff'] + ")"
+        
         weekly_df['Manual Adj'] = final_df['Adjustment_Hrs'].apply(format_hm)
         weekly_df['Daily Avg Diff'] = final_df['Daily_Avg_Diff_Hrs'].apply(format_hm) 
         weekly_df['Total Diff'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
@@ -670,6 +723,12 @@ if time_file and ops_file:
         export_df = weekly_df.copy()
         for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
             export_df[f'{d} Diff'] = final_df[f'{d} Diff']
+        
+        # Final CSV data payload fields
+        export_df['LSI Job Hours'] = final_df['Simple Installs']
+        export_df['LSI Efficiency %'] = final_df['Simple Installs Eff']
+        export_df['WH Job Hours'] = final_df['Water Heaters']
+        export_df['WH Efficiency %'] = final_df['Water Heaters Eff']
         
         st.success("Files processed successfully!")
         
@@ -721,6 +780,7 @@ if time_file and ops_file:
                     except:
                         styled_report = report_df.reset_index(drop=True).style.apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
                 st.table(styled_report)
+                st.markdown(f"**Business Unit Efficiency Breakdown:** LSI: `{tech_data['Simple Installs']}` hrs ({tech_data['Simple Installs Eff']}) &nbsp;&nbsp;|&nbsp;&nbsp; Water Heaters: `{tech_data['Water Heaters']}` hrs ({tech_data['Water Heaters Eff']})")
                 st.markdown("---")
             
             show_advanced_reporting(ops_df, final_df, export_df, tab_key="manager_tab")
@@ -742,40 +802,4 @@ if time_file and ops_file:
                     report_data.append({
                         "Day": full_day,
                         "Jobs": int(tech_data[short_day + '_Job_Count']),
-                        "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']),
-                        "Job Time": format_hm(tech_data[short_day + '_Job_Hrs']),
-                        "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])
-                    })
-                
-                report_data.append({
-                    "Day": "TOTAL WEEKLY",
-                    "Jobs": int(tech_data['Total_Weekly_Job_Count']),
-                    "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']),
-                    "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']),
-                    "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])
-                })
-                
-                report_df = pd.DataFrame(report_data)
-                try:
-                    styled_report = report_df.reset_index(drop=True).style.hide(axis="index").apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
-                except Exception:
-                    try:
-                        styled_report = report_df.reset_index(drop=True).style.hide_index().apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
-                    except:
-                        styled_report = report_df.reset_index(drop=True).style.apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
-                st.table(styled_report)
-                st.markdown(f"**Total Days Clocked In:** {tech_days_worked}")
-
-        day_mapping = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
-        for i, full_day in enumerate(tab_names[3:]): 
-            with tabs[i+3]:
-                short_day = day_mapping[full_day]
-                st.markdown(f'<h3 class="hide-on-print">{full_day} Breakdown</h3>', unsafe_allow_html=True)
-                try:
-                    styled_daily = display_dfs[short_day].reset_index(drop=True).style.map(highlight_daily, subset=[f'{short_day} Diff'])
-                except AttributeError:
-                    styled_daily = display_dfs[short_day].reset_index(drop=True).style.applymap(highlight_daily, subset=[f'{short_day} Diff'])
-                st.dataframe(styled_daily, use_container_width=True)
-            
-    except Exception as e:
-        st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
+                        "Clocked Time": format_hm(tech_data
