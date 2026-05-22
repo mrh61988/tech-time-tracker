@@ -700,11 +700,15 @@ if time_file and ops_file:
         final_df['LSI_Eff'] = np.where(final_df['Assumed_LSI_Clocked'] > 0, (final_df['Simple_Installs_Hrs'] / final_df['Assumed_LSI_Clocked']) * 100, 0.0)
         final_df['WH_Eff'] = np.where(final_df['Assumed_WH_Clocked'] > 0, (final_df['Water_Heaters_Hrs'] / final_df['Assumed_WH_Clocked']) * 100, 0.0)
         
+        # ADDED: Total Overall Individual Efficiency Metric
+        final_df['Total_Eff'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, (final_df['Total_Weekly_Job_Hrs'] / final_df['Total_Weekly_Clocked_Hrs']) * 100, 0.0)
+        
         # Format strings for clean frontend display injection
         final_df['Simple Installs'] = final_df['Simple_Installs_Hrs'].apply(format_hm)
         final_df['Water Heaters'] = final_df['Water_Heaters_Hrs'].apply(format_hm)
         final_df['Simple Installs Eff'] = final_df['LSI_Eff'].apply(lambda x: f"{x:.1f}%")
         final_df['Water Heaters Eff'] = final_df['WH_Eff'].apply(lambda x: f"{x:.1f}%")
+        final_df['Total Eff'] = final_df['Total_Eff'].apply(lambda x: f"{x:.1f}%")
         
         final_df = final_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=False)
         
@@ -917,14 +921,19 @@ if time_file and ops_file:
                 bu_summary_df['Name'] = final_df['Name']
                 bu_summary_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
                 bu_summary_df['Total Jobs'] = final_df['Total_Weekly_Job_Count'].astype(int)
+                # ADDED: Total Efficiency Column to see overall combined score
+                bu_summary_df['Total Efficiency'] = final_df['Total Eff']
+                
                 bu_summary_df['LSI Jobs'] = final_df['Simple_Installs_Count'].astype(int)
                 bu_summary_df['LSI Tablet Hrs'] = final_df['Simple_Installs_Hrs'].apply(format_hm)
                 bu_summary_df['LSI Assumed Clocked'] = final_df['Assumed_LSI_Clocked'].apply(format_hm)
                 bu_summary_df['LSI Efficiency'] = final_df['Simple Installs Eff']
+                
                 bu_summary_df['WH Jobs'] = final_df['Water_Heaters_Count'].astype(int)
                 bu_summary_df['WH Tablet Hrs'] = final_df['Water_Heaters_Hrs'].apply(format_hm)
                 bu_summary_df['WH Assumed Clocked'] = final_df['Assumed_WH_Clocked'].apply(format_hm)
                 bu_summary_df['WH Efficiency'] = final_df['Water Heaters Eff']
+                
                 st.dataframe(bu_summary_df.reset_index(drop=True), use_container_width=True)
             
     except Exception as e:
