@@ -170,7 +170,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     total_job = final_df['Total_Weekly_Job_Hrs'].sum()
     efficiency = (total_job / total_clocked * 100) if total_clocked > 0 else 0
     
-    # UPDATED: Division-level business unit efficiencies are now weighted by the dynamic 'Assumed Clocked' engine
     total_lsi = final_df.get('Simple_Installs_Hrs', pd.Series([0])).sum()
     total_wh = final_df.get('Water_Heaters_Hrs', pd.Series([0])).sum()
     
@@ -645,14 +644,12 @@ if time_file and ops_file:
         st.sidebar.markdown("*(Correct tech hours if they hit a job status too early or late)*")
         st.sidebar.markdown("**Rules:** Use positive numbers like `1:30` or `0:45` to add time. Use a minus sign like `-1:15` or `-0:30` to subtract time.")
         
-        # Master Global Override input tracking logic to sidebar layout
         global_adj_str = st.sidebar.text_input("🌍 Global Adj for ALL Techs (HH:MM)", value="0:00", key="global_adj")
         global_adj_hrs = parse_adj_hm(global_adj_str)
         
         adjustments = {}
         for tech in sorted(final_df['Name'].unique()):
             adj_str = st.sidebar.text_input(f"{tech} Adj (HH:MM)", value="0:00", key=f"adj_{tech}")
-            # Combines the master global override with the technician's individual text inputs safely
             adjustments[tech] = parse_adj_hm(adj_str) + global_adj_hrs
             
         final_df['Adjustment_Hrs'] = final_df['Name'].map(adjustments).fillna(0.0)
@@ -687,16 +684,17 @@ if time_file and ops_file:
         
         final_df['Total_Weekly_Diff_Hrs'] = final_df['Total_Weekly_Clocked_Hrs'] - final_df['Total_Weekly_Job_Hrs']
         
-        # Core math engine computes Daily Avg Diff based purely on days worked before layout builds
         final_df['Daily_Avg_Diff_Hrs'] = np.where(final_df['Days_Worked'] > 0, final_df['Total_Weekly_Diff_Hrs'] / final_df['Days_Worked'], 0.0)
         
-        # --- NEW BU ISOLATED EFFICIENCY CALCULATION ENGINE ---
-        # 1. Calculate an 'Assumed Clocked' rate per job
-        final_df['Assumed_Hrs_Per_Job'] = np.where(final_df['Total_Weekly_Job_Count'] > 0, final_df['Total_Weekly_Clocked_Hrs'] / final_df['Total_Weekly_Job_Count'], 0.0)
+        # --- NEW BU ISOLATED EFFICIENCY CALCULATION ENGINE (WEIGHTED GOALS) ---
+        # 1. Set goal baselines (LSI = 2:00 hrs, WH = 3:30 hrs) and calculate total weighted goal hours
+        final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
+        final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * 3.5
+        final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
         
-        # 2. Allocate assumed clocked time proportionately to each Business Unit
-        final_df['Assumed_LSI_Clocked'] = final_df['Simple_Installs_Count'] * final_df['Assumed_Hrs_Per_Job']
-        final_df['Assumed_WH_Clocked'] = final_df['Water_Heaters_Count'] * final_df['Assumed_Hrs_Per_Job']
+        # 2. Allocate assumed clocked time proportionately based on goal weight ratios
+        final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
+        final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
         
         # 3. Calculate true isolated efficiency
         final_df['LSI_Eff'] = np.where(final_df['Assumed_LSI_Clocked'] > 0, (final_df['Simple_Installs_Hrs'] / final_df['Assumed_LSI_Clocked']) * 100, 0.0)
@@ -708,7 +706,6 @@ if time_file and ops_file:
         final_df['Simple Installs Eff'] = final_df['LSI_Eff'].apply(lambda x: f"{x:.1f}%")
         final_df['Water Heaters Eff'] = final_df['WH_Eff'].apply(lambda x: f"{x:.1f}%")
         
-        # Core system now sorts final_df by Daily_Avg_Diff_Hrs descending so Weekly Summary is automatically organized
         final_df = final_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=False)
         
         weekly_df = pd.DataFrame()
@@ -717,7 +714,6 @@ if time_file and ops_file:
         weekly_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
         weekly_df['Total Job Time'] = final_df['Total_Weekly_Job_Hrs'].apply(format_hm)
         
-        # Business Unit metrics tracking
         weekly_df['LSI Time (Eff %)'] = final_df['Simple Installs'] + " (" + final_df['Simple Installs Eff'] + ")"
         weekly_df['WH Time (Eff %)'] = final_df['Water Heaters'] + " (" + final_df['Water Heaters Eff'] + ")"
         
@@ -730,13 +726,11 @@ if time_file and ops_file:
         for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
             export_df[f'{d} Diff'] = final_df[f'{d} Diff']
         
-        # Final CSV data payload fields
         export_df['LSI Job Hours'] = final_df['Simple Installs']
         export_df['LSI Efficiency %'] = final_df['Simple Installs Eff']
         export_df['WH Job Hours'] = final_df['Water Heaters']
         export_df['WH Efficiency %'] = final_df['Water Heaters Eff']
         
-        # Pre-calculated launch parameters securely moved up to standard operational environment block
         ops_sorted = ops_df.dropna(subset=['Earliest_Start']).sort_values(['Assigned Team Members', 'Earliest_Start'])
         ops_sorted['Next_Job_Start'] = ops_sorted.groupby(['Assigned Team Members', 'Short_Date'])['Earliest_Start'].shift(-1)
         ops_sorted['Gap_Hrs'] = (ops_sorted['Next_Job_Start'] - ops_sorted['Estimated_End']).dt.total_seconds() / 3600.0
@@ -916,10 +910,9 @@ if time_file and ops_file:
                 else:
                     st.info("No launch metadata loaded to aggregate in sandbox loops.")
 
-            # UPDATED: Injected Business Unit Efficiency parsing logic into sandbox view
             if "📊 Business Unit Weekly Efficiency Summary" in test_choices:
                 st.markdown("### **📊 Business Unit Weekly Efficiency Summary (Sandbox View)**")
-                st.markdown("*(Efficiency is calculated by deriving an **Assumed Clocked Time** for each unit based on the tech's average clocked time per job)*")
+                st.markdown("*(Efficiency is calculated by weighting total clocked hours against specific task goals: **Water Heaters = 3.5 hrs**, **LSI = 2.0 hrs**)*")
                 bu_summary_df = pd.DataFrame()
                 bu_summary_df['Name'] = final_df['Name']
                 bu_summary_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
