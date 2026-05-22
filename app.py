@@ -208,7 +208,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
             leaderboard_df['Total Clocked'] = leaderboard_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
             leaderboard_df['Total Job Time'] = leaderboard_df['Total_Weekly_Job_Hrs'].apply(format_hm)
             leaderboard_df['Manual Adj'] = leaderboard_df['Adjustment_Hrs'].apply(format_hm)
-            # UPDATED: Appended formatted tracking variables to the Leaderboard payload
             leaderboard_df['Daily Avg Diff'] = leaderboard_df['Daily_Avg_Diff_Hrs'].apply(format_hm)
             leaderboard_df['Total Diff'] = leaderboard_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
             
@@ -299,7 +298,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         if not gold_star_df.empty:
             gold_star_df['Total Clocked'] = gold_star_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
             gold_star_df['Total Job Time'] = gold_star_df['Total_Weekly_Job_Hrs'].apply(format_hm)
-            # UPDATED: Appended formatted tracking variables to Gold Star metrics payload
             gold_star_df['Daily Avg Diff'] = gold_star_df['Daily_Avg_Diff_Hrs'].apply(format_hm)
             gold_star_df['Total Diff'] = gold_star_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
             show_gold = gold_star_df[['Name', 'Total Clocked', 'Total Job Time', 'Daily Avg Diff', 'Total Diff']].copy()
@@ -604,10 +602,15 @@ if time_file and ops_file:
         st.sidebar.markdown("*(Correct tech hours if they hit a job status too early or late)*")
         st.sidebar.markdown("**Rules:** Use positive numbers like `1:30` or `0:45` to add time. Use a minus sign like `-1:15` or `-0:30` to subtract time.")
         
+        # ADDED: Master Global Override input tracking logic to sidebar layout
+        global_adj_str = st.sidebar.text_input("🌍 Global Adj for ALL Techs (HH:MM)", value="0:00", key="global_adj")
+        global_adj_hrs = parse_adj_hm(global_adj_str)
+        
         adjustments = {}
         for tech in sorted(final_df['Name'].unique()):
             adj_str = st.sidebar.text_input(f"{tech} Adj (HH:MM)", value="0:00", key=f"adj_{tech}")
-            adjustments[tech] = parse_adj_hm(adj_str)
+            # FIXED: Combines the master global override with the technician's individual text inputs safely
+            adjustments[tech] = parse_adj_hm(adj_str) + global_adj_hrs
             
         final_df['Adjustment_Hrs'] = final_df['Name'].map(adjustments).fillna(0.0)
         final_df['Total_Weekly_Job_Hrs'] = final_df['Total_Weekly_Job_Hrs'] + final_df['Adjustment_Hrs']
@@ -641,7 +644,7 @@ if time_file and ops_file:
         
         final_df['Total_Weekly_Diff_Hrs'] = final_df['Total_Weekly_Clocked_Hrs'] - final_df['Total_Weekly_Job_Hrs']
         
-        # FIXED: Core math engine computes Daily Avg Diff based purely on days worked before layout builds
+        # Core math engine computes Daily Avg Diff based purely on days worked before layout builds
         final_df['Daily_Avg_Diff_Hrs'] = np.where(final_df['Days_Worked'] > 0, final_df['Total_Weekly_Diff_Hrs'] / final_df['Days_Worked'], 0.0)
         
         weekly_df = pd.DataFrame()
@@ -650,7 +653,7 @@ if time_file and ops_file:
         weekly_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
         weekly_df['Total Job Time'] = final_df['Total_Weekly_Job_Hrs'].apply(format_hm)
         weekly_df['Manual Adj'] = final_df['Adjustment_Hrs'].apply(format_hm)
-        weekly_df['Daily Avg Diff'] = final_df['Daily_Avg_Diff_Hrs'].apply(format_hm) # Added Column
+        weekly_df['Daily Avg Diff'] = final_df['Daily_Avg_Diff_Hrs'].apply(format_hm) 
         weekly_df['Total Diff'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
         display_dfs['Weekly'] = weekly_df
         
