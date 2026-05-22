@@ -802,4 +802,45 @@ if time_file and ops_file:
                     report_data.append({
                         "Day": full_day,
                         "Jobs": int(tech_data[short_day + '_Job_Count']),
-                        "Clocked Time": format_hm(tech_data
+                        "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']),
+                        "Job Time": format_hm(tech_data[short_day + '_Job_Hrs']),
+                        "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])
+                    })
+                
+                report_data.append({
+                    "Day": "TOTAL WEEKLY",
+                    "Jobs": int(tech_data['Total_Weekly_Job_Count']),
+                    "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']),
+                    "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']),
+                    "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])
+                })
+                
+                report_df = pd.DataFrame(report_data)
+                try:
+                    styled_report = report_df.reset_index(drop=True).style.hide(axis="index").apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
+                except Exception:
+                    try:
+                        styled_report = report_df.reset_index(drop=True).style.hide_index().apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
+                    except:
+                        styled_report = report_df.reset_index(drop=True).style.apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
+                st.table(styled_report)
+                
+                a_col, b_col = st.columns(2)
+                with a_col:
+                    st.markdown(f"**Total Days Clocked In:** {tech_days_worked}")
+                with b_col:
+                    st.markdown(f"**LSI (Simple Installs):** `{tech_data['Simple Installs']}` hrs ({tech_data['Simple Installs Eff']})  \n**Water Heaters:** `{tech_data['Water Heaters']}` hrs ({tech_data['Water Heaters Eff']})")
+
+        day_mapping = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
+        for i, full_day in enumerate(tab_names[3:]): 
+            with tabs[i+3]:
+                short_day = day_mapping[full_day]
+                st.markdown(f'<h3 class="hide-on-print">{full_day} Breakdown</h3>', unsafe_allow_html=True)
+                try:
+                    styled_daily = display_dfs[short_day].reset_index(drop=True).style.map(highlight_daily, subset=[f'{short_day} Diff'])
+                except AttributeError:
+                    styled_daily = display_dfs[short_day].reset_index(drop=True).style.applymap(highlight_daily, subset=[f'{short_day} Diff'])
+                st.dataframe(styled_daily, use_container_width=True)
+            
+    except Exception as e:
+        st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
