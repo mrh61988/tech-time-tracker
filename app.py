@@ -208,9 +208,11 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
             leaderboard_df['Total Clocked'] = leaderboard_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
             leaderboard_df['Total Job Time'] = leaderboard_df['Total_Weekly_Job_Hrs'].apply(format_hm)
             leaderboard_df['Manual Adj'] = leaderboard_df['Adjustment_Hrs'].apply(format_hm)
+            # UPDATED: Appended formatted tracking variables to the Leaderboard payload
+            leaderboard_df['Daily Avg Diff'] = leaderboard_df['Daily_Avg_Diff_Hrs'].apply(format_hm)
             leaderboard_df['Total Diff'] = leaderboard_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
             
-            show_leaderboard = leaderboard_df[['Name', 'Total Clocked', 'Total Job Time', 'Manual Adj', 'Total Diff']].copy()
+            show_leaderboard = leaderboard_df[['Name', 'Total Clocked', 'Total Job Time', 'Manual Adj', 'Daily Avg Diff', 'Total Diff']].copy()
             def highlight_leaderboard(row):
                 val = parse_diff_to_hours(row['Total Diff'])
                 if val > 0:
@@ -297,8 +299,10 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         if not gold_star_df.empty:
             gold_star_df['Total Clocked'] = gold_star_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
             gold_star_df['Total Job Time'] = gold_star_df['Total_Weekly_Job_Hrs'].apply(format_hm)
+            # UPDATED: Appended formatted tracking variables to Gold Star metrics payload
+            gold_star_df['Daily Avg Diff'] = gold_star_df['Daily_Avg_Diff_Hrs'].apply(format_hm)
             gold_star_df['Total Diff'] = gold_star_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
-            show_gold = gold_star_df[['Name', 'Total Clocked', 'Total Job Time', 'Total Diff']].copy()
+            show_gold = gold_star_df[['Name', 'Total Clocked', 'Total Job Time', 'Daily Avg Diff', 'Total Diff']].copy()
             try:
                 styled_gold = show_gold.reset_index(drop=True).style.hide(axis="index").set_properties(**{'background-color': '#e6f4ea', 'color': '#137333'})
             except Exception:
@@ -465,7 +469,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
             st.success("Perfect deployment momentum! All technicians hit the road before 8:30 AM this week.")
 
     with launch_empty_col:
-        # ADDED: New structural scoreboard tracking the exact number of occurrences per tech
         st.subheader("📊 Late Deployment Scorecard")
         st.markdown("*(Total number of delayed launches tracked for each technician)*")
         if not delayed_launches_df.empty:
@@ -638,12 +641,16 @@ if time_file and ops_file:
         
         final_df['Total_Weekly_Diff_Hrs'] = final_df['Total_Weekly_Clocked_Hrs'] - final_df['Total_Weekly_Job_Hrs']
         
+        # FIXED: Core math engine computes Daily Avg Diff based purely on days worked before layout builds
+        final_df['Daily_Avg_Diff_Hrs'] = np.where(final_df['Days_Worked'] > 0, final_df['Total_Weekly_Diff_Hrs'] / final_df['Days_Worked'], 0.0)
+        
         weekly_df = pd.DataFrame()
         weekly_df['Name'] = final_df['Name']
         weekly_df['Days Worked'] = final_df['Days_Worked']
         weekly_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
         weekly_df['Total Job Time'] = final_df['Total_Weekly_Job_Hrs'].apply(format_hm)
         weekly_df['Manual Adj'] = final_df['Adjustment_Hrs'].apply(format_hm)
+        weekly_df['Daily Avg Diff'] = final_df['Daily_Avg_Diff_Hrs'].apply(format_hm) # Added Column
         weekly_df['Total Diff'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
         display_dfs['Weekly'] = weekly_df
         
