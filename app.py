@@ -687,9 +687,9 @@ if time_file and ops_file:
         final_df['Daily_Avg_Diff_Hrs'] = np.where(final_df['Days_Worked'] > 0, final_df['Total_Weekly_Diff_Hrs'] / final_df['Days_Worked'], 0.0)
         
         # --- NEW BU ISOLATED EFFICIENCY CALCULATION ENGINE (WEIGHTED GOALS) ---
-        # 1. Set goal baselines (LSI = 2:00 hrs, WH = 3:30 hrs) and calculate total weighted goal hours
-        final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
-        final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * 3.5
+        # 1. Set goal baselines (LSI = 1.75 hrs, WH = 3.4167 hrs) and calculate total weighted goal hours
+        final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 1.75
+        final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * (3 + (25 / 60.0))
         final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
         
         # 2. Allocate assumed clocked time proportionately based on goal weight ratios
@@ -700,7 +700,6 @@ if time_file and ops_file:
         final_df['LSI_Eff'] = np.where(final_df['Assumed_LSI_Clocked'] > 0, (final_df['Simple_Installs_Hrs'] / final_df['Assumed_LSI_Clocked']) * 100, 0.0)
         final_df['WH_Eff'] = np.where(final_df['Assumed_WH_Clocked'] > 0, (final_df['Water_Heaters_Hrs'] / final_df['Assumed_WH_Clocked']) * 100, 0.0)
         
-        # ADDED: Total Overall Individual Efficiency Metric
         final_df['Total_Eff'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, (final_df['Total_Weekly_Job_Hrs'] / final_df['Total_Weekly_Clocked_Hrs']) * 100, 0.0)
         
         # Format strings for clean frontend display injection
@@ -916,12 +915,11 @@ if time_file and ops_file:
 
             if "📊 Business Unit Weekly Efficiency Summary" in test_choices:
                 st.markdown("### **📊 Business Unit Weekly Efficiency Summary (Sandbox View)**")
-                st.markdown("*(Efficiency is calculated by weighting total clocked hours against specific task goals: **Water Heaters = 3.5 hrs**, **LSI = 2.0 hrs**)*")
+                st.markdown("*(Efficiency is calculated by weighting total clocked hours against specific task goals: **Water Heaters = 3:25 hrs**, **LSI = 1:45 hrs**)*")
                 bu_summary_df = pd.DataFrame()
                 bu_summary_df['Name'] = final_df['Name']
                 bu_summary_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
                 bu_summary_df['Total Jobs'] = final_df['Total_Weekly_Job_Count'].astype(int)
-                # ADDED: Total Efficiency Column to see overall combined score
                 bu_summary_df['Total Efficiency'] = final_df['Total Eff']
                 
                 bu_summary_df['LSI Jobs'] = final_df['Simple_Installs_Count'].astype(int)
