@@ -439,7 +439,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         else:
             st.success("Great routing! No days hit greater than 40% drive time.")
 
-    # === MORNING MOMENTUM DELAYED LAUNCH AUDIT (ADJUSTED TO 8:30 AM) ===
+    # === MORNING MOMENTUM DELAYED LAUNCH AUDIT ===
     st.markdown("<br>", unsafe_allow_html=True)
     launch_col, launch_empty_col = st.columns(2)
     
@@ -470,7 +470,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         
         if not delayed_launches_df.empty:
             tech_late_list = sorted(delayed_launches_df['Assigned Team Members'].unique())
-            # FIXED: Bound selection dropdown selector to dynamic tab_key configurations to ensure separate instances across tabs
+            # Bound selection dropdown selector to dynamic tab_key configurations to ensure separate instances across tabs
             selected_late_tech = st.selectbox("Select Tech to view launch times:", tech_late_list, key=f"late_launch_tech_select_{tab_key}")
             
             if selected_late_tech:
@@ -638,7 +638,7 @@ if time_file and ops_file:
             day_df[f'{day} Clocked'] = final_df[f'{day} Clocked']
             day_df[f'{day} Job Time'] = final_df[f'{day} Job Time']
             day_df[f'{day} Diff'] = final_df[f'{day} Diff']
-            display_dfs[day] = day_df
+            display_dfs[short_day if 'short_day' in locals() else day] = day_df
             
         manager_cols = ['Name']
         diff_cols_for_style = []
@@ -674,7 +674,8 @@ if time_file and ops_file:
         st.success("Files processed successfully!")
         
         # --- 4. Display Results in Tabs ---
-        tab_names = ["Weekly Summary", "Manager Overview", "Individual Tech Report", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        # UPDATED: Injected isolated experimental 11th tab string parameter to core array
+        tab_names = ["Weekly Summary", "Manager Overview", "Individual Tech Report", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "🧪 Test Section"]
         tabs = st.tabs(tab_names)
         
         with tabs[0]:
@@ -767,7 +768,7 @@ if time_file and ops_file:
                 st.markdown(f"**Total Days Clocked In:** {tech_days_worked}")
 
         day_mapping = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
-        for i, full_day in enumerate(tab_names[3:]): 
+        for i, full_day in enumerate(tab_names[3:10]): 
             with tabs[i+3]:
                 short_day = day_mapping[full_day]
                 st.markdown(f'<h3 class="hide-on-print">{full_day} Breakdown</h3>', unsafe_allow_html=True)
@@ -776,6 +777,56 @@ if time_file and ops_file:
                 except AttributeError:
                     styled_daily = display_dfs[short_day].reset_index(drop=True).style.applymap(highlight_daily, subset=[f'{short_day} Diff'])
                 st.dataframe(styled_daily, use_container_width=True)
+
+        # ADDED: Standalone 11th Tab handling Sandbox controls completely isolated from the remaining codebase
+        with tabs[10]:
+            st.header("🧪 Isolated Leaderboard Sandbox")
+            st.markdown("Use the selections below to add, remove, or evaluate components without changing the data models in other sections.")
+            
+            test_choices = st.multiselect(
+                "Select active data views to mount inside Test Section:",
+                ["🚨 Team Leaderboard", "⭐ Gold Star Performance Roll", "📊 Late Deployment Scorecard"],
+                default=["🚨 Team Leaderboard"],
+                key="sandbox_view_choices"
+            )
+            
+            if "🚨 Team Leaderboard" in test_choices:
+                st.markdown("### **🚨 Team Leaderboard (Sandbox View)**")
+                leaderboard_df = final_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=False).copy()
+                if not leaderboard_df.empty:
+                    leaderboard_df['Total Clocked'] = leaderboard_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
+                    leaderboard_df['Total Job Time'] = leaderboard_df['Total_Weekly_Job_Hrs'].apply(format_hm)
+                    leaderboard_df['Manual Adj'] = leaderboard_df['Adjustment_Hrs'].apply(format_hm)
+                    leaderboard_df['Daily Avg Diff'] = leaderboard_df['Daily_Avg_Diff_Hrs'].apply(format_hm)
+                    leaderboard_df['Total Diff'] = leaderboard_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
+                    show_leaderboard = leaderboard_df[['Name', 'Total Clocked', 'Total Job Time', 'Manual Adj', 'Daily Avg Diff', 'Total Diff']].copy()
+                    def highlight_leaderboard(row):
+                        val = parse_diff_to_hours(row['Total Diff'])
+                        return ['background-color: #ffcccc; color: #990000;'] * len(row) if val > 0 else [''] * len(row)
+                    st.dataframe(show_leaderboard.reset_index(drop=True).style.apply(highlight_leaderboard, axis=1), use_container_width=True)
+            
+            if "⭐ Gold Star Performance Roll" in test_choices:
+                st.markdown("### **⭐ The Gold Star Performer Board (Sandbox View)**")
+                gold_star_df = final_df[(final_df['Daily_Avg_Diff_Hrs'] < 1.5) & (final_df['Days_Worked'] > 0)].copy()
+                if not gold_star_df.empty:
+                    gold_star_df = gold_star_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=True)
+                    gold_star_df['Total Clocked'] = gold_star_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
+                    gold_star_df['Total Job Time'] = gold_star_df['Total_Weekly_Job_Hrs'].apply(format_hm)
+                    gold_star_df['Daily Avg Diff'] = gold_star_df['Daily_Avg_Diff_Hrs'].apply(format_hm)
+                    gold_star_df['Total Diff'] = gold_star_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
+                    show_gold = gold_star_df[['Name', 'Total Clocked', 'Total Job Time', 'Daily Avg Diff', 'Total Diff']].copy()
+                    st.dataframe(show_gold.reset_index(drop=True).style.set_properties(**{'background-color': '#e6f4ea', 'color': '#137333'}), use_container_width=True)
+                else:
+                    st.info("No sandbox metrics match the active Gold Star criteria.")
+
+            if "📊 Late Deployment Scorecard" in test_choices:
+                st.markdown("### **📊 Late Deployment Leaderboard (Sandbox View)**")
+                if not delayed_launches_df.empty:
+                    launch_counts = delayed_launches_df.groupby('Assigned Team Members').size().reset_index(name='Total Late Days')
+                    launch_counts = launch_counts.sort_values(by='Total Late Days', ascending=False).rename(columns={'Assigned Team Members': 'Name'})
+                    st.dataframe(launch_counts.reset_index(drop=True).style.set_properties(**{'background-color': '#fff3cd', 'color': '#856404;', 'font-weight': 'bold'}), use_container_width=True)
+                else:
+                    st.info("No launch metadata loaded to aggregate in sandbox loops.")
             
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
