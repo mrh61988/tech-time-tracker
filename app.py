@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit st
 import pandas as pd
 import numpy as np
 
@@ -202,7 +202,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
 
     with leaderboard_col:
         st.subheader("🚨 Team Leaderboard")
-        # FIXED: Modified sorting filter to rank by Daily_Avg_Diff_Hrs (Highest unallocated daily speed drops at top)
+        st.markdown("*(Whole team sorted by highest unaccounted time after overrides)*")
         leaderboard_df = final_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=False).copy()
         if not leaderboard_df.empty:
             leaderboard_df['Total Clocked'] = leaderboard_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
@@ -296,7 +296,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         gold_star_df = final_df[(final_df['Daily_Avg_Diff_Hrs'] < 1.5) & (final_df['Days_Worked'] > 0)].copy()
         
         if not gold_star_df.empty:
-            # FIXED: Sorted Gold Star high performers by lowest average difference at the top (ascending=True)
             gold_star_df = gold_star_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=True)
             
             gold_star_df['Total Clocked'] = gold_star_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
@@ -450,33 +449,14 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         ((bounds_df['First_Punch'].dt.hour == 8) & (bounds_df['First_Punch'].dt.minute >= 30))
     ].copy()
     
+    # FIXED/UPDATED: Late Deployment Scorecard moved to the LEFT, sorted by most total late days at the top
     with launch_col:
-        st.subheader("🚗 Delayed Launch Alert (Morning Momentum Audit)")
-        st.markdown("*(Flags field operations where a technician's very first status update of the day happened at or after 8:30 AM)*")
-        
-        if not delayed_launches_df.empty:
-            # FIXED: Sorted Delayed Launch activity alphabetically by Technician Name
-            delayed_launches_sorted = delayed_launches_df.sort_values(by='Assigned Team Members', ascending=True).copy()
-            delayed_launches_sorted['First Launch'] = delayed_launches_sorted['First_Punch'].dt.strftime('%I:%M %p')
-            show_launches = delayed_launches_sorted[['Assigned Team Members', 'Short_Date', 'First Launch']].rename(columns={
-                'Assigned Team Members': 'Name',
-                'Short_Date': 'Date'
-            })
-            try:
-                styled_launches = show_launches.reset_index(drop=True).style.hide(axis="index").set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'})
-            except Exception:
-                styled_launches = show_launches.reset_index(drop=True).style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'})
-            st.dataframe(styled_launches, use_container_width=True)
-        else:
-            st.success("Perfect deployment momentum! All technicians hit the road before 8:30 AM this week.")
-
-    with launch_empty_col:
         st.subheader("📊 Late Deployment Scorecard")
         st.markdown("*(Total number of delayed launches tracked for each technician)*")
         if not delayed_launches_df.empty:
             launch_counts = delayed_launches_df.groupby('Assigned Team Members').size().reset_index(name='Total Late Days')
-            # FIXED: Sorted Late Count Scorecard alphabetically by Technician Name
-            launch_counts = launch_counts.sort_values(by='Assigned Team Members', ascending=True).rename(columns={'Assigned Team Members': 'Name'})
+            # Sorted by total late days descending (highest at top)
+            launch_counts = launch_counts.sort_values(by='Total Late Days', ascending=False).rename(columns={'Assigned Team Members': 'Name'})
             try:
                 styled_counts = launch_counts.reset_index(drop=True).style.hide(axis="index").set_properties(**{'background-color': '#fff3cd', 'color': '#856404;', 'font-weight': 'bold'})
             except Exception:
@@ -484,6 +464,31 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
             st.dataframe(styled_counts, use_container_width=True)
         else:
             st.info("No late deployment metrics to aggregate this week.")
+
+    # FIXED/UPDATED: Delayed Launch Alert moved to the RIGHT, configured with a smart technician dropdown menu
+    with launch_empty_col:
+        st.subheader("🚗 Delayed Launch Alert (Morning Momentum Audit)")
+        st.markdown("*(Select a technician from the dropdown to review their specific late launch ledger logs)*")
+        
+        if not delayed_launches_df.empty:
+            # Sorted dropdown options alphabetically by technician name
+            tech_late_list = sorted(delayed_launches_df['Assigned Team Members'].unique())
+            selected_late_tech = st.selectbox("Select Tech to view launch times:", tech_late_list, key="late_launch_tech_select")
+            
+            if selected_late_tech:
+                # Filter rows strictly to the selected tech and display
+                tech_launches_df = delayed_launches_df[delayed_launches_df['Assigned Team Members'] == selected_late_tech].copy()
+                tech_launches_df['First Launch'] = tech_launches_df['First_Punch'].dt.strftime('%I:%M %p')
+                show_launches = tech_launches_df.sort_values(by='First_Punch', ascending=False)[['Short_Date', 'First Launch']].rename(columns={
+                    'Short_Date': 'Date'
+                })
+                try:
+                    styled_launches = show_launches.reset_index(drop=True).style.hide(axis="index").set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'})
+                except Exception:
+                    styled_launches = show_launches.reset_index(drop=True).style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'})
+                st.dataframe(styled_launches, use_container_width=True)
+        else:
+            st.success("Perfect deployment momentum! All technicians hit the road before 8:30 AM this week.")
 # ------------------------------
 
 if time_file and ops_file:
@@ -652,7 +657,7 @@ if time_file and ops_file:
         # Core math engine computes Daily Avg Diff based purely on days worked before layout builds
         final_df['Daily_Avg_Diff_Hrs'] = np.where(final_df['Days_Worked'] > 0, final_df['Total_Weekly_Diff_Hrs'] / final_df['Days_Worked'], 0.0)
         
-        # FIXED: Core system now sorts final_df by Daily_Avg_Diff_Hrs descending so Weekly Summary is automatically organized
+        # Core system now sorts final_df by Daily_Avg_Diff_Hrs descending so Weekly Summary is automatically organized
         final_df = final_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=False)
         
         weekly_df = pd.DataFrame()
