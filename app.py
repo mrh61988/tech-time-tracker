@@ -474,10 +474,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
             
             if selected_late_tech:
                 tech_launches_df = delayed_launches_df[delayed_launches_df['Assigned Team Members'] == selected_late_tech].copy()
-                
-                # UPDATED: Injected string concatenation to display both Time AND Status in the ledger visually
                 tech_launches_df['First Launch'] = tech_launches_df['First_Punch'].dt.strftime('%I:%M %p') + " (" + tech_launches_df['First_Status'] + ")"
-                
                 show_launches = tech_launches_df.sort_values(by='First_Punch', ascending=False)[['Short_Date', 'First Launch']].rename(columns={
                     'Short_Date': 'Date'
                 })
@@ -566,10 +563,14 @@ if time_file and ops_file:
         for c in available_ts_cols:
             ops_df[c + '_dt'] = pd.to_datetime(ops_df[c].astype(str).str.split(' GMT').str[0], errors='coerce')
         
-        # UPDATED: Parse exact status of the earliest start
+        # FIXED: Safe search mask to prevent idxmin from crashing on blank rows
         available_ts_dt_cols = [c + '_dt' for c in available_ts_cols]
         ops_df['Earliest_Start'] = ops_df[available_ts_dt_cols].min(axis=1)
-        ops_df['Earliest_Status_Col'] = ops_df[available_ts_dt_cols].idxmin(axis=1)
+        
+        valid_ts_mask = ops_df[available_ts_dt_cols].notna().any(axis=1)
+        ops_df['Earliest_Status_Col'] = pd.NA
+        if valid_ts_mask.any():
+            ops_df.loc[valid_ts_mask, 'Earliest_Status_Col'] = ops_df.loc[valid_ts_mask, available_ts_dt_cols].idxmin(axis=1)
         
         def map_status(col):
             if pd.isna(col): return 'Unknown'
@@ -604,7 +605,6 @@ if time_file and ops_file:
             bu_pivot = pd.merge(bu_pivot_hrs, bu_pivot_cnt, on='Assigned Team Members', suffixes=('_hrs', '_cnt'))
             bu_pivot = bu_pivot.rename(columns={'Assigned Team Members': 'Name'})
             
-            # Ensure safety columns exist
             for col in ['Lowes - Simple Installs_hrs', 'Lowes - Water Heaters_hrs', 'Lowes - Simple Installs_cnt', 'Lowes - Water Heaters_cnt']:
                 if col not in bu_pivot.columns:
                     bu_pivot[col] = 0.0
@@ -630,7 +630,6 @@ if time_file and ops_file:
         job_time_pivot = job_time_pivot.rename(columns=rename_dict)
         job_time_pivot['Total_Weekly_Job_Hrs'] = job_time_pivot[[d + '_Job_Hrs' for d in days]].sum(axis=1)
         
-        # --- Create Daily Job Counts ---
         job_count_agg = ops_df.groupby(['Assigned Team Members', 'Day_of_Week']).size().reset_index(name='Job_Count')
         job_count_pivot = job_count_agg.pivot(index='Assigned Team Members', columns='Day_of_Week', values='Job_Count').reset_index()
         job_count_pivot = job_count_pivot.rename(columns={'Assigned Team Members': 'Name'}).fillna(0)
@@ -643,11 +642,9 @@ if time_file and ops_file:
         job_count_pivot = job_count_pivot.rename(columns=rename_dict_counts)
         job_count_pivot['Total_Weekly_Job_Count'] = job_count_pivot[[d + '_Job_Count' for d in days]].sum(axis=1)
         
-        # --- 3. Merge and Calculate Differences ---
         final_df = pd.merge(time_df, job_time_pivot, on='Name', how='left').fillna(0)
         final_df = pd.merge(final_df, job_count_pivot, on='Name', how='left').fillna(0)
         
-        # Inject Business Unit hours & counts into main tracking grid
         if not bu_pivot.empty:
             final_df = pd.merge(final_df, bu_pivot[['Name', 'Simple_Installs_Hrs', 'Water_Heaters_Hrs', 'Simple_Installs_Count', 'Water_Heaters_Count']], on='Name', how='left').fillna(0)
         else:
@@ -656,7 +653,6 @@ if time_file and ops_file:
             final_df['Simple_Installs_Count'] = 0.0
             final_df['Water_Heaters_Count'] = 0.0
             
-        # --- 3.5 Tablet Adjustments Sidebar UI ---
         st.sidebar.header("🔧 Tablet Time Adjustments")
         st.sidebar.markdown("*(Correct tech hours if they hit a job status too early or late)*")
         st.sidebar.markdown("**Rules:** Use positive numbers like `1:30` or `0:45` to add time. Use a minus sign like `-1:15` or `-0:30` to subtract time.")
@@ -751,7 +747,6 @@ if time_file and ops_file:
         ops_sorted['Next_Job_Start'] = ops_sorted.groupby(['Assigned Team Members', 'Short_Date'])['Earliest_Start'].shift(-1)
         ops_sorted['Gap_Hrs'] = (ops_sorted['Next_Job_Start'] - ops_sorted['Estimated_End']).dt.total_seconds() / 3600.0
         
-        # UPDATED: Pull the Earliest_Status for each day's first punch
         bounds_df = ops_sorted.groupby(['Assigned Team Members', 'Short_Date']).agg(
             First_Punch=('Earliest_Start', 'min'),
             Last_Punch=('Estimated_End', 'max'),
@@ -762,7 +757,6 @@ if time_file and ops_file:
         bounds_df['Total_Span_Hrs'] = (bounds_df['Last_Punch'] - bounds_df['First_Punch']).dt.total_seconds() / 3600.0
         bounds_df['Total Time'] = bounds_df['Total_Span_Hrs'].apply(format_hm)
         
-        # UPDATED: Dynamic status validation for late deployment metrics
         def check_late(row):
             fp = row['First_Punch']
             status = row['First_Status']
