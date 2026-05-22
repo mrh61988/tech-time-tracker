@@ -154,7 +154,8 @@ def highlight_consistency(s):
     return styles
 
 # --- Advanced Reporting Block Function ---
-def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
+# FIXED: Updated signature parameters to accept pre-calculated dispatcher tables safely
+def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
     # === BOSS TOOLS SECTION ===
@@ -335,20 +336,11 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         else:
             st.success("No major routing gaps detected!")
 
+    # FIXED: Replaced nested bounds_df logic to inherit clean pipeline data directly
     with d_col2:
         st.subheader("🌅 First Job vs. Last Job")
         st.markdown("*(First punch of the morning, last punch of the afternoon)*")
-        bounds_df = ops_sorted.groupby(['Assigned Team Members', 'Short_Date']).agg(
-            First_Punch=('Earliest_Start', 'min'),
-            Last_Punch=('Estimated_End', 'max')
-        ).reset_index()
-        bounds_df['First Status Update'] = bounds_df['First_Punch'].dt.strftime('%I:%M %p')
-        bounds_df['Last Status Update'] = bounds_df['Last_Punch'].dt.strftime('%I:%M %p')
-        bounds_df['Total_Span_Hrs'] = (bounds_df['Last_Punch'] - bounds_df['First_Punch']).dt.total_seconds() / 3600.0
-        bounds_df['Total Time'] = bounds_df['Total_Span_Hrs'].apply(format_hm)
-        
         bounds_sorted_df = bounds_df.sort_values(by='Total_Span_Hrs', ascending=False).copy()
-        
         show_bounds = bounds_sorted_df[['Assigned Team Members', 'Short_Date', 'First Status Update', 'Last Status Update', 'Total Time']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
         st.dataframe(show_bounds, use_container_width=True)
 
@@ -372,7 +364,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
             all_store_df['Store Time'] = all_store_df['Store_Time_Hrs'].apply(format_hm)
             show_store = all_store_df[['Assigned Team Members', 'Short_Date', 'Store Time']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
             
-            # Highlight function targeting rows where time > 45 mins
             def highlight_store_jobs(row):
                 hrs = parse_hm(row['Store Time'])
                 if hrs > 0.75:
@@ -443,18 +434,11 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
     st.markdown("<br>", unsafe_allow_html=True)
     launch_col, launch_empty_col = st.columns(2)
     
-    # Filter bounds to capture any day where the first status update punch was at or after 8:30 AM
-    delayed_launches_df = bounds_df[
-        (bounds_df['First_Punch'].dt.hour > 8) | 
-        ((bounds_df['First_Punch'].dt.hour == 8) & (bounds_df['First_Punch'].dt.minute >= 30))
-    ].copy()
-    
     with launch_col:
         st.subheader("📊 Late Deployment Scorecard")
         st.markdown("*(Total number of delayed launches tracked for each technician)*")
         if not delayed_launches_df.empty:
             launch_counts = delayed_launches_df.groupby('Assigned Team Members').size().reset_index(name='Total Late Days')
-            # Sorted by total late days descending (highest at top)
             launch_counts = launch_counts.sort_values(by='Total Late Days', ascending=False).rename(columns={'Assigned Team Members': 'Name'})
             try:
                 styled_counts = launch_counts.reset_index(drop=True).style.hide(axis="index").set_properties(**{'background-color': '#fff3cd', 'color': '#856404;', 'font-weight': 'bold'})
@@ -470,7 +454,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         
         if not delayed_launches_df.empty:
             tech_late_list = sorted(delayed_launches_df['Assigned Team Members'].unique())
-            # Bound selection dropdown selector to dynamic tab_key configurations to ensure separate instances across tabs
             selected_late_tech = st.selectbox("Select Tech to view launch times:", tech_late_list, key=f"late_launch_tech_select_{tab_key}")
             
             if selected_late_tech:
@@ -638,7 +621,7 @@ if time_file and ops_file:
             day_df[f'{day} Clocked'] = final_df[f'{day} Clocked']
             day_df[f'{day} Job Time'] = final_df[f'{day} Job Time']
             day_df[f'{day} Diff'] = final_df[f'{day} Diff']
-            display_dfs[short_day if 'short_day' in locals() else day] = day_df
+            display_dfs[day] = day_df
             
         manager_cols = ['Name']
         diff_cols_for_style = []
@@ -671,10 +654,28 @@ if time_file and ops_file:
         for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
             export_df[f'{d} Diff'] = final_df[f'{d} Diff']
         
+        # FIXED: Pre-calculated launch parameters in global block prior to template assembly loops
+        ops_sorted = ops_df.dropna(subset=['Earliest_Start']).sort_values(['Assigned Team Members', 'Earliest_Start'])
+        ops_sorted['Next_Job_Start'] = ops_sorted.groupby(['Assigned Team Members', 'Short_Date'])['Earliest_Start'].shift(-1)
+        ops_sorted['Gap_Hrs'] = (ops_sorted['Next_Job_Start'] - ops_sorted['Estimated_End']).dt.total_seconds() / 3600.0
+        
+        bounds_df = ops_sorted.groupby(['Assigned Team Members', 'Short_Date']).agg(
+            First_Punch=('Earliest_Start', 'min'),
+            Last_Punch=('Estimated_End', 'max')
+        ).reset_index()
+        bounds_df['First Status Update'] = bounds_df['First_Punch'].dt.strftime('%I:%M %p')
+        bounds_df['Last Status Update'] = bounds_df['Last_Punch'].dt.strftime('%I:%M %p')
+        bounds_df['Total_Span_Hrs'] = (bounds_df['Last_Punch'] - bounds_df['First_Punch']).dt.total_seconds() / 3600.0
+        bounds_df['Total Time'] = bounds_df['Total_Span_Hrs'].apply(format_hm)
+        
+        delayed_launches_df = bounds_df[
+            (bounds_df['First_Punch'].dt.hour > 8) | 
+            ((bounds_df['First_Punch'].dt.hour == 8) & (bounds_df['First_Punch'].dt.minute >= 30))
+        ].copy()
+        
         st.success("Files processed successfully!")
         
         # --- 4. Display Results in Tabs ---
-        # UPDATED: Injected isolated experimental 11th tab string parameter to core array
         tab_names = ["Weekly Summary", "Manager Overview", "Individual Tech Report", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "🧪 Test Section"]
         tabs = st.tabs(tab_names)
         
@@ -682,7 +683,8 @@ if time_file and ops_file:
             st.markdown('<h3 class="hide-on-print">Weekly Summary</h3>', unsafe_allow_html=True)
             styled_weekly = display_dfs['Weekly'].reset_index(drop=True).style.apply(highlight_weekly_row, axis=1)
             st.dataframe(styled_weekly, use_container_width=True)
-            show_advanced_reporting(ops_df, final_df, export_df, tab_key="summary_tab")
+            # FIXED: Transferred parameters down to signature block
+            show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, tab_key="summary_tab")
             
         with tabs[1]:
             st.markdown('<h3 class="hide-on-print">Manager Overview - All Techs</h3>', unsafe_allow_html=True)
@@ -724,7 +726,8 @@ if time_file and ops_file:
                 st.table(styled_report)
                 st.markdown("---")
             
-            show_advanced_reporting(ops_df, final_df, export_df, tab_key="manager_tab")
+            # FIXED: Transferred parameters down to signature block
+            show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, tab_key="manager_tab")
             
         with tabs[2]:
             st.markdown('<h3 class="hide-on-print">Printable Individual Report</h3>', unsafe_allow_html=True)
@@ -778,7 +781,7 @@ if time_file and ops_file:
                     styled_daily = display_dfs[short_day].reset_index(drop=True).style.applymap(highlight_daily, subset=[f'{short_day} Diff'])
                 st.dataframe(styled_daily, use_container_width=True)
 
-        # ADDED: Standalone 11th Tab handling Sandbox controls completely isolated from the remaining codebase
+        # FIXED: Test section sandbox now references the securely shared global delayed_launches_df smoothly
         with tabs[10]:
             st.header("🧪 Isolated Leaderboard Sandbox")
             st.markdown("Use the selections below to add, remove, or evaluate components without changing the data models in other sections.")
