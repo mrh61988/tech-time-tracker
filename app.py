@@ -687,8 +687,8 @@ if time_file and ops_file:
         final_df['Daily_Avg_Diff_Hrs'] = np.where(final_df['Days_Worked'] > 0, final_df['Total_Weekly_Diff_Hrs'] / final_df['Days_Worked'], 0.0)
         
         # --- NEW BU ISOLATED EFFICIENCY CALCULATION ENGINE (WEIGHTED GOALS) ---
-        # 1. Set goal baselines (LSI = 1.75 hrs, WH = 3.4167 hrs) and calculate total weighted goal hours
-        final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 1.75
+        # UPDATED: Set LSI goal baseline to exactly 2.0 hours. Set WH baseline to exactly 3.4167 hours (3:25).
+        final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
         final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * (3 + (25 / 60.0))
         final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
         
@@ -915,24 +915,33 @@ if time_file and ops_file:
 
             if "📊 Business Unit Weekly Efficiency Summary" in test_choices:
                 st.markdown("### **📊 Business Unit Weekly Efficiency Summary (Sandbox View)**")
-                st.markdown("*(Efficiency is calculated by weighting total clocked hours against specific task goals: **Water Heaters = 3:25 hrs**, **LSI = 1:45 hrs**)*")
+                st.markdown("*(Efficiency is calculated by weighting total clocked hours against specific task goals: **Water Heaters = 3:25 hrs**, **LSI = 2:00 hrs**)*")
+                
+                # UPDATED: Sorted strictly by Water Heater Efficiency numeric calculations before pushing text strings
+                sandbox_df = final_df.sort_values(by='WH_Eff', ascending=False).copy()
+                
                 bu_summary_df = pd.DataFrame()
-                bu_summary_df['Name'] = final_df['Name']
-                bu_summary_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
-                bu_summary_df['Total Jobs'] = final_df['Total_Weekly_Job_Count'].astype(int)
-                bu_summary_df['Total Efficiency'] = final_df['Total Eff']
+                bu_summary_df['Name'] = sandbox_df['Name']
+                bu_summary_df['Total Clocked'] = sandbox_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
+                bu_summary_df['Total Jobs'] = sandbox_df['Total_Weekly_Job_Count'].astype(int)
+                bu_summary_df['Total Efficiency'] = sandbox_df['Total Eff']
                 
-                bu_summary_df['LSI Jobs'] = final_df['Simple_Installs_Count'].astype(int)
-                bu_summary_df['LSI Tablet Hrs'] = final_df['Simple_Installs_Hrs'].apply(format_hm)
-                bu_summary_df['LSI Assumed Clocked'] = final_df['Assumed_LSI_Clocked'].apply(format_hm)
-                bu_summary_df['LSI Efficiency'] = final_df['Simple Installs Eff']
+                bu_summary_df['LSI Jobs'] = sandbox_df['Simple_Installs_Count'].astype(int)
+                bu_summary_df['LSI Tablet Hrs'] = sandbox_df['Simple_Installs_Hrs'].apply(format_hm)
+                bu_summary_df['LSI Assumed Clocked'] = sandbox_df['Assumed_LSI_Clocked'].apply(format_hm)
+                bu_summary_df['LSI Efficiency'] = sandbox_df['Simple Installs Eff']
                 
-                bu_summary_df['WH Jobs'] = final_df['Water_Heaters_Count'].astype(int)
-                bu_summary_df['WH Tablet Hrs'] = final_df['Water_Heaters_Hrs'].apply(format_hm)
-                bu_summary_df['WH Assumed Clocked'] = final_df['Assumed_WH_Clocked'].apply(format_hm)
-                bu_summary_df['WH Efficiency'] = final_df['Water Heaters Eff']
+                bu_summary_df['WH Jobs'] = sandbox_df['Water_Heaters_Count'].astype(int)
+                bu_summary_df['WH Tablet Hrs'] = sandbox_df['Water_Heaters_Hrs'].apply(format_hm)
+                bu_summary_df['WH Assumed Clocked'] = sandbox_df['Assumed_WH_Clocked'].apply(format_hm)
+                bu_summary_df['WH Efficiency'] = sandbox_df['Water Heaters Eff']
                 
-                st.dataframe(bu_summary_df.reset_index(drop=True), use_container_width=True)
+                # UPDATED: Injected styling class specific to the 'WH Efficiency' column
+                styled_bu = bu_summary_df.reset_index(drop=True).style.set_properties(
+                    **{'background-color': '#fff3cd', 'font-weight': 'bold', 'color': '#856404'}, subset=['WH Efficiency']
+                )
+                
+                st.dataframe(styled_bu, use_container_width=True)
             
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
