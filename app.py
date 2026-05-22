@@ -307,38 +307,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         else:
             st.info("No technicians qualified for the Gold Star list this week.")
 
-    # === ADDED: NEW ROW FOR TABLET STATUS COMPLIANCE AUDIT ===
-    st.markdown("<br>", unsafe_allow_html=True)
-    compliance_col, compliance_empty_col = st.columns(2)
-    
-    with compliance_col:
-        st.subheader("📱 Tablet Status Compliance Grade")
-        st.markdown("*(Flags batch-clicking or pencil-whipping habits where 'In Progress' was clicked for less than 3 minutes or skipped completely)*")
-        
-        # Pull jobs where In Progress time is non-compliant (<3 minutes) but the job has logged overall timestamp activity
-        batch_clicked_df = ops_df[(ops_df['In_Progress_Time_Hrs'] < 0.05) & (ops_df['Total_Job_Time_Hours'] > 0)].copy()
-        
-        if not batch_clicked_df.empty:
-            batch_clicked_df['Duration'] = batch_clicked_df['In_Progress_Time_Hrs'].apply(lambda x: "Skipped" if x == 0 else f"{int(x*60)} mins")
-            show_compliance = batch_clicked_df[['Assigned Team Members', 'Short_Date', 'Duration']].rename(columns={
-                'Assigned Team Members': 'Name',
-                'Short_Date': 'Date',
-                'Duration': 'In Progress Window'
-            }).sort_values(by='Name')
-            
-            def highlight_compliance_rows(row):
-                if row['In Progress Window'] == "Skipped":
-                    return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row)
-                return ['background-color: #fff3cd; color: #856404;'] * len(row)
-                
-            try:
-                styled_compliance = show_compliance.reset_index(drop=True).style.hide(axis="index").apply(highlight_compliance_rows, axis=1)
-            except Exception:
-                styled_compliance = show_compliance.reset_index(drop=True).style.apply(highlight_compliance_rows, axis=1)
-            st.dataframe(styled_compliance, use_container_width=True)
-        else:
-            st.success("Perfect compliance! No pencil-whipped or skipped tablet statuses detected.")
-
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
     # === DISPATCHER TOOLS SECTION ===
@@ -388,6 +356,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         st.subheader("🛒 Lowe's Operational Delays")
         st.markdown("*(All logged store visits. Rows highlighted in red show specific jobs that took greater than 45 minutes)*")
         
+        # Calculate summary metrics strictly on jobs over 45 minutes
         excessive_df = ops_df[ops_df['Store_Time_Hrs'] > 0.75].copy()
         total_delayed_store_hrs = excessive_df['Store_Time_Hrs'].sum()
         store_loss_cost = total_delayed_store_hrs * rate
@@ -399,6 +368,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
             all_store_df['Store Time'] = all_store_df['Store_Time_Hrs'].apply(format_hm)
             show_store = all_store_df[['Assigned Team Members', 'Short_Date', 'Store Time']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
             
+            # Highlight function targeting rows where time > 45 mins
             def highlight_store_jobs(row):
                 hrs = parse_hm(row['Store Time'])
                 if hrs > 0.75:
@@ -465,16 +435,19 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         else:
             st.success("Great routing! No days hit greater than 40% drive time.")
 
-    # === ADDED: NEW ROW FOR MORNING MOMENTUM DELAYED LAUNCH AUDIT ===
+    # === ADDED: MORNING MOMENTUM DELAYED LAUNCH AUDIT (ADJUSTED TO 8:30 AM) ===
     st.markdown("<br>", unsafe_allow_html=True)
     launch_col, launch_empty_col = st.columns(2)
     
     with launch_col:
         st.subheader("🚗 Delayed Launch Alert (Morning Momentum Audit)")
-        st.markdown("*(Flags field operations where a technician's very first status update of the day happened after 8:00 AM)*")
+        st.markdown("*(Flags field operations where a technician's very first status update of the day happened at or after 8:30 AM)*")
         
-        # Filter bounds to capture any day where the first status update punch was at or after 8:00 AM
-        delayed_launches_df = bounds_df[bounds_df['First_Punch'].dt.hour >= 8].sort_values(by='First_Punch', ascending=False).copy()
+        # FIXED: Targets rows where first punch is 8:30 AM or later
+        delayed_launches_df = bounds_df[
+            (bounds_df['First_Punch'].dt.hour > 8) | 
+            ((bounds_df['First_Punch'].dt.hour == 8) & (bounds_df['First_Punch'].dt.minute >= 30))
+        ].sort_values(by='First_Punch', ascending=False).copy()
         
         if not delayed_launches_df.empty:
             delayed_launches_df['First Launch'] = delayed_launches_df['First_Punch'].dt.strftime('%I:%M %p')
@@ -488,7 +461,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
                 styled_launches = show_launches.reset_index(drop=True).style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'})
             st.dataframe(styled_launches, use_container_width=True)
         else:
-            st.success("Perfect deployment momentum! All technicians hit the road before 8:00 AM this week.")
+            st.success("Perfect deployment momentum! All technicians hit the road before 8:30 AM this week.")
 # ------------------------------
 
 if time_file and ops_file:
