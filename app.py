@@ -184,14 +184,15 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
 
     with leaderboard_col:
         st.subheader("🚨 Team Leaderboard")
-        st.markdown("*(Whole team sorted by highest unaccounted time)*")
+        st.markdown("*(Whole team sorted by highest unaccounted time after overrides)*")
         leaderboard_df = final_df.sort_values(by='Total_Weekly_Diff_Hrs', ascending=False).copy()
         if not leaderboard_df.empty:
             leaderboard_df['Total Clocked'] = leaderboard_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
             leaderboard_df['Total Job Time'] = leaderboard_df['Total_Weekly_Job_Hrs'].apply(format_hm)
+            leaderboard_df['Manual Adj'] = leaderboard_df['Adjustment_Hrs'].apply(format_hm)
             leaderboard_df['Total Diff'] = leaderboard_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
             
-            show_leaderboard = leaderboard_df[['Name', 'Total Clocked', 'Total Job Time', 'Total Diff']].copy()
+            show_leaderboard = leaderboard_df[['Name', 'Total Clocked', 'Total Job Time', 'Manual Adj', 'Total Diff']].copy()
             def highlight_leaderboard(row):
                 val = parse_diff_to_hours(row['Total Diff'])
                 if val > 0:
@@ -271,7 +272,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
 
     with gold_star_col:
         st.subheader("⭐ The \"Gold Star\" High-Performer List")
-        # UPDATED: Changed threshold description and logic parameter to 6.0 hours
         st.markdown("*(Technicians with less than or equal to 6 hours of total unaccounted time. Store delays do NOT penalize techs)*")
         
         gold_star_df = final_df[(final_df['Total_Weekly_Diff_Hrs'] <= 6.0) & (final_df['Days_Worked'] > 0)].copy()
@@ -534,6 +534,18 @@ if time_file and ops_file:
         final_df = pd.merge(time_df, job_time_pivot, on='Name', how='left').fillna(0)
         final_df = pd.merge(final_df, job_count_pivot, on='Name', how='left').fillna(0)
         
+        # --- 3.5 ADDED: Apply Manual Tablet Adjustments Sidebar UI ---
+        st.sidebar.header("🔧 Tablet Time Adjustments")
+        st.sidebar.markdown("*(Correct tech hours if they hit a job status too early or late)*")
+        st.sidebar.markdown("**Rules:** `+` Adds to productive job time (tech forgot to punch), `-` Subtracts from job time (status left running too long).")
+        
+        adjustments = {}
+        for tech in sorted(final_df['Name'].unique()):
+            adjustments[tech] = st.sidebar.number_input(f"{tech} Adj (Hrs)", value=0.0, step=0.25, key=f"adj_{tech}")
+            
+        final_df['Adjustment_Hrs'] = final_df['Name'].map(adjustments).fillna(0.0)
+        final_df['Total_Weekly_Job_Hrs'] = final_df['Total_Weekly_Job_Hrs'] + final_df['Adjustment_Hrs']
+        
         display_dfs = {}
         for day in days:
             diff_col = day + '_Diff_Hrs'
@@ -568,6 +580,7 @@ if time_file and ops_file:
         weekly_df['Days Worked'] = final_df['Days_Worked']
         weekly_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
         weekly_df['Total Job Time'] = final_df['Total_Weekly_Job_Hrs'].apply(format_hm)
+        weekly_df['Manual Adj'] = final_df['Adjustment_Hrs'].apply(format_hm) # Added adjustment tracking row
         weekly_df['Total Diff'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
         display_dfs['Weekly'] = weekly_df
         
