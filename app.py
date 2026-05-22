@@ -470,7 +470,8 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         
         if not delayed_launches_df.empty:
             tech_late_list = sorted(delayed_launches_df['Assigned Team Members'].unique())
-            selected_late_tech = st.selectbox("Select Tech to view launch times:", tech_late_list, key="late_launch_tech_select")
+            # FIXED: Bound selection dropdown selector to dynamic tab_key configurations to ensure separate instances across tabs
+            selected_late_tech = st.selectbox("Select Tech to view launch times:", tech_late_list, key=f"late_launch_tech_select_{tab_key}")
             
             if selected_late_tech:
                 tech_launches_df = delayed_launches_df[delayed_launches_df['Assigned Team Members'] == selected_late_tech].copy()
