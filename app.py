@@ -466,7 +466,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
 
     with launch_empty_col:
         st.subheader("🚗 Delayed Launch Alert (Morning Momentum Audit)")
-        st.markdown("*(Select a technician from the dropdown to review their specific late launch ledger logs)*")
+        st.markdown("*(Select a tech from the dropdown to review late launch logs. Goals: **On The Way/Store by 8:00 AM**, **In Progress by 8:30 AM**)*")
         
         if not delayed_launches_df.empty:
             tech_late_list = sorted(delayed_launches_df['Assigned Team Members'].unique())
@@ -474,7 +474,10 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
             
             if selected_late_tech:
                 tech_launches_df = delayed_launches_df[delayed_launches_df['Assigned Team Members'] == selected_late_tech].copy()
-                tech_launches_df['First Launch'] = tech_launches_df['First_Punch'].dt.strftime('%I:%M %p')
+                
+                # UPDATED: Injected string concatenation to display both Time AND Status in the ledger visually
+                tech_launches_df['First Launch'] = tech_launches_df['First_Punch'].dt.strftime('%I:%M %p') + " (" + tech_launches_df['First_Status'] + ")"
+                
                 show_launches = tech_launches_df.sort_values(by='First_Punch', ascending=False)[['Short_Date', 'First Launch']].rename(columns={
                     'Short_Date': 'Date'
                 })
@@ -484,7 +487,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
                     styled_launches = show_launches.reset_index(drop=True).style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'})
                 st.dataframe(styled_launches, use_container_width=True)
         else:
-            st.success("Perfect deployment momentum! All technicians hit the road before 8:30 AM this week.")
+            st.success("Perfect deployment momentum! All technicians launched successfully on time.")
 # ------------------------------
 
 if time_file and ops_file:
@@ -563,7 +566,21 @@ if time_file and ops_file:
         for c in available_ts_cols:
             ops_df[c + '_dt'] = pd.to_datetime(ops_df[c].astype(str).str.split(' GMT').str[0], errors='coerce')
         
-        ops_df['Earliest_Start'] = ops_df[[c + '_dt' for c in available_ts_cols]].min(axis=1)
+        # UPDATED: Parse exact status of the earliest start
+        available_ts_dt_cols = [c + '_dt' for c in available_ts_cols]
+        ops_df['Earliest_Start'] = ops_df[available_ts_dt_cols].min(axis=1)
+        ops_df['Earliest_Status_Col'] = ops_df[available_ts_dt_cols].idxmin(axis=1)
+        
+        def map_status(col):
+            if pd.isna(col): return 'Unknown'
+            col = str(col)
+            if 'Lowes Store' in col: return 'Lowes Store'
+            if 'On The Way' in col: return 'On The Way'
+            if 'In Progress' in col: return 'In Progress'
+            return 'Unknown'
+            
+        ops_df['Earliest_Status'] = ops_df['Earliest_Status_Col'].apply(map_status)
+        
         ops_df['Estimated_End'] = ops_df['Earliest_Start'] + pd.to_timedelta(ops_df['Total_Job_Time_Hours'] * 3600, unit='s')
         ops_df['Job_Date_Parsed'] = pd.to_datetime(ops_df['Job_Date'].astype(str).str.split(' GMT').str[0], errors='coerce')
         ops_df['Day_of_Week'] = ops_df['Job_Date_Parsed'].dt.day_name().str[:3]
@@ -687,22 +704,18 @@ if time_file and ops_file:
         final_df['Daily_Avg_Diff_Hrs'] = np.where(final_df['Days_Worked'] > 0, final_df['Total_Weekly_Diff_Hrs'] / final_df['Days_Worked'], 0.0)
         
         # --- NEW BU ISOLATED EFFICIENCY CALCULATION ENGINE (WEIGHTED GOALS) ---
-        # UPDATED: Set LSI goal baseline to exactly 2.0 hours. Set WH baseline to exactly 3.4167 hours (3:25).
         final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
         final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * (3 + (25 / 60.0))
         final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
         
-        # 2. Allocate assumed clocked time proportionately based on goal weight ratios
         final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
         final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
         
-        # 3. Calculate true isolated efficiency
         final_df['LSI_Eff'] = np.where(final_df['Assumed_LSI_Clocked'] > 0, (final_df['Simple_Installs_Hrs'] / final_df['Assumed_LSI_Clocked']) * 100, 0.0)
         final_df['WH_Eff'] = np.where(final_df['Assumed_WH_Clocked'] > 0, (final_df['Water_Heaters_Hrs'] / final_df['Assumed_WH_Clocked']) * 100, 0.0)
         
         final_df['Total_Eff'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, (final_df['Total_Weekly_Job_Hrs'] / final_df['Total_Weekly_Clocked_Hrs']) * 100, 0.0)
         
-        # Format strings for clean frontend display injection
         final_df['Simple Installs'] = final_df['Simple_Installs_Hrs'].apply(format_hm)
         final_df['Water Heaters'] = final_df['Water_Heaters_Hrs'].apply(format_hm)
         final_df['Simple Installs Eff'] = final_df['LSI_Eff'].apply(lambda x: f"{x:.1f}%")
@@ -738,19 +751,29 @@ if time_file and ops_file:
         ops_sorted['Next_Job_Start'] = ops_sorted.groupby(['Assigned Team Members', 'Short_Date'])['Earliest_Start'].shift(-1)
         ops_sorted['Gap_Hrs'] = (ops_sorted['Next_Job_Start'] - ops_sorted['Estimated_End']).dt.total_seconds() / 3600.0
         
+        # UPDATED: Pull the Earliest_Status for each day's first punch
         bounds_df = ops_sorted.groupby(['Assigned Team Members', 'Short_Date']).agg(
             First_Punch=('Earliest_Start', 'min'),
-            Last_Punch=('Estimated_End', 'max')
+            Last_Punch=('Estimated_End', 'max'),
+            First_Status=('Earliest_Status', 'first')
         ).reset_index()
         bounds_df['First Status Update'] = bounds_df['First_Punch'].dt.strftime('%I:%M %p')
         bounds_df['Last Status Update'] = bounds_df['Last_Punch'].dt.strftime('%I:%M %p')
         bounds_df['Total_Span_Hrs'] = (bounds_df['Last_Punch'] - bounds_df['First_Punch']).dt.total_seconds() / 3600.0
         bounds_df['Total Time'] = bounds_df['Total_Span_Hrs'].apply(format_hm)
         
-        delayed_launches_df = bounds_df[
-            (bounds_df['First_Punch'].dt.hour > 8) | 
-            ((bounds_df['First_Punch'].dt.hour == 8) & (bounds_df['First_Punch'].dt.minute >= 30))
-        ].copy()
+        # UPDATED: Dynamic status validation for late deployment metrics
+        def check_late(row):
+            fp = row['First_Punch']
+            status = row['First_Status']
+            if pd.isna(fp): return False
+            if status in ['On The Way', 'Lowes Store']:
+                return fp.hour >= 8
+            elif status == 'In Progress':
+                return fp.hour > 8 or (fp.hour == 8 and fp.minute >= 30)
+            return False
+            
+        delayed_launches_df = bounds_df[bounds_df.apply(check_late, axis=1)].copy()
         
         st.success("Files processed successfully!")
         
@@ -917,7 +940,6 @@ if time_file and ops_file:
                 st.markdown("### **📊 Business Unit Weekly Efficiency Summary (Sandbox View)**")
                 st.markdown("*(Efficiency is calculated by weighting total clocked hours against specific task goals: **Water Heaters = 3:25 hrs**, **LSI = 2:00 hrs**)*")
                 
-                # UPDATED: Sorted strictly by Water Heater Efficiency numeric calculations before pushing text strings
                 sandbox_df = final_df.sort_values(by='WH_Eff', ascending=False).copy()
                 
                 bu_summary_df = pd.DataFrame()
@@ -936,7 +958,6 @@ if time_file and ops_file:
                 bu_summary_df['WH Assumed Clocked'] = sandbox_df['Assumed_WH_Clocked'].apply(format_hm)
                 bu_summary_df['WH Efficiency'] = sandbox_df['Water Heaters Eff']
                 
-                # UPDATED: Injected styling class specific to the 'WH Efficiency' column
                 styled_bu = bu_summary_df.reset_index(drop=True).style.set_properties(
                     **{'background-color': '#fff3cd', 'font-weight': 'bold', 'color': '#856404'}, subset=['WH Efficiency']
                 )
