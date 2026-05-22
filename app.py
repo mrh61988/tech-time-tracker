@@ -563,14 +563,22 @@ if time_file and ops_file:
         for c in available_ts_cols:
             ops_df[c + '_dt'] = pd.to_datetime(ops_df[c].astype(str).str.split(' GMT').str[0], errors='coerce')
         
-        # FIXED: Safe search mask to prevent idxmin from crashing on blank rows
+        # FIXED: Bulletproof logic to extract earliest timestamp and status column without invoking Pandas .idxmin() bug
         available_ts_dt_cols = [c + '_dt' for c in available_ts_cols]
         ops_df['Earliest_Start'] = ops_df[available_ts_dt_cols].min(axis=1)
         
-        valid_ts_mask = ops_df[available_ts_dt_cols].notna().any(axis=1)
-        ops_df['Earliest_Status_Col'] = pd.NA
-        if valid_ts_mask.any():
-            ops_df.loc[valid_ts_mask, 'Earliest_Status_Col'] = ops_df.loc[valid_ts_mask, available_ts_dt_cols].idxmin(axis=1)
+        def get_first_status_col(row):
+            min_t = pd.NaT
+            best_c = 'Unknown'
+            for c in available_ts_dt_cols:
+                t = row[c]
+                if pd.notna(t):
+                    if pd.isna(min_t) or t < min_t:
+                        min_t = t
+                        best_c = c
+            return best_c
+
+        ops_df['Earliest_Status_Col'] = ops_df.apply(get_first_status_col, axis=1)
         
         def map_status(col):
             if pd.isna(col): return 'Unknown'
@@ -605,6 +613,7 @@ if time_file and ops_file:
             bu_pivot = pd.merge(bu_pivot_hrs, bu_pivot_cnt, on='Assigned Team Members', suffixes=('_hrs', '_cnt'))
             bu_pivot = bu_pivot.rename(columns={'Assigned Team Members': 'Name'})
             
+            # Ensure safety columns exist
             for col in ['Lowes - Simple Installs_hrs', 'Lowes - Water Heaters_hrs', 'Lowes - Simple Installs_cnt', 'Lowes - Water Heaters_cnt']:
                 if col not in bu_pivot.columns:
                     bu_pivot[col] = 0.0
@@ -630,6 +639,7 @@ if time_file and ops_file:
         job_time_pivot = job_time_pivot.rename(columns=rename_dict)
         job_time_pivot['Total_Weekly_Job_Hrs'] = job_time_pivot[[d + '_Job_Hrs' for d in days]].sum(axis=1)
         
+        # --- Create Daily Job Counts ---
         job_count_agg = ops_df.groupby(['Assigned Team Members', 'Day_of_Week']).size().reset_index(name='Job_Count')
         job_count_pivot = job_count_agg.pivot(index='Assigned Team Members', columns='Day_of_Week', values='Job_Count').reset_index()
         job_count_pivot = job_count_pivot.rename(columns={'Assigned Team Members': 'Name'}).fillna(0)
@@ -642,9 +652,11 @@ if time_file and ops_file:
         job_count_pivot = job_count_pivot.rename(columns=rename_dict_counts)
         job_count_pivot['Total_Weekly_Job_Count'] = job_count_pivot[[d + '_Job_Count' for d in days]].sum(axis=1)
         
+        # --- 3. Merge and Calculate Differences ---
         final_df = pd.merge(time_df, job_time_pivot, on='Name', how='left').fillna(0)
         final_df = pd.merge(final_df, job_count_pivot, on='Name', how='left').fillna(0)
         
+        # Inject Business Unit hours & counts into main tracking grid
         if not bu_pivot.empty:
             final_df = pd.merge(final_df, bu_pivot[['Name', 'Simple_Installs_Hrs', 'Water_Heaters_Hrs', 'Simple_Installs_Count', 'Water_Heaters_Count']], on='Name', how='left').fillna(0)
         else:
@@ -653,6 +665,7 @@ if time_file and ops_file:
             final_df['Simple_Installs_Count'] = 0.0
             final_df['Water_Heaters_Count'] = 0.0
             
+        # --- 3.5 Tablet Adjustments Sidebar UI ---
         st.sidebar.header("🔧 Tablet Time Adjustments")
         st.sidebar.markdown("*(Correct tech hours if they hit a job status too early or late)*")
         st.sidebar.markdown("**Rules:** Use positive numbers like `1:30` or `0:45` to add time. Use a minus sign like `-1:15` or `-0:30` to subtract time.")
@@ -707,15 +720,15 @@ if time_file and ops_file:
         final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
         final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
         
-        final_df['LSI_Eff'] = np.where(final_df['Assumed_LSI_Clocked'] > 0, (final_df['Simple_Installs_Hrs'] / final_df['Assumed_LSI_Clocked']) * 100, 0.0)
-        final_df['WH_Eff'] = np.where(final_df['Assumed_WH_Clocked'] > 0, (final_df['Water_Heaters_Hrs'] / final_df['Assumed_WH_Clocked']) * 100, 0.0)
+        final_df['LSI_Eff_Raw'] = np.where(final_df['Assumed_LSI_Clocked'] > 0, (final_df['Simple_Installs_Hrs'] / final_df['Assumed_LSI_Clocked']) * 100, 0.0)
+        final_df['WH_Eff_Raw'] = np.where(final_df['Assumed_WH_Clocked'] > 0, (final_df['Water_Heaters_Hrs'] / final_df['Assumed_WH_Clocked']) * 100, 0.0)
         
         final_df['Total_Eff'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, (final_df['Total_Weekly_Job_Hrs'] / final_df['Total_Weekly_Clocked_Hrs']) * 100, 0.0)
         
         final_df['Simple Installs'] = final_df['Simple_Installs_Hrs'].apply(format_hm)
         final_df['Water Heaters'] = final_df['Water_Heaters_Hrs'].apply(format_hm)
-        final_df['Simple Installs Eff'] = final_df['LSI_Eff'].apply(lambda x: f"{x:.1f}%")
-        final_df['Water Heaters Eff'] = final_df['WH_Eff'].apply(lambda x: f"{x:.1f}%")
+        final_df['Simple Installs Eff'] = final_df['LSI_Eff_Raw'].apply(lambda x: f"{x:.1f}%")
+        final_df['Water Heaters Eff'] = final_df['WH_Eff_Raw'].apply(lambda x: f"{x:.1f}%")
         final_df['Total Eff'] = final_df['Total_Eff'].apply(lambda x: f"{x:.1f}%")
         
         final_df = final_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=False)
@@ -934,7 +947,7 @@ if time_file and ops_file:
                 st.markdown("### **📊 Business Unit Weekly Efficiency Summary (Sandbox View)**")
                 st.markdown("*(Efficiency is calculated by weighting total clocked hours against specific task goals: **Water Heaters = 3:25 hrs**, **LSI = 2:00 hrs**)*")
                 
-                sandbox_df = final_df.sort_values(by='WH_Eff', ascending=False).copy()
+                sandbox_df = final_df.sort_values(by='WH_Eff_Raw', ascending=False).copy()
                 
                 bu_summary_df = pd.DataFrame()
                 bu_summary_df['Name'] = sandbox_df['Name']
