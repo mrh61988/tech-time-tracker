@@ -291,9 +291,10 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
 
     with gold_star_col:
         st.subheader("⭐ The \"Gold Star\" High-Performer List")
-        st.markdown("*(Technicians with less than or equal to 6 hours of total unaccounted time. Store delays do NOT penalize techs)*")
+        # FIXED: Updated description rule and filtering condition to filter dynamically on Daily Avg < 1.5 hours (1:30)
+        st.markdown("*(Technicians who average under 1:30 of unallocated difference per day worked. Store delays do NOT penalize techs)*")
         
-        gold_star_df = final_df[(final_df['Total_Weekly_Diff_Hrs'] <= 6.0) & (final_df['Days_Worked'] > 0)].copy()
+        gold_star_df = final_df[(final_df['Daily_Avg_Diff_Hrs'] < 1.5) & (final_df['Days_Worked'] > 0)].copy()
         
         if not gold_star_df.empty:
             gold_star_df['Total Clocked'] = gold_star_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
@@ -602,14 +603,14 @@ if time_file and ops_file:
         st.sidebar.markdown("*(Correct tech hours if they hit a job status too early or late)*")
         st.sidebar.markdown("**Rules:** Use positive numbers like `1:30` or `0:45` to add time. Use a minus sign like `-1:15` or `-0:30` to subtract time.")
         
-        # ADDED: Master Global Override input tracking logic to sidebar layout
+        # Master Global Override input tracking logic to sidebar layout
         global_adj_str = st.sidebar.text_input("🌍 Global Adj for ALL Techs (HH:MM)", value="0:00", key="global_adj")
         global_adj_hrs = parse_adj_hm(global_adj_str)
         
         adjustments = {}
         for tech in sorted(final_df['Name'].unique()):
             adj_str = st.sidebar.text_input(f"{tech} Adj (HH:MM)", value="0:00", key=f"adj_{tech}")
-            # FIXED: Combines the master global override with the technician's individual text inputs safely
+            # Combines the master global override with the technician's individual text inputs safely
             adjustments[tech] = parse_adj_hm(adj_str) + global_adj_hrs
             
         final_df['Adjustment_Hrs'] = final_df['Name'].map(adjustments).fillna(0.0)
