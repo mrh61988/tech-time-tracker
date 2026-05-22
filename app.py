@@ -66,6 +66,24 @@ def parse_hm(time_str):
     except:
         return 0.0
 
+# ADDED: Special parsing handler for manual adjustments using hours and minutes
+def parse_adj_hm(val_str):
+    val_str = str(val_str).strip()
+    if not val_str or val_str == '-' or val_str == '0' or val_str == '0:00':
+        return 0.0
+    try:
+        sign = -1 if val_str.startswith('-') else 1
+        clean_val = val_str.lstrip('+-')
+        if ':' in clean_val:
+            parts = clean_val.split(':')
+            h = int(parts[0])
+            m = int(parts[1]) if len(parts) > 1 else 0
+            return sign * (h + m / 60.0)
+        else:
+            return sign * float(clean_val)
+    except:
+        return 0.0
+
 def parse_diff_to_hours(val):
     if val == '-' or pd.isna(val): return 0.0
     try:
@@ -534,14 +552,16 @@ if time_file and ops_file:
         final_df = pd.merge(time_df, job_time_pivot, on='Name', how='left').fillna(0)
         final_df = pd.merge(final_df, job_count_pivot, on='Name', how='left').fillna(0)
         
-        # --- 3.5 ADDED: Apply Manual Tablet Adjustments Sidebar UI ---
+        # --- 3.5 Tablet Adjustments Sidebar UI ---
         st.sidebar.header("🔧 Tablet Time Adjustments")
         st.sidebar.markdown("*(Correct tech hours if they hit a job status too early or late)*")
-        st.sidebar.markdown("**Rules:** `+` Adds to productive job time (tech forgot to punch), `-` Subtracts from job time (status left running too long).")
+        st.sidebar.markdown("**Rules:** Use positive numbers like `1:30` or `0:45` to add time. Use a minus sign like `-1:15` or `-0:30` to subtract time.")
         
         adjustments = {}
         for tech in sorted(final_df['Name'].unique()):
-            adjustments[tech] = st.sidebar.number_input(f"{tech} Adj (Hrs)", value=0.0, step=0.25, key=f"adj_{tech}")
+            # FIXED: Converted widget type from number_input to text_input for handling HH:MM configurations
+            adj_str = st.sidebar.text_input(f"{tech} Adj (HH:MM)", value="0:00", key=f"adj_{tech}")
+            adjustments[tech] = parse_adj_hm(adj_str)
             
         final_df['Adjustment_Hrs'] = final_df['Name'].map(adjustments).fillna(0.0)
         final_df['Total_Weekly_Job_Hrs'] = final_df['Total_Weekly_Job_Hrs'] + final_df['Adjustment_Hrs']
@@ -580,7 +600,7 @@ if time_file and ops_file:
         weekly_df['Days Worked'] = final_df['Days_Worked']
         weekly_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
         weekly_df['Total Job Time'] = final_df['Total_Weekly_Job_Hrs'].apply(format_hm)
-        weekly_df['Manual Adj'] = final_df['Adjustment_Hrs'].apply(format_hm) # Added adjustment tracking row
+        weekly_df['Manual Adj'] = final_df['Adjustment_Hrs'].apply(format_hm)
         weekly_df['Total Diff'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
         display_dfs['Weekly'] = weekly_df
         
