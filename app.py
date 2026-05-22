@@ -435,23 +435,24 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         else:
             st.success("Great routing! No days hit greater than 40% drive time.")
 
-    # === ADDED: MORNING MOMENTUM DELAYED LAUNCH AUDIT (ADJUSTED TO 8:30 AM) ===
+    # === MORNING MOMENTUM DELAYED LAUNCH AUDIT (ADJUSTED TO 8:30 AM) ===
     st.markdown("<br>", unsafe_allow_html=True)
     launch_col, launch_empty_col = st.columns(2)
+    
+    # Filter bounds to capture any day where the first status update punch was at or after 8:30 AM
+    delayed_launches_df = bounds_df[
+        (bounds_df['First_Punch'].dt.hour > 8) | 
+        ((bounds_df['First_Punch'].dt.hour == 8) & (bounds_df['First_Punch'].dt.minute >= 30))
+    ].copy()
     
     with launch_col:
         st.subheader("🚗 Delayed Launch Alert (Morning Momentum Audit)")
         st.markdown("*(Flags field operations where a technician's very first status update of the day happened at or after 8:30 AM)*")
         
-        # FIXED: Targets rows where first punch is 8:30 AM or later
-        delayed_launches_df = bounds_df[
-            (bounds_df['First_Punch'].dt.hour > 8) | 
-            ((bounds_df['First_Punch'].dt.hour == 8) & (bounds_df['First_Punch'].dt.minute >= 30))
-        ].sort_values(by='First_Punch', ascending=False).copy()
-        
         if not delayed_launches_df.empty:
-            delayed_launches_df['First Launch'] = delayed_launches_df['First_Punch'].dt.strftime('%I:%M %p')
-            show_launches = delayed_launches_df[['Assigned Team Members', 'Short_Date', 'First Launch']].rename(columns={
+            delayed_launches_sorted = delayed_launches_df.sort_values(by='First_Punch', ascending=False).copy()
+            delayed_launches_sorted['First Launch'] = delayed_launches_sorted['First_Punch'].dt.strftime('%I:%M %p')
+            show_launches = delayed_launches_sorted[['Assigned Team Members', 'Short_Date', 'First Launch']].rename(columns={
                 'Assigned Team Members': 'Name',
                 'Short_Date': 'Date'
             })
@@ -462,6 +463,21 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
             st.dataframe(styled_launches, use_container_width=True)
         else:
             st.success("Perfect deployment momentum! All technicians hit the road before 8:30 AM this week.")
+
+    with launch_empty_col:
+        # ADDED: New structural scoreboard tracking the exact number of occurrences per tech
+        st.subheader("📊 Late Deployment Scorecard")
+        st.markdown("*(Total number of delayed launches tracked for each technician)*")
+        if not delayed_launches_df.empty:
+            launch_counts = delayed_launches_df.groupby('Assigned Team Members').size().reset_index(name='Total Late Days')
+            launch_counts = launch_counts.sort_values(by='Total Late Days', ascending=False).rename(columns={'Assigned Team Members': 'Name'})
+            try:
+                styled_counts = launch_counts.reset_index(drop=True).style.hide(axis="index").set_properties(**{'background-color': '#fff3cd', 'color': '#856404;', 'font-weight': 'bold'})
+            except Exception:
+                styled_counts = launch_counts.reset_index(drop=True).style.set_properties(**{'background-color': '#fff3cd', 'color': '#856404;', 'font-weight': 'bold'})
+            st.dataframe(styled_counts, use_container_width=True)
+        else:
+            st.info("No late deployment metrics to aggregate this week.")
 # ------------------------------
 
 if time_file and ops_file:
