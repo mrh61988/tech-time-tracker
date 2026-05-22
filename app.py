@@ -1,4 +1,4 @@
-import streamlit st
+import streamlit as st
 import pandas as pd
 import numpy as np
 
@@ -449,7 +449,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         ((bounds_df['First_Punch'].dt.hour == 8) & (bounds_df['First_Punch'].dt.minute >= 30))
     ].copy()
     
-    # FIXED/UPDATED: Late Deployment Scorecard moved to the LEFT, sorted by most total late days at the top
     with launch_col:
         st.subheader("📊 Late Deployment Scorecard")
         st.markdown("*(Total number of delayed launches tracked for each technician)*")
@@ -465,18 +464,15 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         else:
             st.info("No late deployment metrics to aggregate this week.")
 
-    # FIXED/UPDATED: Delayed Launch Alert moved to the RIGHT, configured with a smart technician dropdown menu
     with launch_empty_col:
         st.subheader("🚗 Delayed Launch Alert (Morning Momentum Audit)")
         st.markdown("*(Select a technician from the dropdown to review their specific late launch ledger logs)*")
         
         if not delayed_launches_df.empty:
-            # Sorted dropdown options alphabetically by technician name
             tech_late_list = sorted(delayed_launches_df['Assigned Team Members'].unique())
             selected_late_tech = st.selectbox("Select Tech to view launch times:", tech_late_list, key="late_launch_tech_select")
             
             if selected_late_tech:
-                # Filter rows strictly to the selected tech and display
                 tech_launches_df = delayed_launches_df[delayed_launches_df['Assigned Team Members'] == selected_late_tech].copy()
                 tech_launches_df['First Launch'] = tech_launches_df['First_Punch'].dt.strftime('%I:%M %p')
                 show_launches = tech_launches_df.sort_values(by='First_Punch', ascending=False)[['Short_Date', 'First Launch']].rename(columns={
