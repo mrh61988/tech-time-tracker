@@ -202,8 +202,8 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
 
     with leaderboard_col:
         st.subheader("🚨 Team Leaderboard")
-        st.markdown("*(Whole team sorted by highest unaccounted time after overrides)*")
-        leaderboard_df = final_df.sort_values(by='Total_Weekly_Diff_Hrs', ascending=False).copy()
+        # FIXED: Modified sorting filter to rank by Daily_Avg_Diff_Hrs (Highest unallocated daily speed drops at top)
+        leaderboard_df = final_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=False).copy()
         if not leaderboard_df.empty:
             leaderboard_df['Total Clocked'] = leaderboard_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
             leaderboard_df['Total Job Time'] = leaderboard_df['Total_Weekly_Job_Hrs'].apply(format_hm)
@@ -291,12 +291,14 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
 
     with gold_star_col:
         st.subheader("⭐ The \"Gold Star\" High-Performer List")
-        # FIXED: Updated description rule and filtering condition to filter dynamically on Daily Avg < 1.5 hours (1:30)
         st.markdown("*(Technicians who average under 1:30 of unallocated difference per day worked. Store delays do NOT penalize techs)*")
         
         gold_star_df = final_df[(final_df['Daily_Avg_Diff_Hrs'] < 1.5) & (final_df['Days_Worked'] > 0)].copy()
         
         if not gold_star_df.empty:
+            # FIXED: Sorted Gold Star high performers by lowest average difference at the top (ascending=True)
+            gold_star_df = gold_star_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=True)
+            
             gold_star_df['Total Clocked'] = gold_star_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
             gold_star_df['Total Job Time'] = gold_star_df['Total_Weekly_Job_Hrs'].apply(format_hm)
             gold_star_df['Daily Avg Diff'] = gold_star_df['Daily_Avg_Diff_Hrs'].apply(format_hm)
@@ -453,7 +455,8 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         st.markdown("*(Flags field operations where a technician's very first status update of the day happened at or after 8:30 AM)*")
         
         if not delayed_launches_df.empty:
-            delayed_launches_sorted = delayed_launches_df.sort_values(by='First_Punch', ascending=False).copy()
+            # FIXED: Sorted Delayed Launch activity alphabetically by Technician Name
+            delayed_launches_sorted = delayed_launches_df.sort_values(by='Assigned Team Members', ascending=True).copy()
             delayed_launches_sorted['First Launch'] = delayed_launches_sorted['First_Punch'].dt.strftime('%I:%M %p')
             show_launches = delayed_launches_sorted[['Assigned Team Members', 'Short_Date', 'First Launch']].rename(columns={
                 'Assigned Team Members': 'Name',
@@ -472,7 +475,8 @@ def show_advanced_reporting(ops_df, final_df, export_df, tab_key):
         st.markdown("*(Total number of delayed launches tracked for each technician)*")
         if not delayed_launches_df.empty:
             launch_counts = delayed_launches_df.groupby('Assigned Team Members').size().reset_index(name='Total Late Days')
-            launch_counts = launch_counts.sort_values(by='Total Late Days', ascending=False).rename(columns={'Assigned Team Members': 'Name'})
+            # FIXED: Sorted Late Count Scorecard alphabetically by Technician Name
+            launch_counts = launch_counts.sort_values(by='Assigned Team Members', ascending=True).rename(columns={'Assigned Team Members': 'Name'})
             try:
                 styled_counts = launch_counts.reset_index(drop=True).style.hide(axis="index").set_properties(**{'background-color': '#fff3cd', 'color': '#856404;', 'font-weight': 'bold'})
             except Exception:
@@ -647,6 +651,9 @@ if time_file and ops_file:
         
         # Core math engine computes Daily Avg Diff based purely on days worked before layout builds
         final_df['Daily_Avg_Diff_Hrs'] = np.where(final_df['Days_Worked'] > 0, final_df['Total_Weekly_Diff_Hrs'] / final_df['Days_Worked'], 0.0)
+        
+        # FIXED: Core system now sorts final_df by Daily_Avg_Diff_Hrs descending so Weekly Summary is automatically organized
+        final_df = final_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=False)
         
         weekly_df = pd.DataFrame()
         weekly_df['Name'] = final_df['Name']
