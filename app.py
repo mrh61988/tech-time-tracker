@@ -154,7 +154,6 @@ def highlight_consistency(s):
     return styles
 
 # --- Advanced Reporting Block Function ---
-# FIXED: Updated signature parameters to accept pre-calculated dispatcher tables safely
 def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
@@ -336,7 +335,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
         else:
             st.success("No major routing gaps detected!")
 
-    # FIXED: Replaced nested bounds_df logic to inherit clean pipeline data directly
     with d_col2:
         st.subheader("🌅 First Job vs. Last Job")
         st.markdown("*(First punch of the morning, last punch of the afternoon)*")
@@ -364,6 +362,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
             all_store_df['Store Time'] = all_store_df['Store_Time_Hrs'].apply(format_hm)
             show_store = all_store_df[['Assigned Team Members', 'Short_Date', 'Store Time']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
             
+            # Highlight function targeting rows where time > 45 mins
             def highlight_store_jobs(row):
                 hrs = parse_hm(row['Store Time'])
                 if hrs > 0.75:
@@ -439,6 +438,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
         st.markdown("*(Total number of delayed launches tracked for each technician)*")
         if not delayed_launches_df.empty:
             launch_counts = delayed_launches_df.groupby('Assigned Team Members').size().reset_index(name='Total Late Days')
+            # Sorted by total late days descending (highest at top)
             launch_counts = launch_counts.sort_values(by='Total Late Days', ascending=False).rename(columns={'Assigned Team Members': 'Name'})
             try:
                 styled_counts = launch_counts.reset_index(drop=True).style.hide(axis="index").set_properties(**{'background-color': '#fff3cd', 'color': '#856404;', 'font-weight': 'bold'})
@@ -558,6 +558,24 @@ if time_file and ops_file:
         ops_df['Assigned Team Members'] = ops_df['Assigned Team Members'].str.strip()
         ops_df = ops_df[~ops_df['Assigned Team Members'].isin(EXCLUDE_NAMES)]
         
+        # --- NEW PIPELINE LOGIC: Parse Business Units ---
+        if 'Business Unit' in ops_df.columns:
+            bu_agg = ops_df.groupby(['Assigned Team Members', 'Business Unit'])['Total_Job_Time_Hours'].sum().reset_index()
+            bu_pivot = bu_agg.pivot(index='Assigned Team Members', columns='Business Unit', values='Total_Job_Time_Hours').reset_index().fillna(0)
+            bu_pivot = bu_pivot.rename(columns={'Assigned Team Members': 'Name'})
+            
+            if 'Lowes - Simple Installs' not in bu_pivot.columns:
+                bu_pivot['Lowes - Simple Installs'] = 0.0
+            if 'Lowes - Water Heaters' not in bu_pivot.columns:
+                bu_pivot['Lowes - Water Heaters'] = 0.0
+                
+            bu_pivot = bu_pivot.rename(columns={
+                'Lowes - Simple Installs': 'Simple_Installs_Hrs',
+                'Lowes - Water Heaters': 'Water_Heaters_Hrs'
+            })
+        else:
+            bu_pivot = pd.DataFrame(columns=['Name', 'Simple_Installs_Hrs', 'Water_Heaters_Hrs'])
+
         job_time_agg = ops_df.groupby(['Assigned Team Members', 'Day_of_Week'])['Total_Job_Time_Hours'].sum().reset_index()
         job_time_pivot = job_time_agg.pivot(index='Assigned Team Members', columns='Day_of_Week', values='Total_Job_Time_Hours').reset_index()
         job_time_pivot = job_time_pivot.rename(columns={'Assigned Team Members': 'Name'}).fillna(0)
@@ -586,6 +604,17 @@ if time_file and ops_file:
         # --- 3. Merge and Calculate Differences ---
         final_df = pd.merge(time_df, job_time_pivot, on='Name', how='left').fillna(0)
         final_df = pd.merge(final_df, job_count_pivot, on='Name', how='left').fillna(0)
+        
+        # Inject Business Unit hours into main tracking grid
+        if not bu_pivot.empty:
+            final_df = pd.merge(final_df, bu_pivot[['Name', 'Simple_Installs_Hrs', 'Water_Heaters_Hrs']], on='Name', how='left').fillna(0)
+        else:
+            final_df['Simple_Installs_Hrs'] = 0.0
+            final_df['Water_Heaters_Hrs'] = 0.0
+            
+        # Compute individual LSI and WH efficiency metrics safely
+        final_df['LSI_Eff'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, (final_df['Simple_Installs_Hrs'] / final_df['Total_Weekly_Clocked_Hrs']) * 100, 0.0)
+        final_df['WH_Eff'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, (final_df['Water_Heaters_Hrs'] / final_df['Total_Weekly_Clocked_Hrs']) * 100, 0.0)
         
         # --- 3.5 Tablet Adjustments Sidebar UI ---
         st.sidebar.header("🔧 Tablet Time Adjustments")
@@ -654,7 +683,7 @@ if time_file and ops_file:
         for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
             export_df[f'{d} Diff'] = final_df[f'{d} Diff']
         
-        # FIXED: Pre-calculated launch parameters in global block prior to template assembly loops
+        # Pre-calculated launch parameters securely moved up to standard operational environment block
         ops_sorted = ops_df.dropna(subset=['Earliest_Start']).sort_values(['Assigned Team Members', 'Earliest_Start'])
         ops_sorted['Next_Job_Start'] = ops_sorted.groupby(['Assigned Team Members', 'Short_Date'])['Earliest_Start'].shift(-1)
         ops_sorted['Gap_Hrs'] = (ops_sorted['Next_Job_Start'] - ops_sorted['Estimated_End']).dt.total_seconds() / 3600.0
@@ -683,7 +712,6 @@ if time_file and ops_file:
             st.markdown('<h3 class="hide-on-print">Weekly Summary</h3>', unsafe_allow_html=True)
             styled_weekly = display_dfs['Weekly'].reset_index(drop=True).style.apply(highlight_weekly_row, axis=1)
             st.dataframe(styled_weekly, use_container_width=True)
-            # FIXED: Transferred parameters down to signature block
             show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, tab_key="summary_tab")
             
         with tabs[1]:
@@ -726,7 +754,6 @@ if time_file and ops_file:
                 st.table(styled_report)
                 st.markdown("---")
             
-            # FIXED: Transferred parameters down to signature block
             show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, tab_key="manager_tab")
             
         with tabs[2]:
@@ -781,14 +808,14 @@ if time_file and ops_file:
                     styled_daily = display_dfs[short_day].reset_index(drop=True).style.applymap(highlight_daily, subset=[f'{short_day} Diff'])
                 st.dataframe(styled_daily, use_container_width=True)
 
-        # FIXED: Test section sandbox now references the securely shared global delayed_launches_df smoothly
         with tabs[10]:
             st.header("🧪 Isolated Leaderboard Sandbox")
             st.markdown("Use the selections below to add, remove, or evaluate components without changing the data models in other sections.")
             
+            # UPDATED: Added brand new 'Business Unit Weekly Efficiency Summary' multi-select string option
             test_choices = st.multiselect(
                 "Select active data views to mount inside Test Section:",
-                ["🚨 Team Leaderboard", "⭐ Gold Star Performance Roll", "📊 Late Deployment Scorecard"],
+                ["🚨 Team Leaderboard", "⭐ Gold Star Performance Roll", "📊 Late Deployment Scorecard", "📊 Business Unit Weekly Efficiency Summary"],
                 default=["🚨 Team Leaderboard"],
                 key="sandbox_view_choices"
             )
@@ -830,6 +857,18 @@ if time_file and ops_file:
                     st.dataframe(launch_counts.reset_index(drop=True).style.set_properties(**{'background-color': '#fff3cd', 'color': '#856404;', 'font-weight': 'bold'}), use_container_width=True)
                 else:
                     st.info("No launch metadata loaded to aggregate in sandbox loops.")
+
+            # ADDED: Render framework for your custom Business Unit Weekly summary matrix
+            if "📊 Business Unit Weekly Efficiency Summary" in test_choices:
+                st.markdown("### **📊 Business Unit Weekly Efficiency Summary (Sandbox View)**")
+                bu_summary_df = pd.DataFrame()
+                bu_summary_df['Name'] = final_df['Name']
+                bu_summary_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
+                bu_summary_df['LSI Hours'] = final_df['Simple_Installs_Hrs'].apply(format_hm)
+                bu_summary_df['LSI Efficiency'] = final_df['LSI_Eff'].apply(lambda x: f"{x:.1f}%")
+                bu_summary_df['Water Heater Hours'] = final_df['Water_Heaters_Hrs'].apply(format_hm)
+                bu_summary_df['Water Heater Efficiency'] = final_df['WH_Eff'].apply(lambda x: f"{x:.1f}%")
+                st.dataframe(bu_summary_df.reset_index(drop=True), use_container_width=True)
             
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
