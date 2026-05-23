@@ -166,21 +166,28 @@ def highlight_consistency(s):
             styles.append('')
     return styles
 
-# UPDATED: Custom highlight engine targets green code block flags strictly under the 30% ceiling
-def highlight_pay_pct_col(s):
-    styles = []
-    for val in s:
-        if val == '-' or pd.isna(val):
-            styles.append('')
-            continue
-        try:
-            v = float(str(val).replace('%', ''))
-            if v <= 30.0:
-                styles.append('background-color: #e6f4ea; color: #137333; font-weight: bold;')
-            else:
-                styles.append('background-color: #ffcccc; color: #990000;')
-        except:
-            styles.append('')
+# UPDATED: Segmented row highlight engine enforces target ceilings (<20% standard, <34% piece-rate)
+def highlight_pay_pct_row(row):
+    styles = [''] * len(row)
+    if 'Pay % vs Assigned Revenue' in row.index and 'Name' in row.index:
+        val = row['Pay % vs Assigned Revenue']
+        name = str(row['Name']).lower()
+        if val != '-' and pd.notna(val):
+            try:
+                v = float(str(val).replace('%', ''))
+                idx = row.index.get_loc('Pay % vs Assigned Revenue')
+                if 'bryan' in name or 'erik' in name:
+                    if v < 34.0:
+                        styles[idx] = 'background-color: #e6f4ea; color: #137333; font-weight: bold;'
+                    else:
+                        styles[idx] = 'background-color: #ffcccc; color: #990000;'
+                else:
+                    if v < 20.0:
+                        styles[idx] = 'background-color: #e6f4ea; color: #137333; font-weight: bold;'
+                    else:
+                        styles[idx] = 'background-color: #ffcccc; color: #990000;'
+            except:
+                pass
     return styles
 
 # --- Advanced Reporting Block Function ---
@@ -1215,10 +1222,10 @@ if time_file and ops_file:
                     ])
                     st.dataframe(store_stats, use_container_width=True)
 
-            # UPDATED: Added target formatting and re-sorted this table loop layout by pay percentage descending
+            # UPDATED PANEL: Combines financial elements sorted ascending by pay performance percentages
             if "📊 Macro Financial Performance Dashboard" in test_choices:
                 st.markdown("### **📊 Macro Financial Performance Dashboard**")
-                st.markdown("*(Target Bracket Goal: **Under 30.0%** of gross ticket values paid out as payroll cost)*")
+                st.markdown("*(Unified executive layout tracking top-line volume. Green highlight = under 20% for hourly/salaried, under 34% for piece-rate)*")
                 
                 m_col1, m_col2 = st.columns([1, 2])
                 with m_col1:
@@ -1247,12 +1254,12 @@ if time_file and ops_file:
                     )
                     rev_per_hour_df['Pay % vs Assigned Revenue'] = rev_per_hour_df['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
                     
-                    # UPDATED: Enforces pay ratio sorting priority layout directly onto this dashboard grid
-                    show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[
+                    # UPDATED: Enforces direct ascending sorting (best labor leverage margins show up at the top)
+                    show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=True)[
                         ['Name', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue']
                     ]
                     
-                    styled_rev_per_hour = show_rev_per_hour.reset_index(drop=True).style.apply(highlight_pay_pct_col, subset=['Pay % vs Assigned Revenue'])
+                    styled_rev_per_hour = show_rev_per_hour.reset_index(drop=True).style.apply(highlight_pay_pct_row, axis=1)
                     st.dataframe(styled_rev_per_hour, use_container_width=True)
 
             if "📊 Business Unit Revenue Velocity" in test_choices:
@@ -1265,10 +1272,10 @@ if time_file and ops_file:
                 bu_rev['Revenue Share %'] = bu_rev['Revenue Share %'].apply(lambda x: f"{x:.1f}%")
                 st.dataframe(bu_rev[['Business Unit', 'Total Revenue', 'Revenue Share %']].reset_index(drop=True), use_container_width=True)
 
-            # UPDATED BOARD: Maintains sorting configuration strictly prioritized by Pay % vs Revenue layers
+            # UPDATED BOARD: Ranks the entire field crew automatically sorted ascending by true Pay % vs Revenue layers
             if "🏆 Top Revenue Producer Leaderboard" in test_choices:
                 st.markdown("### **🏆 Top Revenue Producer Leaderboard**")
-                st.markdown("*(Ranks all active technicians cleanly by raw dollar value injected into division gross accounts. Target Goal: **Under 30.0%**)*")
+                st.markdown("*(Ranks all active technicians by payload percentage ratios. Green highlight = under 20% for hourly/salaried, under 34% for piece-rate)*")
                 leaderboard_rev = final_df.copy()
                 leaderboard_rev['Assumed Pay Amount'] = leaderboard_rev.apply(get_assumed_pay, axis=1)
                 leaderboard_rev['Pay Pct'] = np.where(
@@ -1277,7 +1284,8 @@ if time_file and ops_file:
                     0.0
                 )
                 
-                leaderboard_rev = leaderboard_rev.sort_values(by='Pay Pct', ascending=False)
+                # UPDATED: Enforces ascending payload margins sorting arrays seamlessly
+                leaderboard_rev = leaderboard_rev.sort_values(by='Pay Pct', ascending=True)
                 
                 leaderboard_rev['Total Clocked'] = leaderboard_rev['Total_Weekly_Clocked_Hrs'].apply(format_hm)
                 leaderboard_rev['Total Assigned Revenue'] = leaderboard_rev['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
@@ -1287,7 +1295,7 @@ if time_file and ops_file:
                 
                 show_leaderboard_rev = leaderboard_rev[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Revenue', 'Assumed Pay', 'Pay % vs Assigned Revenue']]
                 
-                styled_leaderboard_rev = show_leaderboard_rev.reset_index(drop=True).style.apply(highlight_pay_pct_col, subset=['Pay % vs Assigned Revenue'])
+                styled_leaderboard_rev = show_leaderboard_rev.reset_index(drop=True).style.apply(highlight_pay_pct_row, axis=1)
                 st.dataframe(styled_leaderboard_rev, use_container_width=True)
             
     except Exception as e:
