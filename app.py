@@ -952,7 +952,6 @@ if time_file and ops_file:
                 bu_summary_df['Name'] = sandbox_df['Name']
                 bu_summary_df['Total Clocked'] = sandbox_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
                 bu_summary_df['Total Jobs'] = sandbox_df['Total_Weekly_Job_Count'].astype(int)
-                bu_summary_df['Total Efficiency'] = sandbox_df['Total Eff']
                 
                 bu_summary_df['LSI Jobs'] = sandbox_df['Simple_Installs_Count'].astype(int)
                 bu_summary_df['LSI Job Status Time'] = sandbox_df['Simple_Installs_Hrs'].apply(format_hm)
@@ -963,6 +962,9 @@ if time_file and ops_file:
                 bu_summary_df['WH Job Status Time'] = sandbox_df['Water_Heaters_Hrs'].apply(format_hm)
                 bu_summary_df['WH Assumed Clocked'] = sandbox_df['Assumed_WH_Clocked'].apply(format_hm)
                 bu_summary_df['WH Efficiency'] = sandbox_df['Water Heaters Eff']
+
+                # UPDATED: Pushed Total Efficiency to the far right end of the view
+                bu_summary_df['Total Efficiency'] = sandbox_df['Total Eff']
                 
                 styled_bu = bu_summary_df.reset_index(drop=True).style.set_properties(
                     **{'background-color': '#fff3cd', 'font-weight': 'bold', 'color': '#856404'}, subset=['WH Efficiency']
