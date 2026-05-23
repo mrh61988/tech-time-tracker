@@ -181,13 +181,14 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     
     lost_hrs = final_df[final_df['Total_Weekly_Diff_Hrs'] > 0]['Total_Weekly_Diff_Hrs'].sum()
     
-    # UPDATED: Hyper-accurate dynamic payroll leakage calculator mapping specific pay rules
+    # UPDATED: Injected custom salary mapping parameters for Michael Owens ($31.25/hr baseline)
     def get_custom_loss(row, fallback):
         nl = str(row['Name']).lower()
         diff = row['Total_Weekly_Diff_Hrs']
         if diff <= 0: return 0.0
         if 'sean marble' in nl: return diff * 33.65
-        if 'bryan' in nl or 'erik' in nl: return 0.0 # Piece rate doesn't penalize hourly base
+        if 'michael owens' in nl: return diff * 31.25
+        if 'bryan' in nl or 'erik' in nl: return 0.0
         if 'nate' in nl: return diff * 22.50
         if any(n in nl for n in ['edward', 'matt', 'tanner']): return diff * 25.00
         return diff * fallback
@@ -1079,7 +1080,7 @@ if time_file and ops_file:
                     else:
                         st.info("Could not calculate context-switching averages for this set.")
 
-            # UPDATED: Cross-verifies specialized paid codes dynamically based on custom profiles
+            # UPDATED: Included Michael Owens in Salaried profile tracking logic loop securely
             if "🕵️ The \"Ghost Punch\" & Payroll Discrepancy Auditor" in test_choices:
                 st.markdown("### **🕵️ The \"Ghost Punch\" & Payroll Discrepancy Auditor**")
                 st.markdown("*(Scans files day-by-day to cross-verify paid hours against active field activity timestamps)*")
@@ -1088,7 +1089,7 @@ if time_file and ops_file:
                     tech_name = row['Name']
                     nl = tech_name.lower()
                     pay_type = "Hourly"
-                    if "sean marble" in nl: pay_type = "Salary"
+                    if "sean marble" in nl or "michael owens" in nl: pay_type = "Salary"
                     elif "bryan" in nl or "erik" in nl: pay_type = "Piece Rate"
                     
                     for d in ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]:
@@ -1120,7 +1121,7 @@ if time_file and ops_file:
                     ])
                     st.dataframe(store_stats, use_container_width=True)
 
-            # UPDATED: Incorporates the dynamic exemption status calculations safely
+            # UPDATED: Tied Michael Owens to Salary status loops cleanly with a fixed 40-hour weekly baseline goal threshold validation mapping rule
             if "🚨 Fleet Overtime Horizon Predictor" in test_choices:
                 st.markdown("### **🚨 Fleet Overtime Horizon Predictor**")
                 st.markdown("*(Scans overall accumulated clocked hours to calculate incurred overtime margins and pacing thresholds)*")
@@ -1130,7 +1131,7 @@ if time_file and ops_file:
                     nl = tech_name.lower()
                     hrs = row['Total_Weekly_Clocked_Hrs']
                     
-                    if "sean marble" in nl:
+                    if "sean marble" in nl or "michael owens" in nl:
                         status = "✅ Salary - Exempt"
                         ot_hrs = "-"
                     elif "bryan" in nl or "erik" in nl:
