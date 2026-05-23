@@ -188,7 +188,7 @@ def highlight_pay_pct_row(row):
     return styles
 
 # --- MAIN BLOCK REPORT ENGINE ---
-def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_df, delayed_launches_df, daily_route, tab_key):
+def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, daily_route, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
     # === BOSS TOOLS SECTION ===
@@ -373,7 +373,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_
         except Exception: st.dataframe(show_skill.reset_index(drop=True).style.apply(style_flags, axis=1), use_container_width=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("🏁 The Peer-to-Peer \"Coaching Corner\" Overlay")
+    st.subheader("🏁 The Peer-to-Peer Coaching Corner Overlay")
     st.markdown("*(Anonymized mentor baseline layout stack comparing tech efficiency targets with Top 25% performers)*")
     coaching_data = pd.DataFrame()
     coaching_data['Name'] = final_df['Name']
@@ -406,7 +406,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_
     st.markdown("<br>", unsafe_allow_html=True)
     d_col1, d_col2 = st.columns(2)
     with d_col1:
-        st.subheader("🕳️ 'Black Hole' Gap Finder")
+        st.subheader("🕳️ Black Hole Gap Finder")
         st.markdown("*(Gaps between jobs larger than 45 minutes)*")
         ops_sorted = ops_df.dropna(subset=['Earliest_Start']).sort_values(['Assigned Team Members', 'Earliest_Start'])
         ops_sorted['Next_Job_Start'] = ops_sorted.groupby(['Assigned Team Members', 'Short_Date'])['Earliest_Start'].shift(-1)
@@ -431,7 +431,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_
     st.markdown("<br>", unsafe_allow_html=True)
     colC, colD = st.columns(2)
     with colC:
-        st.subheader("🛒 Lowe's Operational Delays")
+        st.subheader("🛒 Lowe\'s Operational Delays")
         st.markdown("*(All logged store visits. Rows highlighted in red show specific jobs that took greater than 45 minutes)*")
         excessive_df = ops_df[ops_df['Store_Time_Hrs'] > 0.75].copy()
         st.markdown(f"⏱️ **Total Field Hours Lost at Lowe's:** `{excessive_df['Store_Time_Hrs'].sum():.1f} hrs` | 💸 **Cost:** `${excessive_df['Store_Time_Hrs'].sum() * rate:,.2f}`")
@@ -475,7 +475,6 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_
     launch_col, launch_empty_col = st.columns(2)
     with launch_col:
         st.subheader("📊 Late Deployment Scorecard")
-        st.markdown("*(Total number of delayed launches tracked for each technician)*")
         if not delayed_launches_df.empty:
             launch_counts = delayed_launches_df.groupby('Assigned Team Members').size().reset_index(name='Total Late Days').sort_values(by='Total Late Days', ascending=False)
             try: st.dataframe(launch_counts.reset_index(drop=True).style.hide(axis="index").set_properties(**{'background-color': '#fff3cd', 'color': '#856404;', 'font-weight': 'bold'}), use_container_width=True)
@@ -483,7 +482,6 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_
 
     with launch_empty_col:
         st.subheader("🚗 Delayed Launch Alert")
-        st.markdown("*(Select a tech from the dropdown to review late launch logs)*")
         if not delayed_launches_df.empty:
             tech_late_list = sorted(delayed_launches_df['Assigned Team Members'].unique())
             selected_late_tech = st.selectbox("Select Tech to view launch times:", tech_late_list, key=f"late_launch_{tab_key}")
@@ -494,7 +492,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_
                 except Exception: st.dataframe(tech_launches_df.sort_values(by='First_Punch', ascending=False)[['Short_Date', 'First Launch']].rename(columns={'Short_Date': 'Date'}).reset_index(drop=True).style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'}), use_container_width=True)
 
 def run_sandbox_tab(unexploded_ops, ops_df, final_df, test_choices):
-    if "🏆 The \"Golden Ratio\" Margin Predictor" in test_choices:
+    if "🏆 The Golden Ratio Margin Predictor" in test_choices:
         st.markdown("### **🏆 The Golden Ratio Margin Predictor**")
         golden_data = []
         for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
@@ -517,7 +515,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, test_choices):
             with g_col1: st.dataframe(golden_summary[['Profile', 'Days', 'Avg Efficiency']], use_container_width=True)
             with g_col2: st.dataframe(golden_df[['Day', 'LSI Mix %', 'Profile', 'Daily Efficiency']], use_container_width=True)
 
-    if "🔄 The \"Context-Switching\" Penalty Alert" in test_choices:
+    if "🔄 The Context-Switching Penalty Alert" in test_choices:
         st.markdown("### **🔄 Context-Switching Penalty Alert**")
         if 'Business Unit' in ops_df.columns:
             daily_bu = ops_df.groupby(['Assigned Team Members', 'Short_Date', 'Business Unit']).size().unstack(fill_value=0).reset_index()
@@ -531,8 +529,8 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, test_choices):
                 context_agg['Average Fleet Job Turnaround'] = context_agg['Avg_Job_Turnaround'].apply(format_hm)
                 st.dataframe(context_agg[['Day Type', 'Total_Days', 'Average Fleet Job Turnaround']].rename(columns={'Total_Days': 'Days Analyzed'}), use_container_width=True)
 
-    if "🕵️ The \"Ghost Punch\" & Payroll Discrepancy Auditor" in test_choices:
-        st.markdown("### **🕵️ The \"Ghost Punch\" & Payroll Discrepancy Auditor**")
+    if "🕵️ The Ghost Punch & Payroll Discrepancy Auditor" in test_choices:
+        st.markdown("### **🕵️ The Ghost Punch & Payroll Discrepancy Auditor**")
         ghost_alerts = []
         for idx, row in final_df.iterrows():
             tech_name = row['Name']
@@ -546,10 +544,10 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, test_choices):
                 if clocked > 0 and jobs == 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🕵️ Paid But Idle (Clocked In, 0 Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": 0})
                 elif clocked == 0 and jobs > 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🚨 Unpaid Field Work (0 Hours Clocked, Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": int(jobs)})
         if ghost_alerts: st.dataframe(pd.DataFrame(ghost_alerts), use_container_width=True)
-        else: st.success("Perfect alignment! No payroll discrepancy errors detected.")
+        else: st.success("Perfect alignment! No payroll discrepancy errors detected on current sheets.")
 
     if "🏬 The Lowe's Store Staging Efficiency Scorecard" in test_choices:
-        st.markdown("### **🏬 The Lowe\'s Store Staging Efficiency Scorecard**")
+        st.markdown("### **🏬 The Lowe's Store Staging Efficiency Scorecard**")
         store_cols = [c for c in ops_df.columns if 'store' in c.lower() and 'time' not in c.lower() and 'timestamp' not in c.lower()]
         if store_cols:
             store_stats = ops_df.groupby(store_cols[0])['Store_Time_Hrs'].mean().reset_index()
@@ -851,7 +849,7 @@ if time_file and ops_file:
             show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_df, delayed_launches_df, daily_route, tab_key="summary_tab")
             
         with tabs[1]:
-            st.markdown('Destructive manager overview tab.')
+            st.markdown('<h3>Manager Overview - All Techs</h3>', unsafe_allow_html=True)
             for tech in final_df['Name'].unique():
                 st.markdown(f"#### **{tech}**")
                 tech_data = final_df[final_df['Name'] == tech].iloc[0]
@@ -882,8 +880,9 @@ if time_file and ops_file:
                 st.dataframe(display_dfs[short_day].reset_index(drop=True), use_container_width=True)
 
         with tabs[10]:
-            test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The \"Golden Ratio\" Margin Predictor", "🔄 The \"Context-Switching\" Penalty Alert", "🕵️ The \"Ghost Punch\" & Payroll Discrepancy Auditor", "🏬 The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🏆 Top Revenue Producer Leaderboard"], default=["🏆 The \"Golden Ratio\" Margin Predictor"], key="sandbox_view_choices")
+            test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "🏬 The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🏆 Top Revenue Producer Leaderboard"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
             run_sandbox_tab(unexploded_ops, ops_df, final_df, test_choices)
             
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
+"""}
