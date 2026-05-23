@@ -241,19 +241,16 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     
     with trend_col:
         st.subheader("📈 Daily Division Health Trend")
-        st.markdown("*(Combined team efficiency analyzed day-by-day across all business units)*")
         trend_data = []
         for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
             day_clocked = final_df[f'{d}_Clocked_Hrs'].sum()
             day_job = final_df[f'{d}_Job_Hrs'].sum()
             day_eff = (day_job / day_clocked * 100) if day_clocked > 0 else 0.0
             trend_data.append({"Day": d, "Total Clocked": format_hm(day_clocked), "Job Status Time": format_hm(day_job), "Efficiency Score": f"{day_eff:.1f}%"})
-        trend_df = pd.DataFrame(trend_data)
-        st.dataframe(trend_df, use_container_width=True)
+        st.dataframe(pd.DataFrame(trend_data), use_container_width=True)
 
     with leaderboard_col:
         st.subheader("🚨 Team Leaderboard")
-        st.markdown("*(Whole team sorted by highest unaccounted time after overrides)*")
         leaderboard_df = final_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=False).copy()
         if not leaderboard_df.empty:
             leaderboard_df['Total Clocked'] = leaderboard_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
@@ -393,11 +390,11 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     with bf_col1:
         st.markdown("**🥇 Top Ranked for LSI Jobs**")
         lsi_top = final_df[final_df['Simple_Installs_Count'] > 0].sort_values(by='LSI_Eff_Raw', ascending=False)
-        if not lsi_top.empty: st.dataframe(lsi_top[['Name', 'Simple Installs Eff']].rename(columns={'Simple Installs Eff': 'LSI Efficiency'}).reset_index(drop=True), use_container_width=True)
+        if not lsi_top.empty: st.dataframe(lsi_top[['Name', 'Simple Installs Eff', 'Jobs Run']].rename(columns={'Simple Installs Eff': 'LSI Efficiency'}).reset_index(drop=True), use_container_width=True)
     with bf_col2:
         st.markdown("**🥇 Top Ranked for Water Heaters**")
         wh_top = final_df[final_df['Water_Heaters_Count'] > 0].sort_values(by='WH_Eff_Raw', ascending=False)
-        if not wh_top.empty: st.dataframe(wh_top[['Name', 'Water Heaters Eff']].rename(columns={'Water Heaters Eff': 'WH Efficiency'}).reset_index(drop=True), use_container_width=True)
+        if not wh_top.empty: st.dataframe(wh_top[['Name', 'Water Heaters Eff', 'Jobs Run']].rename(columns={'Water Heaters Eff': 'WH Efficiency'}).reset_index(drop=True), use_container_width=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     d_col1, d_col2 = st.columns(2)
@@ -492,7 +489,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
                 except Exception: st.dataframe(tech_launches_df.sort_values(by='First_Punch', ascending=False)[['Short_Date', 'First Launch']].rename(columns={'Short_Date': 'Date'}).reset_index(drop=True).style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'}), use_container_width=True)
         else: st.success("Perfect deployment momentum!")
 
-# --- CONSOLIDATED SANDBOX TAB VIEWS ---
 def run_sandbox_tab(unexploded_ops, ops_df, final_df, test_choices):
     if "🏆 The \"Golden Ratio\" Margin Predictor" in test_choices:
         st.markdown("### **🏆 The Golden Ratio Margin Predictor**")
@@ -732,18 +728,29 @@ if time_file and ops_file:
         final_df['Adjustment_Hrs'] = final_df['Name'].map(adjustments).fillna(0.0)
         final_df['Total_Weekly_Job_Hrs'] = final_df['Total_Weekly_Job_Hrs'] + final_df['Adjustment_Hrs']
         
-        # FIXED: Core backend math engine calculation rules restored for business units benchmarks
+        # --- BU Efficiency Assumptions Pipeline Configuration ---
         final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
         final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * (3 + (25 / 60.0))
         final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
         final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
         final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
 
+        # ADDED BACK: Construct bounds_df array natively before scorecard filters require its properties
+        ops_sorted = ops_df.dropna(subset=['Earliest_Start']).sort_values(['Assigned Team Members', 'Earliest_Start'])
+        bounds_df = ops_sorted.groupby(['Assigned Team Members', 'Short_Date']).agg(
+            First_Punch=('Earliest_Start', 'min'),
+            Last_Punch=('Estimated_End', 'max'),
+            First_Status=('Earliest_Status', 'first')
+        ).reset_index()
+        bounds_df['First Status Update'] = bounds_df['First_Punch'].dt.strftime('%I:%M %p')
+        bounds_df['Last Status Update'] = bounds_df['Last_Punch'].dt.strftime('%I:%M %p')
+        bounds_df['Total_Span_Hrs'] = (bounds_df['Last_Punch'] - bounds_df['First_Punch']).dt.total_seconds() / 3600.0
+        bounds_df['Total Time'] = bounds_df['Total_Span_Hrs'].apply(format_hm)
+
         display_dfs = {}
         for day in days:
             final_df[day + '_Diff_Hrs'] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
             
-            # FIXED: Appending values natively to final_df layer so manager_cols and HR payroll boards sync perfectly
             final_df[f'{day} Jobs'] = final_df[day + '_Job_Count'].astype(int)
             final_df[f'{day} Clocked'] = final_df[day + '_Clocked_Hrs'].apply(format_hm)
             final_df[f'{day} Job Time'] = final_df[day + '_Job_Hrs'].apply(format_hm)
@@ -824,7 +831,6 @@ if time_file and ops_file:
                 tech_days_worked = tech_data['Days_Worked']
                 report_data = []
                 for full_day, short_day in {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}.items():
-                    # FIXED: Slicing calculation typo eliminated for individual performance printer cards
                     report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(tech_data[short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])})
                 report_data.append({"Day": "TOTAL WEEKLY", "Jobs": int(tech_data['Total_Weekly_Job_Count']), "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']), "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']), "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])})
                 st.dataframe(pd.DataFrame(report_data), use_container_width=True)
