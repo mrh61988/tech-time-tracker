@@ -98,20 +98,36 @@ def parse_diff_to_hours(val):
         pass
     return 0.0
 
+# NEW HELPER FUNCTION: Calculates hyper-precise weekly assumed pay based on mapped team profiles
+def get_assumed_pay(row):
+    nl = str(row['Name']).lower()
+    clocked = row['Total_Weekly_Clocked_Hrs']
+    rev = row['Total_Assigned_Revenue']
+    
+    if 'sean marble' in nl:
+        return 70000.0 / 52.0
+    if 'michael owens' in nl:
+        return 65000.0 / 52.0
+    if 'bryan' in nl or 'erik' in nl:
+        return rev * 0.30  # Piece Rate 30% revenue share commission
+        
+    rate = 0.0
+    if 'nate' in nl:
+        rate = 22.50
+    elif any(n in nl for n in ['edward', 'matt', 'tanner']):
+        rate = 25.00
+        
+    if rate > 0:
+        if clocked > 40.0:
+            return (40.0 * rate) + ((clocked - 40.0) * rate * 1.5)  # Safe standard 1.5x Overtime calculation
+        else:
+            return clocked * rate
+    return 0.0
+
 def highlight_daily(val):
     hrs = parse_diff_to_hours(val)
     if hrs > 1.0: return 'background-color: #ffcccc; color: #990000;'
     return ''
-
-def highlight_weekly_row(row):
-    styles = [''] * len(row)
-    if 'Total Diff' in row and 'Days Worked' in row:
-        diff_idx = row.index.get_loc('Total Diff')
-        diff_hrs = parse_diff_to_hours(row['Total Diff'])
-        days_worked = row['Days Worked']
-        if diff_hrs > (days_worked * 1.0):
-            styles[diff_idx] = 'background-color: #ffcccc; color: #990000;'
-    return styles
 
 def highlight_individual_report(row, days_worked):
     styles = [''] * len(row)
@@ -210,7 +226,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
 
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # --- Daily Division Health Trend ---
     trend_col, leaderboard_col = st.columns(2)
     
     with trend_col:
@@ -734,7 +749,7 @@ if time_file and ops_file:
         ops_df['Assigned Team Members'] = ops_df['Assigned Team Members'].str.strip()
         ops_df = ops_df[~ops_df['Assigned Team Members'].isin(EXCLUDE_NAMES)]
         
-        # --- NEW PIPELINE LOGIC: Parse Business Units & Job Counts per Unit ---
+        # --- BUSINESS UNITS PARSING ---
         if 'Business Unit' in ops_df.columns:
             bu_agg = ops_df.groupby(['Assigned Team Members', 'Business Unit']).agg(
                 Total_Job_Time_Hours=('Total_Job_Time_Hours', 'sum'),
@@ -858,10 +873,8 @@ if time_file and ops_file:
         display_dfs['Manager'] = manager_df
         
         final_df['Total_Weekly_Diff_Hrs'] = final_df['Total_Weekly_Clocked_Hrs'] - final_df['Total_Weekly_Job_Hrs']
-        
         final_df['Daily_Avg_Diff_Hrs'] = np.where(final_df['Days_Worked'] > 0, final_df['Total_Weekly_Diff_Hrs'] / final_df['Days_Worked'], 0.0)
         
-        # --- BU ISOLATED EFFICIENCY CALCULATION ENGINE (WEIGHTED GOALS) ---
         final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
         final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * (3 + (25 / 60.0))
         final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
@@ -871,7 +884,6 @@ if time_file and ops_file:
         
         final_df['LSI_Eff_Raw'] = np.where(final_df['Assumed_LSI_Clocked'] > 0, (final_df['Simple_Installs_Hrs'] / final_df['Assumed_LSI_Clocked']) * 100, 0.0)
         final_df['WH_Eff_Raw'] = np.where(final_df['Assumed_WH_Clocked'] > 0, (final_df['Water_Heaters_Hrs'] / final_df['Assumed_WH_Clocked']) * 100, 0.0)
-        
         final_df['Total_Eff'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, (final_df['Total_Weekly_Job_Hrs'] / final_df['Total_Weekly_Clocked_Hrs']) * 100, 0.0)
         
         final_df['Simple Installs'] = final_df['Simple_Installs_Hrs'].apply(format_hm)
@@ -996,7 +1008,7 @@ if time_file and ops_file:
                         styled_report = report_df.reset_index(drop=True).style.hide_index().apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
                     except:
                         styled_report = report_df.reset_index(drop=True).style.apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
-                st.table(styled_report)
+                st.dataframe(styled_report)
                 st.markdown(f"**Business Unit Efficiency Breakdown:** LSI: `{tech_data['Simple Installs']}` hrs ({tech_data['Simple Installs Eff']}) &nbsp;&nbsp;|&nbsp;&nbsp; Water Heaters: `{tech_data['Water Heaters']}` hrs ({tech_data['Water Heaters Eff']})")
                 st.markdown("---")
             
@@ -1040,7 +1052,7 @@ if time_file and ops_file:
                         styled_report = report_df.reset_index(drop=True).style.hide_index().apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
                     except:
                         styled_report = report_df.reset_index(drop=True).style.apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
-                st.table(styled_report)
+                st.dataframe(styled_report)
                 
                 a_col, b_col = st.columns(2)
                 with a_col:
@@ -1063,7 +1075,6 @@ if time_file and ops_file:
             st.header("🧪 Isolated Leaderboard Sandbox")
             st.markdown("Use the selections below to add, remove, or evaluate components without changing the data models in other sections.")
             
-            # UPDATED: Replaced three individual selections with the unified compound "📊 Macro Financial Performance Dashboard" option
             test_choices = st.multiselect(
                 "Select active data views to mount inside Test Section:",
                 [
@@ -1190,7 +1201,7 @@ if time_file and ops_file:
                     ])
                     st.dataframe(store_stats, use_container_width=True)
 
-            # UPDATED: NEW CONSOLIDATED INTERFACE SECTION (Combines Total Gross Volume, Average Ticket Size, and Yield Per Hour)
+            # UPDATED CONSOLIDATED DASHBOARD PANEL: Shows dynamic 'Assumed Pay' columns matching compensation tiers
             if "📊 Macro Financial Performance Dashboard" in test_choices:
                 st.markdown("### **📊 Macro Financial Performance Dashboard**")
                 st.markdown("*(Unified executive layout tracking top-line volume, individual task velocity, and asset allocation yield)*")
@@ -1214,8 +1225,13 @@ if time_file and ops_file:
                         lambda r: f"${r['Rev_Per_Clocked_Hr']:.2f}/hr" if r['Total_Weekly_Clocked_Hrs'] > 0 else "-", axis=1
                     )
                     rev_per_hour_df['Total Assigned Value'] = rev_per_hour_df['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
+                    
+                    # Compute Assumed Pay for the hour-yield table
+                    rev_per_hour_df['Assumed Pay Amount'] = rev_per_hour_df.apply(get_assumed_pay, axis=1)
+                    rev_per_hour_df['Assumed Pay'] = rev_per_hour_df['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
+                    
                     show_rev_per_hour = rev_per_hour_df.sort_values(by='Rev_Per_Clocked_Hr', ascending=False)[
-                        ['Name', 'Total Clocked', 'Total Assigned Value', 'Gross Revenue / Clocked Hour']
+                        ['Name', 'Total Clocked', 'Total Assigned Value', 'Gross Revenue / Clocked Hour', 'Assumed Pay']
                     ]
                     st.dataframe(show_rev_per_hour.reset_index(drop=True), use_container_width=True)
 
@@ -1229,6 +1245,7 @@ if time_file and ops_file:
                 bu_rev['Revenue Share %'] = bu_rev['Revenue Share %'].apply(lambda x: f"{x:.1f}%")
                 st.dataframe(bu_rev[['Business Unit', 'Total Revenue', 'Revenue Share %']].reset_index(drop=True), use_container_width=True)
 
+            # UPDATED BOARD: Displays the customized pay calculations for all technicians side-by-side with revenue generation ratios
             if "🏆 Top Revenue Producer Leaderboard" in test_choices:
                 st.markdown("### **🏆 Top Revenue Producer Leaderboard**")
                 st.markdown("*(Ranks all active technicians cleanly by raw dollar value injected into division gross accounts)*")
@@ -1236,7 +1253,12 @@ if time_file and ops_file:
                 leaderboard_rev['Total Clocked'] = leaderboard_rev['Total_Weekly_Clocked_Hrs'].apply(format_hm)
                 leaderboard_rev['Total Assigned Revenue'] = leaderboard_rev['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
                 leaderboard_rev['Total Jobs'] = leaderboard_rev['Total_Weekly_Job_Count'].astype(int)
-                show_leaderboard_rev = leaderboard_rev[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Revenue']]
+                
+                # Compute Assumed Pay for the top macro value table
+                leaderboard_rev['Assumed Pay Amount'] = leaderboard_rev.apply(get_assumed_pay, axis=1)
+                leaderboard_rev['Assumed Pay'] = leaderboard_rev['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
+                
+                show_leaderboard_rev = leaderboard_rev[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Revenue', 'Assumed Pay']]
                 st.dataframe(show_leaderboard_rev.reset_index(drop=True), use_container_width=True)
             
     except Exception as e:
