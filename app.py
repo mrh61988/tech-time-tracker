@@ -103,6 +103,16 @@ def highlight_daily(val):
     if hrs > 1.0: return 'background-color: #ffcccc; color: #990000;'
     return ''
 
+def highlight_weekly_row(row):
+    styles = [''] * len(row)
+    if 'Total Diff' in row and 'Days Worked' in row:
+        diff_idx = row.index.get_loc('Total Diff')
+        diff_hrs = parse_diff_to_hours(row['Total Diff'])
+        days_worked = row['Days Worked']
+        if diff_hrs > (days_worked * 1.0):
+            styles[diff_idx] = 'background-color: #ffcccc; color: #990000;'
+    return styles
+
 def highlight_individual_report(row, days_worked):
     styles = [''] * len(row)
     if 'Difference' in row and 'Day' in row:
@@ -144,7 +154,7 @@ def highlight_consistency(s):
     return styles
 
 # --- Advanced Reporting Block Function ---
-def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, tab_key):
+def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, daily_route, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
     # === BOSS TOOLS SECTION ===
@@ -411,15 +421,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     with colF:
         st.subheader("🗺️ Route Optimization Flags")
         st.markdown("*(Days where greater than 40% of job time was driving. Shows Job Count, Drive Time, and Work Time for context)*")
-        daily_route = ops_df.groupby(['Assigned Team Members', 'Short_Date']).agg(
-            Drive_Time_Hrs=('Drive_Time_Hrs', 'sum'),
-            In_Progress_Time_Hrs=('In_Progress_Time_Hrs', 'sum'),
-            Total_Job_Time_Hours=('Total_Job_Time_Hours', 'sum'),
-            Job_Count=('Total_Job_Time_Hours', 'size')
-        ).reset_index()
-        
-        daily_route = daily_route[daily_route['Total_Job_Time_Hours'] > 0].copy()
-        daily_route['Drive %'] = (daily_route['Drive_Time_Hrs'] / daily_route['Total_Job_Time_Hours']) * 100
         poor_routes = daily_route[daily_route['Drive %'] > 40.0].copy()
         
         if not poor_routes.empty:
@@ -639,6 +640,14 @@ if time_file and ops_file:
         job_count_pivot = job_count_pivot.rename(columns=rename_dict_counts)
         job_count_pivot['Total_Weekly_Job_Count'] = job_count_pivot[[d + '_Job_Count' for d in days]].sum(axis=1)
         
+        # Calculate daily route info globally so it can be passed to sandbox
+        daily_route = ops_df.groupby(['Assigned Team Members', 'Short_Date']).agg(
+            Drive_Time_Hrs=('Drive_Time_Hrs', 'sum'),
+            In_Progress_Time_Hrs=('In_Progress_Time_Hrs', 'sum'),
+            Total_Job_Time_Hours=('Total_Job_Time_Hours', 'sum'),
+            Job_Count=('Total_Job_Time_Hours', 'size')
+        ).reset_index()
+        
         final_df = pd.merge(time_df, job_time_pivot, on='Name', how='left').fillna(0)
         final_df = pd.merge(final_df, job_count_pivot, on='Name', how='left').fillna(0)
         
@@ -715,7 +724,6 @@ if time_file and ops_file:
         final_df['Water Heaters Eff'] = final_df['WH_Eff_Raw'].apply(lambda x: f"{x:.1f}%")
         final_df['Total Eff'] = final_df['Total_Eff'].apply(lambda x: f"{x:.1f}%")
         
-        # Sort master array safely by WH efficiency to populate Weekly summary dynamically
         final_df = final_df.sort_values(by='WH_Eff_Raw', ascending=False)
         
         bu_summary_df = pd.DataFrame()
@@ -793,7 +801,7 @@ if time_file and ops_file:
                 **{'background-color': '#fff3cd', 'font-weight': 'bold', 'color': '#856404'}, subset=['WH Efficiency']
             )
             st.dataframe(styled_weekly, use_container_width=True)
-            show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, tab_key="summary_tab")
+            show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, daily_route, tab_key="summary_tab")
             
         with tabs[1]:
             st.markdown('<h3 class="hide-on-print">Manager Overview - All Techs</h3>', unsafe_allow_html=True)
@@ -836,7 +844,7 @@ if time_file and ops_file:
                 st.markdown(f"**Business Unit Efficiency Breakdown:** LSI: `{tech_data['Simple Installs']}` hrs ({tech_data['Simple Installs Eff']}) &nbsp;&nbsp;|&nbsp;&nbsp; Water Heaters: `{tech_data['Water Heaters']}` hrs ({tech_data['Water Heaters Eff']})")
                 st.markdown("---")
             
-            show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, tab_key="manager_tab")
+            show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, daily_route, tab_key="manager_tab")
             
         with tabs[2]:
             st.markdown('<h3 class="hide-on-print">Printable Individual Report</h3>', unsafe_allow_html=True)
@@ -901,7 +909,15 @@ if time_file and ops_file:
             
             test_choices = st.multiselect(
                 "Select active data views to mount inside Test Section:",
-                ["🚨 Team Leaderboard", "⭐ Gold Star Performance Roll", "📊 Late Deployment Scorecard"],
+                [
+                    "🚨 Team Leaderboard", 
+                    "⭐ Gold Star Performance Roll", 
+                    "📊 Late Deployment Scorecard",
+                    "🏆 The \"Golden Ratio\" Margin Predictor",
+                    "🎯 The Technician \"Skill Matrix\" & Training Flag",
+                    "🧠 \"Best Fit\" Dispatch Recommender",
+                    "🔄 The \"Context-Switching\" Penalty Alert"
+                ],
                 default=["🚨 Team Leaderboard"],
                 key="sandbox_view_choices"
             )
@@ -943,6 +959,135 @@ if time_file and ops_file:
                     st.dataframe(launch_counts.reset_index(drop=True).style.set_properties(**{'background-color': '#fff3cd', 'color': '#856404;', 'font-weight': 'bold'}), use_container_width=True)
                 else:
                     st.info("No launch metadata loaded to aggregate in sandbox loops.")
+
+            # NEW EXPERIMENTAL FEATURE: Golden Ratio
+            if "🏆 The \"Golden Ratio\" Margin Predictor" in test_choices:
+                st.markdown("### **🏆 The Golden Ratio Margin Predictor**")
+                st.markdown("*(Simulates the division's average efficiency based on the ratio of Water Heaters to Simple Installs scheduled that day)*")
+                
+                golden_data = []
+                for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
+                    day_clocked = final_df[f'{d}_Clocked_Hrs'].sum()
+                    day_job = final_df[f'{d}_Job_Hrs'].sum()
+                    day_eff = (day_job / day_clocked * 100) if day_clocked > 0 else 0.0
+                    
+                    day_lsi = ops_df[(ops_df['Day_of_Week'] == d) & (ops_df['Business Unit'] == 'Lowes - Simple Installs')].shape[0]
+                    day_wh = ops_df[(ops_df['Day_of_Week'] == d) & (ops_df['Business Unit'] == 'Lowes - Water Heaters')].shape[0]
+                    total_bu = day_lsi + day_wh
+                    lsi_ratio = (day_lsi / total_bu * 100) if total_bu > 0 else 0
+                    
+                    if total_bu > 0:
+                        profile = "Heavy LSI (>60% LSI)" if lsi_ratio > 60 else ("Heavy WH (<40% LSI)" if lsi_ratio < 40 else "Balanced (40-60%)")
+                        golden_data.append({
+                            "Day": d,
+                            "LSI Jobs": day_lsi,
+                            "WH Jobs": day_wh,
+                            "LSI Mix %": f"{lsi_ratio:.1f}%",
+                            "Daily Efficiency": day_eff,
+                            "Profile": profile
+                        })
+                
+                if golden_data:
+                    golden_df = pd.DataFrame(golden_data)
+                    golden_summary = golden_df.groupby('Profile').agg(
+                        Days=('Day', 'count'),
+                        Avg_Efficiency=('Daily Efficiency', 'mean')
+                    ).reset_index()
+                    golden_summary['Avg Efficiency'] = golden_summary['Avg_Efficiency'].apply(lambda x: f"{x:.1f}%")
+                    
+                    golden_df['Daily Efficiency'] = golden_df['Daily Efficiency'].apply(lambda x: f"{x:.1f}%")
+                    
+                    g_col1, g_col2 = st.columns(2)
+                    with g_col1:
+                        st.markdown("**Performance by Daily Mix Strategy**")
+                        st.dataframe(golden_summary[['Profile', 'Days', 'Avg Efficiency']], use_container_width=True)
+                    with g_col2:
+                        st.markdown("**Raw Daily Breakdown**")
+                        st.dataframe(golden_df[['Day', 'LSI Mix %', 'Profile', 'Daily Efficiency']], use_container_width=True)
+                else:
+                    st.info("No business unit ratios calculated for this week.")
+
+            # NEW EXPERIMENTAL FEATURE: Skill Matrix
+            if "🎯 The Technician \"Skill Matrix\" & Training Flag" in test_choices:
+                st.markdown("### **🎯 The Technician Skill Matrix & Training Flag**")
+                st.markdown("*(Compares a technician's LSI performance against their WH performance. Flags techs where the gap exceeds 25%)*")
+                
+                skill_df = final_df[(final_df['Simple_Installs_Count'] > 0) & (final_df['Water_Heaters_Count'] > 0)].copy()
+                if not skill_df.empty:
+                    skill_df['Eff Gap'] = abs(skill_df['LSI_Eff_Raw'] - skill_df['WH_Eff_Raw'])
+                    
+                    def assign_flag(row):
+                        if row['Eff Gap'] > 25.0:
+                            if row['LSI_Eff_Raw'] > row['WH_Eff_Raw']:
+                                return "⚠️ Needs WH Ride-Along"
+                            else:
+                                return "⚠️ Needs LSI Ride-Along"
+                        return "✅ Balanced Execution"
+                        
+                    skill_df['Action Required'] = skill_df.apply(assign_flag, axis=1)
+                    skill_df = skill_df.sort_values(by='Eff Gap', ascending=False)
+                    show_skill = skill_df[['Name', 'Simple Installs Eff', 'Water Heaters Eff', 'Action Required']].rename(columns={
+                        'Simple Installs Eff': 'LSI Efficiency',
+                        'Water Heaters Eff': 'WH Efficiency'
+                    })
+                    
+                    def style_flags(row):
+                        if '⚠️' in row['Action Required']:
+                            return ['background-color: #fff3cd; color: #856404; font-weight: bold;'] * len(row)
+                        return [''] * len(row)
+                        
+                    try:
+                        st.dataframe(show_skill.reset_index(drop=True).style.hide(axis="index").apply(style_flags, axis=1), use_container_width=True)
+                    except:
+                        st.dataframe(show_skill.reset_index(drop=True).style.apply(style_flags, axis=1), use_container_width=True)
+                else:
+                    st.info("No technicians handled both job types this week to establish a comparison matrix.")
+
+            # NEW EXPERIMENTAL FEATURE: Best Fit Dispatch
+            if "🧠 \"Best Fit\" Dispatch Recommender" in test_choices:
+                st.markdown("### **🧠 Best Fit Dispatch Recommender**")
+                st.markdown("*(Provides a sorted priority list for the dispatcher to assign last-minute emergency jobs based purely on isolated historical unit efficiencies)*")
+                
+                bf_col1, bf_col2 = st.columns(2)
+                with bf_col1:
+                    st.markdown("**🥇 Top Ranked for LSI Jobs**")
+                    lsi_top = final_df[final_df['Simple_Installs_Count'] > 0].sort_values(by='LSI_Eff_Raw', ascending=False)
+                    if not lsi_top.empty:
+                        lsi_top['Jobs Run'] = lsi_top['Simple_Installs_Count'].astype(int)
+                        st.dataframe(lsi_top[['Name', 'Simple Installs Eff', 'Jobs Run']].reset_index(drop=True).rename(columns={'Simple Installs Eff': 'LSI Efficiency'}), use_container_width=True)
+                        
+                with bf_col2:
+                    st.markdown("**🥇 Top Ranked for Water Heaters**")
+                    wh_top = final_df[final_df['Water_Heaters_Count'] > 0].sort_values(by='WH_Eff_Raw', ascending=False)
+                    if not wh_top.empty:
+                        wh_top['Jobs Run'] = wh_top['Water_Heaters_Count'].astype(int)
+                        st.dataframe(wh_top[['Name', 'Water Heaters Eff', 'Jobs Run']].reset_index(drop=True).rename(columns={'Water Heaters Eff': 'WH Efficiency'}), use_container_width=True)
+
+            # NEW EXPERIMENTAL FEATURE: Context Switching
+            if "🔄 The \"Context-Switching\" Penalty Alert" in test_choices:
+                st.markdown("### **🔄 Context-Switching Penalty Alert**")
+                st.markdown("*(Compares route durations on days where a tech did ONLY one job type (Uniform Route) vs days where they had to switch back and forth between LSI and WH (Mixed Route))*")
+                
+                if 'Business Unit' in ops_df.columns:
+                    daily_bu = ops_df.groupby(['Assigned Team Members', 'Short_Date', 'Business Unit']).size().unstack(fill_value=0).reset_index()
+                    if 'Lowes - Simple Installs' not in daily_bu.columns: daily_bu['Lowes - Simple Installs'] = 0
+                    if 'Lowes - Water Heaters' not in daily_bu.columns: daily_bu['Lowes - Water Heaters'] = 0
+                    
+                    daily_bu['Day Type'] = np.where((daily_bu['Lowes - Simple Installs'] > 0) & (daily_bu['Lowes - Water Heaters'] > 0), 'Mixed Route (Both)', 'Uniform Route (One Type)')
+                    
+                    daily_merged = pd.merge(daily_route, daily_bu, on=['Assigned Team Members', 'Short_Date'])
+                    daily_merged['Avg Job Time'] = daily_merged['Total_Job_Time_Hours'] / daily_merged['Job_Count']
+                    
+                    context_agg = daily_merged.groupby('Day Type').agg(
+                        Total_Days=('Short_Date', 'count'),
+                        Avg_Job_Turnaround=('Avg Job Time', 'mean')
+                    ).reset_index()
+                    
+                    if not context_agg.empty:
+                        context_agg['Average Fleet Job Turnaround'] = context_agg['Avg_Job_Turnaround'].apply(format_hm)
+                        st.dataframe(context_agg[['Day Type', 'Total_Days', 'Average Fleet Job Turnaround']].rename(columns={'Total_Days': 'Days Analyzed'}), use_container_width=True)
+                    else:
+                        st.info("Could not calculate context-switching averages for this set.")
             
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
