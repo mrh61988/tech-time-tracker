@@ -188,7 +188,7 @@ def highlight_pay_pct_row(row):
     return styles
 
 # --- MAIN BLOCK REPORT ENGINE ---
-def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, daily_route, tab_key):
+def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_df, delayed_launches_df, daily_route, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
     # === BOSS TOOLS SECTION ===
@@ -241,6 +241,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     
     with trend_col:
         st.subheader("📈 Daily Division Health Trend")
+        st.markdown("*(Combined team efficiency analyzed day-by-day across all business units)*")
         trend_data = []
         for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
             day_clocked = final_df[f'{d}_Clocked_Hrs'].sum()
@@ -252,6 +253,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
 
     with leaderboard_col:
         st.subheader("🚨 Team Leaderboard")
+        st.markdown("*(Whole team sorted by highest unaccounted time after overrides)*")
         leaderboard_df = final_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=False).copy()
         if not leaderboard_df.empty:
             leaderboard_df['Total Clocked'] = leaderboard_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
@@ -283,7 +285,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
             status = "⚠️ Low Volume Warning (Under 35 Hrs)" if hrs < 35.0 else "✅ Salary - Exempt"
             ot_hrs = "-"
         elif "bryan" in nl or "erik" in nl:
-            status = "🚨 High Burnout Risk (Over 45 Hrs)" if hrs > 45.0 else "Piece Rate - Exempt"
+            status = "🚨 High Burnout Risk (Over 45 Hrs)" if hrs > 45.0 else "✅ Piece Rate - Exempt"
             ot_hrs = "-"
         else:
             if hrs > 40:
@@ -430,6 +432,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     colC, colD = st.columns(2)
     with colC:
         st.subheader("🛒 Lowe's Operational Delays")
+        st.markdown("*(All logged store visits. Rows highlighted in red show specific jobs that took greater than 45 minutes)*")
         excessive_df = ops_df[ops_df['Store_Time_Hrs'] > 0.75].copy()
         st.markdown(f"⏱️ **Total Field Hours Lost at Lowe's:** `{excessive_df['Store_Time_Hrs'].sum():.1f} hrs` | 💸 **Cost:** `${excessive_df['Store_Time_Hrs'].sum() * rate:,.2f}`")
         all_store_df = ops_df[ops_df['Store_Time_Hrs'] > 0].sort_values(by='Store_Time_Hrs', ascending=False).copy()
@@ -452,6 +455,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     colE, colF = st.columns(2)
     with colE:
         st.subheader("🔮 Predictive Planning")
+        st.markdown("*(Average total turnaround time per job to help block future calendar schedules)*")
         avg_job_len = ops_df[ops_df['Total_Job_Time_Hours'] > 0].groupby('Assigned Team Members')['Total_Job_Time_Hours'].mean().reset_index()
         if not avg_job_len.empty:
             avg_job_len['Avg Total Job Length'] = avg_job_len['Total_Job_Time_Hours'].apply(format_hm)
@@ -459,6 +463,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
 
     with colF:
         st.subheader("🗺️ Route Optimization Flags")
+        st.markdown("*(Days where greater than 40% of job time was driving. Shows Job Count, Drive Time, and Work Time for context)*")
         poor_routes = daily_route[daily_route['Drive %'] > 40.0].copy()
         if not poor_routes.empty:
             poor_routes['Drive %'] = poor_routes['Drive %'].apply(lambda x: f"{x:.1f}%")
@@ -470,6 +475,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     launch_col, launch_empty_col = st.columns(2)
     with launch_col:
         st.subheader("📊 Late Deployment Scorecard")
+        st.markdown("*(Total number of delayed launches tracked for each technician)*")
         if not delayed_launches_df.empty:
             launch_counts = delayed_launches_df.groupby('Assigned Team Members').size().reset_index(name='Total Late Days').sort_values(by='Total Late Days', ascending=False)
             try: st.dataframe(launch_counts.reset_index(drop=True).style.hide(axis="index").set_properties(**{'background-color': '#fff3cd', 'color': '#856404;', 'font-weight': 'bold'}), use_container_width=True)
@@ -477,6 +483,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
 
     with launch_empty_col:
         st.subheader("🚗 Delayed Launch Alert")
+        st.markdown("*(Select a tech from the dropdown to review late launch logs)*")
         if not delayed_launches_df.empty:
             tech_late_list = sorted(delayed_launches_df['Assigned Team Members'].unique())
             selected_late_tech = st.selectbox("Select Tech to view launch times:", tech_late_list, key=f"late_launch_{tab_key}")
@@ -844,7 +851,7 @@ if time_file and ops_file:
             show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_df, delayed_launches_df, daily_route, tab_key="summary_tab")
             
         with tabs[1]:
-            st.markdown('<h3>Manager Overview - All Techs</h3>', unsafe_allow_html=True)
+            st.markdown('Destructive manager overview tab.')
             for tech in final_df['Name'].unique():
                 st.markdown(f"#### **{tech}**")
                 tech_data = final_df[final_df['Name'] == tech].iloc[0]
@@ -880,4 +887,3 @@ if time_file and ops_file:
             
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
-"""
