@@ -15,6 +15,9 @@ st.markdown("""
     [data-testid="stSelectbox"] { display: none !important; }
     div[data-baseweb="tab-list"] { display: none !important; }
     h1 { display: none !important; }
+    .hide-on-print { display: none !important; }
+    .stAlert { display: none !important; }
+    
     .main .block-container {
         max-width: 100% !important;
         width: 100% !important;
@@ -29,17 +32,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 # ------------------------------
 
-st.title("Technician Time Comparison Tool")
-st.markdown('<p class="hide-on-print">Upload your <strong>Clocked-in Hours</strong> and <strong>Lowes Ops</strong> files to compare tracked job time against clocked time.</p>', unsafe_allow_html=True)
-
-# Create two columns for the file uploaders
-col1, col2 = st.columns(2)
-with col1:
-    time_file = st.file_uploader("Upload Time Sheet (CSV)", type=['csv'])
-with col2:
-    ops_file = st.file_uploader("Upload Lowes Ops Export (CSV)", type=['csv'])
-
-# Helper function to format decimal hours to HH:MM string
+# --- GLOBAL HELPER FUNCTIONS ---
 def format_hm(hrs):
     if pd.isna(hrs) or hrs == 0: return "-"
     sign = "-" if hrs < 0 else ""
@@ -51,7 +44,6 @@ def format_hm(hrs):
         m = 0
     return f"{sign}{h}:{m:02d}"
 
-# Helper function to parse HH:MM strings to decimal hours
 def parse_hm(time_str):
     if pd.isna(time_str) or time_str == '-' or time_str == '':
         return 0.0
@@ -63,7 +55,6 @@ def parse_hm(time_str):
     except:
         return 0.0
 
-# Special parsing handler for manual adjustments using hours and minutes
 def parse_adj_hm(val_str):
     val_str = str(val_str).strip()
     if not val_str or val_str == '-' or val_str == '0' or val_str == '0:00':
@@ -95,7 +86,16 @@ def parse_diff_to_hours(val):
         pass
     return 0.0
 
-# HELPER FUNCTION: Calculates hyper-precise weekly assumed pay based on mapped team profiles
+def check_late(row):
+    fp = row['First_Punch']
+    status = row['First_Status']
+    if pd.isna(fp): return False
+    if status in ['On The Way', 'Lowes Store']:
+        return fp.hour >= 8
+    elif status == 'In Progress':
+        return fp.hour > 8 or (fp.hour == 8 and fp.minute >= 30)
+    return False
+
 def get_assumed_pay(row):
     nl = str(row['Name']).lower()
     clocked = row['Total_Weekly_Clocked_Hrs']
@@ -137,7 +137,6 @@ def highlight_individual_report(row, days_worked):
             if diff_hrs > 1.0: styles[diff_idx] = 'background-color: #ffcccc; color: #990000;'
     return styles
 
-# Style function specifically for parsing the benchmarking columns
 def highlight_bench_col(s):
     styles = []
     for val in s:
@@ -154,7 +153,6 @@ def highlight_bench_col(s):
             styles.append('')
     return styles
 
-# Custom highlight rule for consistency grades
 def highlight_consistency(s):
     styles = []
     for val in s:
@@ -166,7 +164,6 @@ def highlight_consistency(s):
             styles.append('')
     return styles
 
-# Row highlight engine enforces target ceilings (<20% standard, <34% piece-rate)
 def highlight_pay_pct_row(row):
     styles = [''] * len(row)
     if 'Pay % vs Assigned Revenue' in row.index and 'Name' in row.index:
@@ -190,7 +187,7 @@ def highlight_pay_pct_row(row):
                 pass
     return styles
 
-# --- Advanced Reporting Block Function ---
+# --- MAIN BLOCK REPORT ENGINE ---
 def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, daily_route, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
@@ -428,7 +425,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
                         return "⚠️ Needs WH Ride-Along"
                     else:
                         return "⚠️ Needs LSI Ride-Along"
-                return "✅ Balanced Execution"
+                return "Balanced Execution"
             elif lsi_cnt > 0 and wh_cnt == 0:
                 return "ℹ️ Only LSI Jobs Assigned"
             elif lsi_cnt == 0 and wh_cnt > 0:
@@ -896,7 +893,6 @@ if time_file and ops_file:
         final_df['Total_Weekly_Diff_Hrs'] = final_df['Total_Weekly_Clocked_Hrs'] - final_df['Total_Weekly_Job_Hrs']
         final_df['Daily_Avg_Diff_Hrs'] = np.where(final_df['Days_Worked'] > 0, final_df['Total_Weekly_Diff_Hrs'] / final_df['Days_Worked'], 0.0)
         
-        # --- BU Efficiency Calculations ---
         final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
         final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * (3 + (25 / 60.0))
         final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
@@ -915,40 +911,6 @@ if time_file and ops_file:
         final_df['Total Eff'] = final_df['Total_Eff'].apply(lambda x: f"{x:.1f}%")
         
         final_df = final_df.sort_values(by='WH_Eff_Raw', ascending=False)
-        
-        bu_summary_df = pd.DataFrame()
-        bu_summary_df['Name'] = final_df['Name']
-        bu_summary_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
-        bu_summary_df['Total Jobs'] = final_df['Total_Weekly_Job_Count'].astype(int)
-        
-        bu_summary_df['LSI Jobs'] = final_df['Simple_Installs_Count'].astype(int)
-        bu_summary_df['LSI Job Status Time'] = final_df['Simple_Installs_Hrs'].apply(format_hm)
-        bu_summary_df['LSI Assumed Clocked'] = final_df['Assumed_LSI_Clocked'].apply(format_hm)
-        bu_summary_df['LSI Efficiency'] = final_df['Simple Installs Eff']
-        
-        bu_summary_df['WH Jobs'] = final_df['Water_Heaters_Count'].astype(int)
-        bu_summary_df['WH Job Status Time'] = final_df['Water_Heaters_Hrs'].apply(format_hm)
-        bu_summary_df['WH Assumed Clocked'] = final_df['Assumed_WH_Clocked'].apply(format_hm)
-        bu_summary_df['WH Efficiency'] = final_df['Water Heaters Eff']
-        bu_summary_df['Total Efficiency'] = final_df['Total Eff']
-        
-        display_dfs['Weekly'] = bu_summary_df
-        
-        export_df = pd.DataFrame()
-        export_df['Name'] = final_df['Name']
-        export_df['Days Worked'] = final_df['Days_Worked']
-        export_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
-        export_df['Total Job Time'] = final_df['Total_Weekly_Job_Hrs'].apply(format_hm)
-        export_df['Manual Adj'] = final_df['Adjustment_Hrs'].apply(format_hm)
-        export_df['Daily Avg Diff'] = final_df['Daily_Avg_Diff_Hrs'].apply(format_hm) 
-        export_df['Total Diff'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
-        for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
-            export_df[f'{d} Diff'] = final_df[f'{d} Diff']
-        
-        export_df['LSI Job Hours'] = final_df['Simple Installs']
-        export_df['LSI Efficiency %'] = final_df['Simple Installs Eff']
-        export_df['WH Job Hours'] = final_df['Water Heaters']
-        export_df['WH Efficiency %'] = final_df['Water Heaters Eff']
         
         ops_sorted = ops_df.dropna(subset=['Earliest_Start']).sort_values(['Assigned Team Members', 'Earliest_Start'])
         ops_sorted['Next_Job_Start'] = ops_sorted.groupby(['Assigned Team Members', 'Short_Date'])['Earliest_Start'].shift(-1)
@@ -1043,7 +1005,7 @@ if time_file and ops_file:
                         "Day": full_day,
                         "Jobs": int(tech_data[short_day + '_Job_Count']),
                         "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']),
-                        "Job Time": format_hm(tech_data[short_day + '_Job_Hrs']),
+                        "Job Time": format_hm(tech_data[tech_data['Name'] == selected_tech].iloc[0][short_day + '_Job_Hrs']),
                         "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])
                     })
                 
@@ -1212,10 +1174,10 @@ if time_file and ops_file:
                     ])
                     st.dataframe(store_stats, use_container_width=True)
 
-            # === MACRO FINANCIAL PERFORMANCE DASHBOARD ===
+            # === CONSOLIDATED DASHBOARD PANEL ===
             if "📊 Macro Financial Performance Dashboard" in test_choices:
                 st.markdown("### **📊 Macro Financial Performance Dashboard**")
-                st.markdown("*(Green highlight = under 20% for hourly/salaried, under 34% for piece-rate. Sorted highest to lowest by pay ratio)*")
+                st.markdown("*(Sorted highest to lowest payload percentage. Green highlight = under 20% for hourly/salaried, under 34% for piece-rate)*")
                 
                 m_col1, m_col2 = st.columns([1, 2])
                 with m_col1:
@@ -1244,7 +1206,6 @@ if time_file and ops_file:
                     )
                     rev_per_hour_df['Pay % vs Assigned Revenue'] = rev_per_hour_df['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
                     
-                    # UPDATED: Enforces highest to lowest descending sorting format layout dynamically
                     show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[
                         ['Name', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue']
                     ]
@@ -1265,7 +1226,7 @@ if time_file and ops_file:
             # === TOP REVENUE PRODUCER LEADERBOARD ===
             if "🏆 Top Revenue Producer Leaderboard" in test_choices:
                 st.markdown("### **🏆 Top Revenue Producer Leaderboard**")
-                st.markdown("*(Ranks technicians by payload ratios. Sorted highest to lowest. Green highlight = under 20% for hourly/salaried, under 34% for piece-rate)*")
+                st.markdown("*(Sorted highest to lowest payload ratio. Green highlight = under 20% for hourly/salaried, under 34% for piece-rate)*")
                 leaderboard_rev = final_df.copy()
                 leaderboard_rev['Assumed Pay Amount'] = leaderboard_rev.apply(get_assumed_pay, axis=1)
                 leaderboard_rev['Pay Pct'] = np.where(
@@ -1274,7 +1235,6 @@ if time_file and ops_file:
                     0.0
                 )
                 
-                # UPDATED: Enforces highest to lowest descending payload sorting parameter mapping loop safely
                 leaderboard_rev = leaderboard_rev.sort_values(by='Pay Pct', ascending=False)
                 
                 leaderboard_rev['Total Clocked'] = leaderboard_rev['Total_Weekly_Clocked_Hrs'].apply(format_hm)
