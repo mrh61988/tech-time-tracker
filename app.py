@@ -48,7 +48,6 @@ def parse_hm(time_str):
     if pd.isna(time_str) or time_str == '-' or time_str == '':
         return 0.0
     try:
-        # FIXED: Proactively sanitize trailing commas and formatting notes inside all daily hourly metric strings
         clean_str = str(time_str).strip().rstrip(',').strip('"')
         parts = clean_str.split(':')
         h = int(parts[0])
@@ -108,7 +107,7 @@ def get_assumed_pay(row):
     if 'michael owens' in nl:
         return 65000.0 / 52.0
     if 'bryan' in nl or 'erik' in nl:
-        return rev * 0.30  
+        return rev * 0.33  # FIXED: Upgraded commissions to 33% natively
         
     rate = 0.0
     if 'nate' in nl or 'nathan' in nl:
@@ -190,7 +189,7 @@ def highlight_pay_pct_row(row):
     return styles
 
 # --- MAIN BLOCK REPORT ENGINE ---
-def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
+def show_advanced_reporting(ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
     # === BOSS TOOLS SECTION ===
@@ -360,7 +359,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             lsi_cnt, wh_cnt = row['Simple_Installs_Count'], row['Water_Heaters_Count']
             if lsi_cnt > 0 and wh_cnt > 0:
                 if row['Eff Gap'] > 25.0: return "⚠️ WH Ride-Along Required" if row['LSI_Eff_Raw'] > row['WH_Eff_Raw'] else "⚠️ LSI Ride-Along Required"
-                return "Balanced Execution"
+                return "✅ Balanced Execution"
             if lsi_cnt > 0: return "ℹ️ Only LSI Jobs Assigned"
             if wh_cnt > 0: return "ℹ️ Only WH Jobs Assigned"
             return "ℹ️ No BU Jobs Assigned"
@@ -729,7 +728,7 @@ if time_file and ops_file:
         final_df['LSI_Eff_Raw'] = final_df['Simple Installs Eff']
         final_df['WH_Eff_Raw'] = final_df['Water Heaters Eff']
         
-        # Enforce descending sort metrics based on raw WH efficiencies
+        # Enforce dynamic descending sort arrays based on raw WH efficiencies
         final_df = final_df.sort_values(by='WH_Eff_Raw', ascending=False)
         
         final_df['Simple Installs Eff'] = final_df['LSI_Eff_Raw'].apply(lambda x: f"{x:.1f}%")
@@ -770,6 +769,15 @@ if time_file and ops_file:
             m_col1, m_col2 = st.columns([1, 2])
             with m_col1:
                 st.metric(label="Division Gross Invoiced Volume", value=f"${raw_unsplit_volume:,.2f}")
+                
+                # Dynamic total pay macro metrics variables mapped straight to dashboard card layers
+                rev_per_hour_df_calc = final_df.copy()
+                rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(get_assumed_pay, axis=1)
+                total_assumed_pay = rev_per_hour_df_calc['Assumed Pay Amount'].sum()
+                pay_ratio_pct = (total_assumed_pay / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
+                
+                st.metric(label="Assumed Total Pay (Division)", value=f"${total_assumed_pay:,.2f}")
+                st.metric(label="Division Labor Pay Ratio", value=f"{pay_ratio_pct:.1f}%")
                 
                 st.markdown("<br>**📈 Gross Invoiced Revenue by Business Unit**", unsafe_allow_html=True)
                 bu_gross_rev = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].sum().reset_index()
