@@ -189,7 +189,7 @@ def highlight_pay_pct_row(row):
     return styles
 
 # --- MAIN BLOCK REPORT ENGINE ---
-def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
+def show_advanced_reporting(ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
     # === BOSS TOOLS SECTION ===
@@ -212,7 +212,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
     
     b_col1, b_col2, b_col3, b_col4, b_col5, b_col6 = st.columns([1.3, 1, 1, 1, 1, 1])
     with b_col1:
-        rate = st.number_input("Fallback Rate ($/hr)", value=25.0, step=1.0, key=f"rate_{tab_key}")
+        rate = st.number_input("Fallback Rate for Unmapped Techs ($)", value=25.0, step=1.0, key=f"rate_{tab_key}")
         
     def get_custom_loss(row, fallback):
         nl = str(row['Name']).lower()
@@ -347,14 +347,16 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("🎯 The Technician Skill Matrix & Training Flag")
-    st.markdown("*(Compares a technician's LSI performance against their WH performance. Flags techs where the gap exceeds 25%)*")
+    # FIXED: Updated UI description label to precisely show 15% limits
+    st.markdown("*(Compares a technician's LSI performance against their WH performance. Flags techs where the gap exceeds 15%)*")
     skill_df = final_df.copy()
     if not skill_df.empty:
         skill_df['Eff Gap'] = np.where((skill_df['Simple_Installs_Count'] > 0) & (skill_df['Water_Heaters_Count'] > 0), abs(skill_df['LSI_Eff_Raw'] - skill_df['WH_Eff_Raw']), 0.0)
         def assign_skill_flag(row):
             lsi_cnt, wh_cnt = row['Simple_Installs_Count'], row['Water_Heaters_Count']
             if lsi_cnt > 0 and wh_cnt > 0:
-                if row['Eff Gap'] > 25.0: return "⚠️ WH Ride-Along Required" if row['LSI_Eff_Raw'] > row['WH_Eff_Raw'] else "⚠️ LSI Ride-Along Required"
+                # FIXED: Shifted evaluation bounds from 25.0 down to 15.0 variance metrics natively
+                if row['Eff Gap'] > 15.0: return "⚠️ WH Ride-Along Required" if row['LSI_Eff_Raw'] > row['WH_Eff_Raw'] else "⚠️ LSI Ride-Along Required"
                 return "✅ Balanced Execution"
             if lsi_cnt > 0: return "ℹ️ Only LSI Jobs Assigned"
             if wh_cnt > 0: return "ℹ️ Only WH Jobs Assigned"
@@ -467,8 +469,8 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
         st.subheader("📊 Late Deployment Scorecard")
         if not delayed_launches_df.empty:
             launch_counts = delayed_launches_df.groupby('Assigned Team Members').size().reset_index(name='Total Late Days').sort_values(by='Total Late Days', ascending=False)
-            try: st.dataframe(launch_counts.reset_index(drop=True).style.hide(axis="index").set_properties(**{'background-color': '#fff3cd', 'color': '#856404;', 'font-weight': 'bold'}), use_container_width=True)
-            except Exception: st.dataframe(launch_counts.reset_index(drop=True).style.set_properties(**{'background-color': '#fff3cd', 'color': '#856404;', 'font-weight': 'bold'}), use_container_width=True)
+            try: st.dataframe(launch_counts.reset_index(drop=True).style.hide(axis="index").set_properties(**{'background-color': '#fff3cd', 'color': '#856404;'}, subset=['Total Late Days']), use_container_width=True)
+            except Exception: st.dataframe(launch_counts.reset_index(drop=True).style.set_properties(**{'background-color': '#fff3cd', 'color': '#856404;'}, subset=['Total Late Days']), use_container_width=True)
 
     with launch_empty_col:
         st.subheader("🚗 Delayed Launch Alert")
@@ -600,7 +602,7 @@ if time_file and ops_file:
                 fri = time_lines[i+6].strip()
                 sat = time_lines[i+7].strip()
                 total = time_lines[i+8].strip()
-                data.append([name, sun, mon, tue, wed, thu, fri, sat, total])
+                data.append([name, sun, mon, tune, wed, thu, fri, sat, total])
         
         time_df = pd.DataFrame(data, columns=['Name', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Total_Weekly'])
         time_df = time_df[~time_df['Name'].isin(EXCLUDE_NAMES)]
@@ -839,7 +841,6 @@ if time_file and ops_file:
             total_assumed_pay = rev_per_hour_df_calc['Assumed Pay Amount'].sum()
             pay_ratio_pct = (total_assumed_pay / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
             
-            # Positioned metrics on the exact same row/level symmetrically using container cards
             dash_metric_col1, dash_metric_col2, dash_metric_col3 = st.columns(3)
             with dash_metric_col1:
                 st.metric(label="Division Gross Invoiced Volume", value=f"${raw_unsplit_volume:,.2f}")
@@ -848,7 +849,7 @@ if time_file and ops_file:
             with dash_metric_col3:
                 st.metric(label="Division Labor Pay Ratio", value=f"{pay_ratio_pct:.1f}%")
                 
-            # FIXED: Pre-compute the exact pay proportions distributed across Business Units using 'Assigned Team Members'
+            # Pre-compute the exact pay proportions distributed across Business Units using 'Assigned Team Members'
             ops_df['Computed_Row_Pay'] = ops_df['Assigned Team Members'].map(rev_per_hour_df_calc.set_index('Name')['Assumed Pay Amount']).fillna(0.0)
             tech_total_field_hrs = ops_df.groupby('Assigned Team Members')['Total_Job_Time_Hours'].sum().reset_index().rename(columns={'Total_Job_Time_Hours': 'Tech_Total_Work_Hrs'})
             ops_df = pd.merge(ops_df, tech_total_field_hrs, on='Assigned Team Members', how='left')
