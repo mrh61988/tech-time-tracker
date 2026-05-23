@@ -676,13 +676,11 @@ if time_file and ops_file:
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
         
-        # Safely convert Total Invoice Amount fields to float array models
         if 'Total Invoice Amount' in ops_df.columns:
             ops_df['Total Invoice Amount'] = pd.to_numeric(ops_df['Total Invoice Amount'], errors='coerce').fillna(0.0)
         else:
             ops_df['Total Invoice Amount'] = 0.0
             
-        # Capture raw copy baseline before split/explode operations distort unique calculations
         unexploded_ops = ops_df.copy()
         
         ts_cols = [
@@ -806,7 +804,6 @@ if time_file and ops_file:
             final_df['Simple_Installs_Count'] = 0.0
             final_df['Water_Heaters_Count'] = 0.0
             
-        # Aggregate total revenue loops assigned contextually per tech string mapping
         tech_rev_agg = ops_df.groupby('Assigned Team Members')['Total Invoice Amount'].sum().reset_index()
         tech_rev_agg.columns = ['Name', 'Total_Assigned_Revenue']
         final_df = pd.merge(final_df, tech_rev_agg, on='Name', how='left').fillna(0.0)
@@ -1065,7 +1062,6 @@ if time_file and ops_file:
             st.header("🧪 Isolated Leaderboard Sandbox")
             st.markdown("Use the selections below to add, remove, or evaluate components without changing the data models in other sections.")
             
-            # UPDATED: Appended financial selection flags directly into multi-select layout checklists
             test_choices = st.multiselect(
                 "Select active data views to mount inside Test Section:",
                 [
@@ -1201,11 +1197,12 @@ if time_file and ops_file:
                 total_rev = unexploded_ops['Total Invoice Amount'].sum()
                 st.metric(label="Division-Wide Gross Invoiced Volume", value=f"${total_rev:,.2f}")
 
-            # ADDED NEW SANDBOX FEATURE: Gross Revenue per Clocked Hour
+            # FIXED: Added formatted 'Total Clocked' injection to avoid slicing errors on copy structures
             if "📈 Gross Revenue per Clocked Hour" in test_choices:
                 st.markdown("### **📈 Gross Revenue per Clocked Hour**")
                 st.markdown("*(Calculates gross value added to operations for every hour a tech is active on timesheets)*")
                 rev_per_hour_df = final_df.copy()
+                rev_per_hour_df['Total Clocked'] = rev_per_hour_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
                 rev_per_hour_df['Gross Revenue / Clocked Hour'] = rev_per_hour_df.apply(
                     lambda r: f"${r['Rev_Per_Clocked_Hr']:.2f}/hr" if r['Total_Weekly_Clocked_Hrs'] > 0 else "-", axis=1
                 )
@@ -1226,11 +1223,12 @@ if time_file and ops_file:
                 bu_rev['Revenue Share %'] = bu_rev['Revenue Share %'].apply(lambda x: f"{x:.1f}%")
                 st.dataframe(bu_rev[['Business Unit', 'Total Revenue', 'Revenue Share %']].reset_index(drop=True), use_container_width=True)
 
-            # ADDED NEW SANDBOX FEATURE: Top Revenue Producer Leaderboard
+            # FIXED: Added formatted 'Total Clocked' injection to prevent indexing failures during priority sorting slices
             if "🏆 Top Revenue Producer Leaderboard" in test_choices:
                 st.markdown("### **🏆 Top Revenue Producer Leaderboard**")
                 st.markdown("*(Ranks all active technicians cleanly by raw dollar value injected into division gross accounts)*")
                 leaderboard_rev = final_df.sort_values(by='Total_Assigned_Revenue', ascending=False).copy()
+                leaderboard_rev['Total Clocked'] = leaderboard_rev['Total_Weekly_Clocked_Hrs'].apply(format_hm)
                 leaderboard_rev['Total Assigned Revenue'] = leaderboard_rev['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
                 leaderboard_rev['Total Jobs'] = leaderboard_rev['Total_Weekly_Job_Count'].astype(int)
                 show_leaderboard_rev = leaderboard_rev[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Revenue']]
