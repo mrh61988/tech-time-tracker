@@ -328,10 +328,68 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
         else:
             st.info("No technicians qualified for the Gold Star list this week.")
 
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # NEW FEATURE: Skill Matrix & Training Flag
+    st.subheader("🎯 The Technician Skill Matrix & Training Flag")
+    st.markdown("*(Compares a technician's LSI performance against their WH performance. Flags techs where the gap exceeds 25%)*")
+    
+    skill_df = final_df[(final_df['Simple_Installs_Count'] > 0) & (final_df['Water_Heaters_Count'] > 0)].copy()
+    if not skill_df.empty:
+        skill_df['Eff Gap'] = abs(skill_df['LSI_Eff_Raw'] - skill_df['WH_Eff_Raw'])
+        
+        def assign_flag(row):
+            if row['Eff Gap'] > 25.0:
+                if row['LSI_Eff_Raw'] > row['WH_Eff_Raw']:
+                    return "⚠️ Needs WH Ride-Along"
+                else:
+                    return "⚠️ Needs LSI Ride-Along"
+            return "✅ Balanced Execution"
+            
+        skill_df['Action Required'] = skill_df.apply(assign_flag, axis=1)
+        skill_df = skill_df.sort_values(by='Eff Gap', ascending=False)
+        show_skill = skill_df[['Name', 'Simple Installs Eff', 'Water Heaters Eff', 'Action Required']].rename(columns={
+            'Simple Installs Eff': 'LSI Efficiency',
+            'Water Heaters Eff': 'WH Efficiency'
+        })
+        
+        def style_flags(row):
+            if '⚠️' in row['Action Required']:
+                return ['background-color: #fff3cd; color: #856404; font-weight: bold;'] * len(row)
+            return [''] * len(row)
+            
+        try:
+            st.dataframe(show_skill.reset_index(drop=True).style.hide(axis="index").apply(style_flags, axis=1), use_container_width=True)
+        except:
+            st.dataframe(show_skill.reset_index(drop=True).style.apply(style_flags, axis=1), use_container_width=True)
+    else:
+        st.info("No technicians handled both job types this week to establish a comparison matrix.")
+
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
     # === DISPATCHER TOOLS SECTION ===
     st.header("🛠️ Dispatcher Tools (Daily Accountability & Planning)")
+    
+    # NEW FEATURE: Best Fit Dispatch Recommender
+    st.subheader("🧠 Best Fit Dispatch Recommender")
+    st.markdown("*(Provides a sorted priority list for the dispatcher to assign last-minute emergency jobs based purely on isolated historical unit efficiencies)*")
+    
+    bf_col1, bf_col2 = st.columns(2)
+    with bf_col1:
+        st.markdown("**🥇 Top Ranked for LSI Jobs**")
+        lsi_top = final_df[final_df['Simple_Installs_Count'] > 0].sort_values(by='LSI_Eff_Raw', ascending=False)
+        if not lsi_top.empty:
+            lsi_top['Jobs Run'] = lsi_top['Simple_Installs_Count'].astype(int)
+            st.dataframe(lsi_top[['Name', 'Simple Installs Eff', 'Jobs Run']].reset_index(drop=True).rename(columns={'Simple Installs Eff': 'LSI Efficiency'}), use_container_width=True)
+            
+    with bf_col2:
+        st.markdown("**🥇 Top Ranked for Water Heaters**")
+        wh_top = final_df[final_df['Water_Heaters_Count'] > 0].sort_values(by='WH_Eff_Raw', ascending=False)
+        if not wh_top.empty:
+            wh_top['Jobs Run'] = wh_top['Water_Heaters_Count'].astype(int)
+            st.dataframe(wh_top[['Name', 'Water Heaters Eff', 'Jobs Run']].reset_index(drop=True).rename(columns={'Water Heaters Eff': 'WH Efficiency'}), use_container_width=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
     
     d_col1, d_col2 = st.columns(2)
     
@@ -603,7 +661,6 @@ if time_file and ops_file:
             bu_pivot = pd.merge(bu_pivot_hrs, bu_pivot_cnt, on='Assigned Team Members', suffixes=('_hrs', '_cnt'))
             bu_pivot = bu_pivot.rename(columns={'Assigned Team Members': 'Name'})
             
-            # Ensure safety columns exist
             for col in ['Lowes - Simple Installs_hrs', 'Lowes - Water Heaters_hrs', 'Lowes - Simple Installs_cnt', 'Lowes - Water Heaters_cnt']:
                 if col not in bu_pivot.columns:
                     bu_pivot[col] = 0.0
@@ -629,7 +686,6 @@ if time_file and ops_file:
         job_time_pivot = job_time_pivot.rename(columns=rename_dict)
         job_time_pivot['Total_Weekly_Job_Hrs'] = job_time_pivot[[d + '_Job_Hrs' for d in days]].sum(axis=1)
         
-        # --- Create Daily Job Counts ---
         job_count_agg = ops_df.groupby(['Assigned Team Members', 'Day_of_Week']).size().reset_index(name='Job_Count')
         job_count_pivot = job_count_agg.pivot(index='Assigned Team Members', columns='Day_of_Week', values='Job_Count').reset_index()
         job_count_pivot = job_count_pivot.rename(columns={'Assigned Team Members': 'Name'}).fillna(0)
@@ -641,8 +697,8 @@ if time_file and ops_file:
         rename_dict_counts = {day: day + '_Job_Count' for day in days}
         job_count_pivot = job_count_pivot.rename(columns=rename_dict_counts)
         job_count_pivot['Total_Weekly_Job_Count'] = job_count_pivot[[d + '_Job_Count' for d in days]].sum(axis=1)
-
-        # FIXED: Calculate daily route info globally with 'Drive %' correctly appended before advanced sorting calls
+        
+        # Calculate daily route info globally so it can be passed to sandbox
         daily_route = ops_df.groupby(['Assigned Team Members', 'Short_Date']).agg(
             Drive_Time_Hrs=('Drive_Time_Hrs', 'sum'),
             In_Progress_Time_Hrs=('In_Progress_Time_Hrs', 'sum'),
@@ -653,11 +709,9 @@ if time_file and ops_file:
         daily_route = daily_route[daily_route['Total_Job_Time_Hours'] > 0].copy()
         daily_route['Drive %'] = (daily_route['Drive_Time_Hrs'] / daily_route['Total_Job_Time_Hours']) * 100
         
-        # --- 3. Merge and Calculate Differences ---
         final_df = pd.merge(time_df, job_time_pivot, on='Name', how='left').fillna(0)
         final_df = pd.merge(final_df, job_count_pivot, on='Name', how='left').fillna(0)
         
-        # Inject Business Unit hours & counts into main tracking grid
         if not bu_pivot.empty:
             final_df = pd.merge(final_df, bu_pivot[['Name', 'Simple_Installs_Hrs', 'Water_Heaters_Hrs', 'Simple_Installs_Count', 'Water_Heaters_Count']], on='Name', how='left').fillna(0)
         else:
@@ -666,7 +720,6 @@ if time_file and ops_file:
             final_df['Simple_Installs_Count'] = 0.0
             final_df['Water_Heaters_Count'] = 0.0
             
-        # --- 3.5 Job Status Adjustments Sidebar UI ---
         st.sidebar.header("🔧 Job Status Time Adjustments")
         st.sidebar.markdown("*(Correct tech hours if they hit a job status too early or late)*")
         st.sidebar.markdown("**Rules:** Use positive numbers like `1:30` or `0:45` to add time. Use a minus sign like `-1:15` or `-0:30` to subtract time.")
@@ -918,55 +971,12 @@ if time_file and ops_file:
             test_choices = st.multiselect(
                 "Select active data views to mount inside Test Section:",
                 [
-                    "🚨 Team Leaderboard", 
-                    "⭐ Gold Star Performance Roll", 
-                    "📊 Late Deployment Scorecard",
                     "🏆 The \"Golden Ratio\" Margin Predictor",
-                    "🎯 The Technician \"Skill Matrix\" & Training Flag",
-                    "🧠 \"Best Fit\" Dispatch Recommender",
                     "🔄 The \"Context-Switching\" Penalty Alert"
                 ],
-                default=["🚨 Team Leaderboard"],
+                default=["🏆 The \"Golden Ratio\" Margin Predictor"],
                 key="sandbox_view_choices"
             )
-            
-            if "🚨 Team Leaderboard" in test_choices:
-                st.markdown("### **🚨 Team Leaderboard (Sandbox View)**")
-                leaderboard_df = final_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=False).copy()
-                if not leaderboard_df.empty:
-                    leaderboard_df['Total Clocked'] = leaderboard_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
-                    leaderboard_df['Total Job Time'] = leaderboard_df['Total_Weekly_Job_Hrs'].apply(format_hm)
-                    leaderboard_df['Manual Adj'] = leaderboard_df['Adjustment_Hrs'].apply(format_hm)
-                    leaderboard_df['Daily Avg Diff'] = leaderboard_df['Daily_Avg_Diff_Hrs'].apply(format_hm)
-                    leaderboard_df['Total Diff'] = leaderboard_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
-                    show_leaderboard = leaderboard_df[['Name', 'Total Clocked', 'Total Job Time', 'Manual Adj', 'Daily Avg Diff', 'Total Diff']].copy()
-                    def highlight_leaderboard(row):
-                        val = parse_diff_to_hours(row['Total Diff'])
-                        return ['background-color: #ffcccc; color: #990000;'] * len(row) if val > 0 else [''] * len(row)
-                    st.dataframe(show_leaderboard.reset_index(drop=True).style.apply(highlight_leaderboard, axis=1), use_container_width=True)
-            
-            if "⭐ Gold Star Performance Roll" in test_choices:
-                st.markdown("### **⭐ The Gold Star Performer Board (Sandbox View)**")
-                gold_star_df = final_df[(final_df['Daily_Avg_Diff_Hrs'] < 1.5) & (final_df['Days_Worked'] > 0)].copy()
-                if not gold_star_df.empty:
-                    gold_star_df = gold_star_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=True)
-                    gold_star_df['Total Clocked'] = gold_star_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
-                    gold_star_df['Total Job Time'] = gold_star_df['Total_Weekly_Job_Hrs'].apply(format_hm)
-                    gold_star_df['Daily Avg Diff'] = gold_star_df['Daily_Avg_Diff_Hrs'].apply(format_hm)
-                    gold_star_df['Total Diff'] = gold_star_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
-                    show_gold = gold_star_df[['Name', 'Total Clocked', 'Total Job Time', 'Daily Avg Diff', 'Total Diff']].copy()
-                    st.dataframe(show_gold.reset_index(drop=True).style.set_properties(**{'background-color': '#e6f4ea', 'color': '#137333'}), use_container_width=True)
-                else:
-                    st.info("No sandbox metrics match the active Gold Star criteria.")
-
-            if "📊 Late Deployment Scorecard" in test_choices:
-                st.markdown("### **📊 Late Deployment Leaderboard (Sandbox View)**")
-                if not delayed_launches_df.empty:
-                    launch_counts = delayed_launches_df.groupby('Assigned Team Members').size().reset_index(name='Total Late Days')
-                    launch_counts = launch_counts.sort_values(by='Total Late Days', ascending=False).rename(columns={'Assigned Team Members': 'Name'})
-                    st.dataframe(launch_counts.reset_index(drop=True).style.set_properties(**{'background-color': '#fff3cd', 'color': '#856404;', 'font-weight': 'bold'}), use_container_width=True)
-                else:
-                    st.info("No launch metadata loaded to aggregate in sandbox loops.")
 
             if "🏆 The \"Golden Ratio\" Margin Predictor" in test_choices:
                 st.markdown("### **🏆 The Golden Ratio Margin Predictor**")
@@ -1013,60 +1023,6 @@ if time_file and ops_file:
                         st.dataframe(golden_df[['Day', 'LSI Mix %', 'Profile', 'Daily Efficiency']], use_container_width=True)
                 else:
                     st.info("No business unit ratios calculated for this week.")
-
-            if "🎯 The Technician \"Skill Matrix\" & Training Flag" in test_choices:
-                st.markdown("### **🎯 The Technician Skill Matrix & Training Flag**")
-                st.markdown("*(Compares a technician's LSI performance against their WH performance. Flags techs where the gap exceeds 25%)*")
-                
-                skill_df = final_df[(final_df['Simple_Installs_Count'] > 0) & (final_df['Water_Heaters_Count'] > 0)].copy()
-                if not skill_df.empty:
-                    skill_df['Eff Gap'] = abs(skill_df['LSI_Eff_Raw'] - skill_df['WH_Eff_Raw'])
-                    
-                    def assign_flag(row):
-                        if row['Eff Gap'] > 25.0:
-                            if row['LSI_Eff_Raw'] > row['WH_Eff_Raw']:
-                                return "⚠️ Needs WH Ride-Along"
-                            else:
-                                return "⚠️ Needs LSI Ride-Along"
-                        return "✅ Balanced Execution"
-                        
-                    skill_df['Action Required'] = skill_df.apply(assign_flag, axis=1)
-                    skill_df = skill_df.sort_values(by='Eff Gap', ascending=False)
-                    show_skill = skill_df[['Name', 'Simple Installs Eff', 'Water Heaters Eff', 'Action Required']].rename(columns={
-                        'Simple Installs Eff': 'LSI Efficiency',
-                        'Water Heaters Eff': 'WH Efficiency'
-                    })
-                    
-                    def style_flags(row):
-                        if '⚠️' in row['Action Required']:
-                            return ['background-color: #fff3cd; color: #856404; font-weight: bold;'] * len(row)
-                        return [''] * len(row)
-                        
-                    try:
-                        st.dataframe(show_skill.reset_index(drop=True).style.hide(axis="index").apply(style_flags, axis=1), use_container_width=True)
-                    except:
-                        st.dataframe(show_skill.reset_index(drop=True).style.apply(style_flags, axis=1), use_container_width=True)
-                else:
-                    st.info("No technicians handled both job types this week to establish a comparison matrix.")
-
-            if "🧠 \"Best Fit\" Dispatch Recommender" in test_choices:
-                st.markdown("### **🧠 Best Fit Dispatch Recommender**")
-                st.markdown("*(Provides a sorted priority list for the dispatcher to assign last-minute emergency jobs based purely on isolated historical unit efficiencies)*")
-                
-                bf_col1, bf_col2 = st.columns(2)
-                with bf_col1:
-                    st.markdown("**🥇 Top Ranked for LSI Jobs**")
-                    lsi_top = final_df[final_df['Simple_Installs_Count'] > 0].sort_values(by='LSI_Eff_Raw', ascending=False)
-                    if not lsi_top.empty:
-                        lsi_top['Jobs Run'] = lsi_top['Simple_Installs_Count'].astype(int)
-                        st.dataframe(lsi_top[['Name', 'Simple Installs Eff', 'Jobs Run']].reset_index(drop=True).rename(columns={'Simple Installs Eff': 'LSI Efficiency'}), use_container_width=True)
-                        
-                with bf_col2:
-                    st.markdown("**🥇 Top Ranked for Water Heaters**")
-                    wh_top = final_df[final_df['Water_Heaters_Count'] > 0].sort_values(by='WH_Eff_Raw', ascending=False)
-                    if not wh_top.empty:
-                        wh_top['Jobs Run'] = wh_top['Water_Heaters_Count'].astype(int)
-                        st.dataframe(wh_top[['Name', 'Water Heaters Eff', 'Jobs Run']].reset_index(drop=True).rename(columns={'Water Heaters Eff': 'WH Efficiency'}), use_container_width=True)
 
             if "🔄 The \"Context-Switching\" Penalty Alert" in test_choices:
                 st.markdown("### **🔄 Context-Switching Penalty Alert**")
