@@ -266,8 +266,11 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             def highlight_leaderboard(row):
                 val = parse_diff_to_hours(row['Total Diff'])
                 return ['background-color: #ffcccc; color: #990000;'] * len(row) if val > 0 else [''] * len(row)
-            try: st.dataframe(show_leaderboard.reset_index(drop=True).style.hide(axis="index").apply(highlight_leaderboard, axis=1), use_container_width=True)
-            except Exception: st.dataframe(show_leaderboard.reset_index(drop=True).style.apply(highlight_leaderboard, axis=1), use_container_width=True)
+            try:
+                styled_leaderboard = show_leaderboard.reset_index(drop=True).style.hide(axis="index").apply(highlight_leaderboard, axis=1)
+            except Exception:
+                styled_leaderboard = show_leaderboard.reset_index(drop=True).style.apply(highlight_leaderboard, axis=1)
+            st.dataframe(styled_leaderboard, use_container_width=True)
 
     # === OVERTIME HORIZON PREDICTOR ===
     st.markdown("<br>", unsafe_allow_html=True)
@@ -307,7 +310,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # === REWARDS ===
+    # === OPS MANAGER TOOLS ===
     st.header("📊 Ops Manager Tools (Benchmarking & Performance)")
     bench_col, gold_star_col = st.columns(2)
     with bench_col:
@@ -369,7 +372,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
         except Exception: st.dataframe(show_skill.reset_index(drop=True).style.apply(style_flags, axis=1), use_container_width=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("🏁 The Peer-to-Peer Coaching Corner Overlay")
+    st.subheader("🎯 The Peer-to-Peer Coaching Corner Overlay")
     st.markdown("*(Anonymized mentor baseline layout stack comparing tech efficiency targets with Top 25% performers)*")
     coaching_data = pd.DataFrame()
     coaching_data['Name'] = final_df['Name']
@@ -574,7 +577,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         st.markdown("### **📊 Business Unit Revenue Velocity**")
         bu_rev = unexploded_ops['Total Invoice Amount'].sum()
         bu_rev_df = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].sum().reset_index()
-        bu_rev_df['Revenue Share %'] = (bu_rev_df['Total Invoice Amount'] / bu_rev) * 100
+        bu_rev_df['Revenue Share %'] = (bu_rev_df['Total Invoice Amount'] / unexploded_ops['Total Invoice Amount'].sum()) * 100
         bu_rev_df['Total Revenue'] = bu_rev_df['Total Invoice Amount'].apply(lambda x: f"${x:,.2f}")
         bu_rev_df['Revenue Share %'] = bu_rev_df['Revenue Share %'].apply(lambda x: f"{x:.1f}%")
         st.dataframe(bu_rev_df[['Business Unit', 'Total Revenue', 'Revenue Share %']].reset_index(drop=True), use_container_width=True)
@@ -873,12 +876,3 @@ if time_file and ops_file:
             
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
-"""
-"""
-
-# Compilation test
-try:
-    compile(master_code, "<string>", "exec")
-    print("Clean compilation wrapper checked successfully!")
-except SyntaxError as se:
-    print("Syntax issues:", se)}
