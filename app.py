@@ -15,6 +15,9 @@ st.markdown("""
     [data-testid="stSelectbox"] { display: none !important; }
     div[data-baseweb="tab-list"] { display: none !important; }
     h1 { display: none !important; }
+    .hide-on-print { display: none !important; }
+    .stAlert { display: none !important; }
+    
     .main .block-container {
         max-width: 100% !important;
         width: 100% !important;
@@ -380,12 +383,18 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     bf_col1, bf_col2 = st.columns(2)
     with bf_col1:
         st.markdown("**🥇 Top Ranked for LSI Jobs**")
-        lsi_top = final_df[final_df['Simple_Installs_Count'] > 0].sort_values(by='LSI_Eff_Raw', ascending=False)
-        if not lsi_top.empty: st.dataframe(lsi_top[['Name', 'Simple Installs Eff', 'Jobs Run']].rename(columns={'Simple Installs Eff': 'LSI Efficiency'}).reset_index(drop=True), use_container_width=True)
+        # FIXED: Enforce .copy() to preserve assignments and guarantee 'Jobs Run' exists safely
+        lsi_top = final_df[final_df['Simple_Installs_Count'] > 0].sort_values(by='LSI_Eff_Raw', ascending=False).copy()
+        if not lsi_top.empty:
+            lsi_top['Jobs Run'] = lsi_top['Simple_Installs_Count'].astype(int)
+            st.dataframe(lsi_top[['Name', 'Simple Installs Eff', 'Jobs Run']].rename(columns={'Simple Installs Eff': 'LSI Efficiency'}).reset_index(drop=True), use_container_width=True)
     with bf_col2:
         st.markdown("**🥇 Top Ranked for Water Heaters**")
-        wh_top = final_df[final_df['Water_Heaters_Count'] > 0].sort_values(by='WH_Eff_Raw', ascending=False)
-        if not wh_top.empty: st.dataframe(wh_top[['Name', 'Water Heaters Eff', 'Jobs Run']].rename(columns={'Water Heaters Eff': 'WH Efficiency'}).reset_index(drop=True), use_container_width=True)
+        # FIXED: Enforce .copy() to preserve assignments and guarantee 'Jobs Run' exists safely
+        wh_top = final_df[final_df['Water_Heaters_Count'] > 0].sort_values(by='WH_Eff_Raw', ascending=False).copy()
+        if not wh_top.empty:
+            wh_top['Jobs Run'] = wh_top['Water_Heaters_Count'].astype(int)
+            st.dataframe(wh_top[['Name', 'Water Heaters Eff', 'Jobs Run']].rename(columns={'Water Heaters Eff': 'WH Efficiency'}).reset_index(drop=True), use_container_width=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     d_col1, d_col2 = st.columns(2)
@@ -469,7 +478,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
                 try: st.dataframe(tech_launches_df.sort_values(by='First_Punch', ascending=False)[['Short_Date', 'First Launch']].rename(columns={'Short_Date': 'Date'}).reset_index(drop=True).style.hide(axis="index").set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'}), use_container_width=True)
                 except Exception: st.dataframe(tech_launches_df.sort_values(by='First_Punch', ascending=False)[['Short_Date', 'First Launch']].rename(columns={'Short_Date': 'Date'}).reset_index(drop=True).style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'}), use_container_width=True)
 
-# --- CONSOLIDATED SANDBOX TAB VIEWS ---
 def run_sandbox_tab(unexploded_ops, ops_df, final_df, test_choices):
     if "🏆 The \"Golden Ratio\" Margin Predictor" in test_choices:
         st.markdown("### **🏆 The Golden Ratio Margin Predictor**")
@@ -511,7 +519,6 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, test_choices):
                 elif clocked == 0 and jobs > 0:
                     ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🚨 Unpaid Field Work (0 Hours Clocked, Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": int(jobs)})
         if ghost_alerts: st.dataframe(pd.DataFrame(ghost_alerts), use_container_width=True)
-        else: st.success("Perfect alignment! No payroll discrepancy errors detected.")
 
     if "📊 Macro Financial Performance Dashboard" in test_choices:
         st.markdown("### **📊 Macro Financial Performance Dashboard**")
@@ -693,11 +700,17 @@ if time_file and ops_file:
         final_df['Adjustment_Hrs'] = final_df['Name'].map(adjustments).fillna(0.0)
         final_df['Total_Weekly_Job_Hrs'] = final_df['Total_Weekly_Job_Hrs'] + final_df['Adjustment_Hrs']
         
+        # --- BU Efficiency Assumptions Pipeline Configuration ---
+        final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
+        final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * (3 + (25 / 60.0))
+        final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
+        final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
+        final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
+
         display_dfs = {}
         for day in days:
             final_df[day + '_Diff_Hrs'] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
             
-            # Map index tracking metrics back into the final dataframe properly
             final_df[f'{day} Jobs'] = final_df[day + '_Job_Count'].astype(int)
             final_df[f'{day} Clocked'] = final_df[day + '_Clocked_Hrs'].apply(format_hm)
             final_df[f'{day} Job Time'] = final_df[day + '_Job_Hrs'].apply(format_hm)
@@ -718,23 +731,14 @@ if time_file and ops_file:
         final_df['Total_Weekly_Diff_Hrs'] = final_df['Total_Weekly_Clocked_Hrs'] - final_df['Total_Weekly_Job_Hrs']
         final_df['Daily_Avg_Diff_Hrs'] = np.where(final_df['Days_Worked'] > 0, final_df['Total_Weekly_Diff_Hrs'] / final_df['Days_Worked'], 0.0)
         
-        final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
-        final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * (3 + (25 / 60.0))
-        final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
-        final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
-        final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
-        
-        final_df['LSI_Eff_Raw'] = np.where(final_df['Assumed_LSI_Clocked'] > 0, (final_df['Simple_Installs_Hrs'] / final_df['Assumed_LSI_Clocked']) * 100, 0.0)
-        final_df['WH_Eff_Raw'] = np.where(final_df['Assumed_WH_Clocked'] > 0, (final_df['Water_Heaters_Hrs'] / final_df['Assumed_WH_Clocked']) * 100, 0.0)
-        final_df['Total_Eff'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, (final_df['Total_Weekly_Job_Hrs'] / final_df['Total_Weekly_Clocked_Hrs']) * 100, 0.0)
-        
         final_df['Simple Installs'] = final_df['Simple_Installs_Hrs'].apply(format_hm)
         final_df['Water Heaters'] = final_df['Water_Heaters_Hrs'].apply(format_hm)
-        final_df['Simple Installs Eff'] = final_df['LSI_Eff_Raw'].apply(lambda x: f"{x:.1f}%")
-        final_df['Water Heaters Eff'] = final_df['WH_Eff_Raw'].apply(lambda x: f"{x:.1f}%")
-        final_df['Total Eff'] = final_df['Total_Eff'].apply(lambda x: f"{x:.1f}%")
-        
-        final_df = final_df.sort_values(by='WH_Eff_Raw', ascending=False)
+        final_df['Simple Installs Eff'] = np.where(final_df['Assumed_LSI_Clocked'] > 0, (final_df['Simple_Installs_Hrs'] / final_df['Assumed_LSI_Clocked']) * 100, 0.0)
+        final_df['Water Heaters Eff'] = np.where(final_df['Assumed_WH_Clocked'] > 0, (final_df['Water_Heaters_Hrs'] / final_df['Assumed_WH_Clocked']) * 100, 0.0)
+        final_df['LSI_Eff_Raw'] = final_df['Simple Installs Eff']
+        final_df['WH_Eff_Raw'] = final_df['Water Heaters Eff']
+        final_df['Simple Installs Eff'] = final_df['Simple Installs Eff'].apply(lambda x: f"{x:.1f}%")
+        final_df['Water Heaters Eff'] = final_df['Water Heaters Eff'].apply(lambda x: f"{x:.1f}%")
         
         bu_summary_df = pd.DataFrame()
         bu_summary_df['Name'] = final_df['Name']
