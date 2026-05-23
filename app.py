@@ -188,7 +188,7 @@ def highlight_pay_pct_row(row):
     return styles
 
 # --- MAIN BLOCK REPORT ENGINE ---
-def show_advanced_reporting(ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
+def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
     # === BOSS TOOLS SECTION ===
@@ -266,11 +266,8 @@ def show_advanced_reporting(ops_df, final_df, bounds_df, delayed_launches_df, da
             def highlight_leaderboard(row):
                 val = parse_diff_to_hours(row['Total Diff'])
                 return ['background-color: #ffcccc; color: #990000;'] * len(row) if val > 0 else [''] * len(row)
-            try:
-                styled_leaderboard = show_leaderboard.reset_index(drop=True).style.hide(axis="index").apply(highlight_leaderboard, axis=1)
-            except Exception:
-                styled_leaderboard = show_leaderboard.reset_index(drop=True).style.apply(highlight_leaderboard, axis=1)
-            st.dataframe(styled_leaderboard, use_container_width=True)
+            try: st.dataframe(show_leaderboard.reset_index(drop=True).style.hide(axis="index").apply(highlight_leaderboard, axis=1), use_container_width=True)
+            except Exception: st.dataframe(show_leaderboard.reset_index(drop=True).style.apply(highlight_leaderboard, axis=1), use_container_width=True)
 
     # === OVERTIME HORIZON PREDICTOR ===
     st.markdown("<br>", unsafe_allow_html=True)
@@ -310,7 +307,7 @@ def show_advanced_reporting(ops_df, final_df, bounds_df, delayed_launches_df, da
             
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # === OPS MANAGER TOOLS ===
+    # === REWARDS ===
     st.header("📊 Ops Manager Tools (Benchmarking & Performance)")
     bench_col, gold_star_col = st.columns(2)
     with bench_col:
@@ -460,7 +457,6 @@ def show_advanced_reporting(ops_df, final_df, bounds_df, delayed_launches_df, da
 
     with colF:
         st.subheader("🗺️ Route Optimization Flags")
-        st.markdown("*(Days where greater than 40% of job time was driving. Shows Job Count, Drive Time, and Work Time for context)*")
         poor_routes = daily_route[daily_route['Drive %'] > 40.0].copy()
         if not poor_routes.empty:
             poor_routes['Drive %'] = poor_routes['Drive %'].apply(lambda x: f"{x:.1f}%")
@@ -637,7 +633,6 @@ if time_file and ops_file:
         def calculate_tech_count(val): return max(1, len(str(val).split(',')))
         ops_df['Tech_Count_On_Job'] = ops_df['Assigned Team Members'].apply(calculate_tech_count)
         
-        # FIXED: Core tracking metrics math arrays computed FIRST before being split or read anywhere else
         for col in time_cols: ops_df[col] = pd.to_numeric(ops_df[col], errors='coerce').fillna(0) / ops_df['Tech_Count_On_Job']
         ops_df['Total Invoice Amount'] = pd.to_numeric(ops_df.get('Total Invoice Amount', pd.Series([0])), errors='coerce').fillna(0.0) / ops_df['Tech_Count_On_Job']
         
@@ -747,7 +742,6 @@ if time_file and ops_file:
         final_df['Adjustment_Hrs'] = final_df['Name'].map(adjustments).fillna(0.0)
         final_df['Total_Weekly_Job_Hrs'] = final_df['Total_Weekly_Job_Hrs'] + final_df['Adjustment_Hrs']
         
-        # --- CRITICAL RE-ALIGNMENT: Compute benchmarks immediately upon joining dataframe parameters safely ---
         final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
         final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * (3 + (25 / 60.0))
         final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
@@ -879,3 +873,12 @@ if time_file and ops_file:
             
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
+"""
+"""
+
+# Compilation test
+try:
+    compile(master_code, "<string>", "exec")
+    print("Clean compilation wrapper checked successfully!")
+except SyntaxError as se:
+    print("Syntax issues:", se)}
