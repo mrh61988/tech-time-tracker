@@ -307,7 +307,8 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
             elif hrs > 35:
                 status = "⚠️ High Overtime Risk"
                 ot_hrs = "-"
-            else = "✅ Safe Strategy"
+            else:
+                status = "✅ Safe Strategy"
                 ot_hrs = "-"
         ot_rows.append({"Name": tech_name, "Weekly Clocked": format_hm(hrs), "Pace Status": status, "Overtime Hours": ot_hrs})
     
@@ -888,7 +889,6 @@ if time_file and ops_file:
         final_df['Total_Weekly_Diff_Hrs'] = final_df['Total_Weekly_Clocked_Hrs'] - final_df['Total_Weekly_Job_Hrs']
         final_df['Daily_Avg_Diff_Hrs'] = np.where(final_df['Days_Worked'] > 0, final_df['Total_Weekly_Diff_Hrs'] / final_df['Days_Worked'], 0.0)
         
-        # --- BU ISOLATED EFFICIENCY CALCULATION ENGINE (WEIGHTED GOALS) ---
         final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
         final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * (3 + (25 / 60.0))
         final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
@@ -1215,7 +1215,7 @@ if time_file and ops_file:
                     ])
                     st.dataframe(store_stats, use_container_width=True)
 
-            # UPDATED: Re-mapped text parameters and added the alert styling array overlay safely
+            # UPDATED PANEL: Displaying macro financial elements side-by-side with % of pay indicators
             if "📊 Macro Financial Performance Dashboard" in test_choices:
                 st.markdown("### **📊 Macro Financial Performance Dashboard**")
                 st.markdown("*(Target Bracket Goal: **20.0% to 30.0%** of gross ticket values paid out as payroll cost)*")
@@ -1235,9 +1235,6 @@ if time_file and ops_file:
                     st.markdown("**📈 Gross Revenue per Clocked Hour**")
                     rev_per_hour_df = final_df.copy()
                     rev_per_hour_df['Total Clocked'] = rev_per_hour_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
-                    rev_per_hour_df['Gross Revenue / Clocked Hour'] = rev_per_hour_df.apply(
-                        lambda r: f"${r['Rev_Per_Clocked_Hr']:.2f}/hr" if r['Total_Weekly_Clocked_Hrs'] > 0 else "-", axis=1
-                    )
                     rev_per_hour_df['Total Assigned Value'] = rev_per_hour_df['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
                     
                     rev_per_hour_df['Assumed Pay Amount'] = rev_per_hour_df.apply(get_assumed_pay, axis=1)
@@ -1250,11 +1247,11 @@ if time_file and ops_file:
                     )
                     rev_per_hour_df['Pay % vs Assigned Revenue'] = rev_per_hour_df['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
                     
+                    # UPDATED COLUMN SLICE: Slices and hides the old "Gross Revenue / Clocked Hour" tracking string row cleanly
                     show_rev_per_hour = rev_per_hour_df.sort_values(by='Rev_Per_Clocked_Hr', ascending=False)[
-                        ['Name', 'Total Clocked', 'Total Assigned Value', 'Gross Revenue / Clocked Hour', 'Assumed Pay', 'Pay % vs Assigned Revenue']
+                        ['Name', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue']
                     ]
                     
-                    # UPDATED: Enforces target conditional color codes dynamically onto this table view
                     styled_rev_per_hour = show_rev_per_hour.reset_index(drop=True).style.apply(highlight_pay_pct_col, subset=['Pay % vs Assigned Revenue'])
                     st.dataframe(styled_rev_per_hour, use_container_width=True)
 
@@ -1268,23 +1265,25 @@ if time_file and ops_file:
                 bu_rev['Revenue Share %'] = bu_rev['Revenue Share %'].apply(lambda x: f"{x:.1f}%")
                 st.dataframe(bu_rev[['Business Unit', 'Total Revenue', 'Revenue Share %']].reset_index(drop=True), use_container_width=True)
 
-            # UPDATED BOARD: Added exact 'Pay % vs Assigned Revenue' column mappings with dynamic color styling engine activated here too
+            # UPDATED BOARD: Ranks the entire field crew automatically sorted from highest to lowest by true Pay % variance weights
             if "🏆 Top Revenue Producer Leaderboard" in test_choices:
                 st.markdown("### **🏆 Top Revenue Producer Leaderboard**")
                 st.markdown("*(Ranks all active technicians cleanly by raw dollar value injected into division gross accounts. Target Goal: **20.0% - 30.0%**)*")
-                leaderboard_rev = final_df.sort_values(by='Total_Assigned_Revenue', ascending=False).copy()
-                leaderboard_rev['Total Clocked'] = leaderboard_rev['Total_Weekly_Clocked_Hrs'].apply(format_hm)
-                leaderboard_rev['Total Assigned Revenue'] = leaderboard_rev['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
-                leaderboard_rev['Total Jobs'] = leaderboard_rev['Total_Weekly_Job_Count'].astype(int)
-                
+                leaderboard_rev = final_df.copy()
                 leaderboard_rev['Assumed Pay Amount'] = leaderboard_rev.apply(get_assumed_pay, axis=1)
-                leaderboard_rev['Assumed Pay'] = leaderboard_rev['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
-                
                 leaderboard_rev['Pay Pct'] = np.where(
                     leaderboard_rev['Total_Assigned_Revenue'] > 0,
                     (leaderboard_rev['Assumed Pay Amount'] / leaderboard_rev['Total_Assigned_Revenue']) * 100,
                     0.0
                 )
+                
+                # UPDATED: Enforces direct 'Pay Pct' sorting array prioritization here dynamically
+                leaderboard_rev = leaderboard_rev.sort_values(by='Pay Pct', ascending=False)
+                
+                leaderboard_rev['Total Clocked'] = leaderboard_rev['Total_Weekly_Clocked_Hrs'].apply(format_hm)
+                leaderboard_rev['Total Assigned Revenue'] = leaderboard_rev['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
+                leaderboard_rev['Total Jobs'] = leaderboard_rev['Total_Weekly_Job_Count'].astype(int)
+                leaderboard_rev['Assumed Pay'] = leaderboard_rev['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
                 leaderboard_rev['Pay % vs Assigned Revenue'] = leaderboard_rev['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
                 
                 show_leaderboard_rev = leaderboard_rev[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Revenue', 'Assumed Pay', 'Pay % vs Assigned Revenue']]
