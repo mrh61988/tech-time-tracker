@@ -166,7 +166,7 @@ def highlight_consistency(s):
             styles.append('')
     return styles
 
-# Custom highlight engine to cross-examine targets between 20.0% and 30.0%
+# UPDATED: Custom highlight engine targets green code block flags strictly under the 30% ceiling
 def highlight_pay_pct_col(s):
     styles = []
     for val in s:
@@ -175,7 +175,7 @@ def highlight_pay_pct_col(s):
             continue
         try:
             v = float(str(val).replace('%', ''))
-            if 20.0 <= v <= 30.0:
+            if v <= 30.0:
                 styles.append('background-color: #e6f4ea; color: #137333; font-weight: bold;')
             else:
                 styles.append('background-color: #ffcccc; color: #990000;')
@@ -1215,10 +1215,10 @@ if time_file and ops_file:
                     ])
                     st.dataframe(store_stats, use_container_width=True)
 
-            # UPDATED PANEL: Displaying macro financial elements side-by-side with % of pay indicators
+            # UPDATED: Added target formatting and re-sorted this table loop layout by pay percentage descending
             if "📊 Macro Financial Performance Dashboard" in test_choices:
                 st.markdown("### **📊 Macro Financial Performance Dashboard**")
-                st.markdown("*(Target Bracket Goal: **20.0% to 30.0%** of gross ticket values paid out as payroll cost)*")
+                st.markdown("*(Target Bracket Goal: **Under 30.0%** of gross ticket values paid out as payroll cost)*")
                 
                 m_col1, m_col2 = st.columns([1, 2])
                 with m_col1:
@@ -1247,8 +1247,8 @@ if time_file and ops_file:
                     )
                     rev_per_hour_df['Pay % vs Assigned Revenue'] = rev_per_hour_df['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
                     
-                    # UPDATED COLUMN SLICE: Slices and hides the old "Gross Revenue / Clocked Hour" tracking string row cleanly
-                    show_rev_per_hour = rev_per_hour_df.sort_values(by='Rev_Per_Clocked_Hr', ascending=False)[
+                    # UPDATED: Enforces pay ratio sorting priority layout directly onto this dashboard grid
+                    show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[
                         ['Name', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue']
                     ]
                     
@@ -1265,10 +1265,10 @@ if time_file and ops_file:
                 bu_rev['Revenue Share %'] = bu_rev['Revenue Share %'].apply(lambda x: f"{x:.1f}%")
                 st.dataframe(bu_rev[['Business Unit', 'Total Revenue', 'Revenue Share %']].reset_index(drop=True), use_container_width=True)
 
-            # UPDATED BOARD: Ranks the entire field crew automatically sorted from highest to lowest by true Pay % variance weights
+            # UPDATED BOARD: Maintains sorting configuration strictly prioritized by Pay % vs Revenue layers
             if "🏆 Top Revenue Producer Leaderboard" in test_choices:
                 st.markdown("### **🏆 Top Revenue Producer Leaderboard**")
-                st.markdown("*(Ranks all active technicians cleanly by raw dollar value injected into division gross accounts. Target Goal: **20.0% - 30.0%**)*")
+                st.markdown("*(Ranks all active technicians cleanly by raw dollar value injected into division gross accounts. Target Goal: **Under 30.0%**)*")
                 leaderboard_rev = final_df.copy()
                 leaderboard_rev['Assumed Pay Amount'] = leaderboard_rev.apply(get_assumed_pay, axis=1)
                 leaderboard_rev['Pay Pct'] = np.where(
@@ -1277,7 +1277,6 @@ if time_file and ops_file:
                     0.0
                 )
                 
-                # UPDATED: Enforces direct 'Pay Pct' sorting array prioritization here dynamically
                 leaderboard_rev = leaderboard_rev.sort_values(by='Pay Pct', ascending=False)
                 
                 leaderboard_rev['Total Clocked'] = leaderboard_rev['Total_Weekly_Clocked_Hrs'].apply(format_hm)
