@@ -189,13 +189,12 @@ def highlight_pay_pct_row(row):
     return styles
 
 # --- MAIN BLOCK REPORT ENGINE ---
-def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
+def show_advanced_reporting(ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
     # === BOSS TOOLS SECTION ===
     st.header("💼 Boss Tools (Financials & Efficiency)")
     
-    # Compute tracking totals at the backend level first
     total_clocked = final_df['Total_Weekly_Clocked_Hrs'].sum()
     total_job = final_df['Total_Weekly_Job_Hrs'].sum()
     efficiency = (total_job / total_clocked * 100) if total_clocked > 0 else 0
@@ -211,9 +210,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
     
     lost_hrs = final_df[final_df['Total_Weekly_Diff_Hrs'] > 0]['Total_Weekly_Diff_Hrs'].sum()
     
-    # High-density 6-column unified executive layout row banner
     b_col1, b_col2, b_col3, b_col4, b_col5, b_col6 = st.columns([1.3, 1, 1, 1, 1, 1])
-    
     with b_col1:
         rate = st.number_input("Fallback Rate ($/hr)", value=25.0, step=1.0, key=f"rate_{tab_key}")
         
@@ -453,7 +450,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         if ghost_alerts: st.dataframe(pd.DataFrame(ghost_alerts), use_container_width=True)
         else: st.success("Perfect alignment! No payroll discrepancy errors detected.")
 
-    if "🏬 The Lowe's Store Staging Efficiency Scorecard" in test_choices:
+    if "¼ The Lowe's Store Staging Efficiency Scorecard" in test_choices:
         st.markdown("### **¼ The Lowe's Store Staging Efficiency Scorecard**")
         store_cols = [c for c in ops_df.columns if 'store' in c.lower() and 'time' not in c.lower() and 'timestamp' not in c.lower()]
         if store_cols:
@@ -713,7 +710,7 @@ if time_file and ops_file:
         final_df['LSI_Eff_Raw'] = final_df['Simple Installs Eff']
         final_df['WH_Eff_Raw'] = final_df['Water Heaters Eff']
         
-        # Enforce dynamic descending sort arrays based on raw WH efficiencies
+        # Enforce descending sort metrics based on raw WH efficiencies
         final_df = final_df.sort_values(by='WH_Eff_Raw', ascending=False)
         
         final_df['Simple Installs Eff'] = final_df['LSI_Eff_Raw'].apply(lambda x: f"{x:.1f}%")
@@ -731,8 +728,6 @@ if time_file and ops_file:
         bu_summary_df['WH Efficiency'] = final_df['Water Heaters Eff']
         bu_summary_df['Total Efficiency'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, (final_df['Total_Weekly_Job_Hrs'] / final_df['Total_Weekly_Clocked_Hrs']) * 100, 0.0)
         bu_summary_df['Total Efficiency'] = bu_summary_df['Total Efficiency'].apply(lambda x: f"{x:.1f}%")
-        
-        # FIXED: Shifted unallocated column string parameters to the extreme right edge of the dictionary frame
         bu_summary_df['Total Unallocated Hours'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
         display_dfs['Weekly'] = bu_summary_df
         
@@ -757,7 +752,6 @@ if time_file and ops_file:
             total_assumed_pay = rev_per_hour_df_calc['Assumed Pay Amount'].sum()
             pay_ratio_pct = (total_assumed_pay / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
             
-            # FIXED: Positioned summary KPI cards side-by-side symmetrically on the same level to resolve 'tab_key' positional issues
             dash_metric_col1, dash_metric_col2, dash_metric_col3 = st.columns(3)
             with dash_metric_col1:
                 st.metric(label="Division Gross Invoiced Volume", value=f"${raw_unsplit_volume:,.2f}")
@@ -766,17 +760,43 @@ if time_file and ops_file:
             with dash_metric_col3:
                 st.metric(label="Division Labor Pay Ratio", value=f"{pay_ratio_pct:.1f}%")
                 
-            m_col1, m_col2 = st.columns([1, 2])
+            # FIXED: Pre-compute the exact pay proportions distributed across Business Units
+            ops_df['Computed_Row_Pay'] = ops_df['Name'].map(rev_per_hour_df_calc.set_index('Name')['Assumed Pay Amount']).fillna(0.0)
+            tech_total_field_hrs = ops_df.groupby('Name')['Total_Job_Time_Hours'].sum().reset_index().rename(columns={'Total_Job_Time_Hours': 'Tech_Total_Work_Hrs'})
+            ops_df = pd.merge(ops_df, tech_total_field_hrs, on='Name', how='left')
+            ops_df['Job_Time_Weight'] = np.where(ops_df['Tech_Total_Work_Hrs'] > 0, ops_df['Total_Job_Time_Hours'] / ops_df['Tech_Total_Work_Hrs'], 0.0)
+            ops_df['Allocated_Job_Pay'] = ops_df['Computed_Row_Pay'] * ops_df['Job_Time_Weight']
+            
+            # For Bryan and Erik, overwrite with exactly 33% of that job's revenue
+            ops_df['Allocated_Job_Pay'] = np.where(
+                ops_df['Name'].str.lower().str.contains('bryan') | ops_df['Name'].str.lower().str.contains('erik'),
+                ops_df['Total Invoice Amount'] * 0.33,
+                ops_df['Allocated_Job_Pay']
+            )
+            
+            bu_gross_rev = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].sum().reset_index()
+            bu_gross_rev.columns = ['Business Unit', 'Gross Invoiced Revenue Raw']
+            total_macro_sum = bu_gross_rev['Gross Invoiced Revenue Raw'].sum() if bu_gross_rev['Gross Invoiced Revenue Raw'].sum() > 0 else 1.0
+            bu_gross_rev['Rev Share %'] = (bu_gross_rev['Gross Invoiced Revenue Raw'] / total_macro_sum * 100).apply(lambda x: f"{x:.1f}%")
+            
+            bu_pay_split = ops_df.groupby('Business Unit')['Allocated_Job_Pay'].sum().reset_index().rename(columns={'Allocated_Job_Pay': 'Assumed Pay Raw'})
+            bu_financial_matrix = pd.merge(bu_gross_rev, bu_pay_split, on='Business Unit', how='left').fillna(0.0)
+            
+            # Formulate ratios
+            bu_financial_matrix['Assumed Pay'] = bu_financial_matrix['Assumed Pay Raw'].apply(lambda x: f"${x:,.2f}")
+            bu_financial_matrix['Pay % of Revenue'] = np.where(
+                bu_financial_matrix['Gross Invoiced Revenue Raw'] > 0,
+                (bu_financial_matrix['Assumed Pay Raw'] / bu_financial_matrix['Gross Invoiced Revenue Raw']) * 100,
+                0.0
+            )
+            bu_financial_matrix['Pay % of Revenue'] = bu_financial_matrix['Pay % of Revenue'].apply(lambda x: f"{x:.1f}%")
+            bu_financial_matrix['Gross Invoiced Revenue'] = bu_financial_matrix['Gross Invoiced Revenue Raw'].apply(lambda x: f"${x:,.2f}")
+            
+            m_col1, m_col2 = st.columns([1.2, 1.8])
             with m_col1:
-                st.markdown("<br>**📈 Gross Invoiced Revenue by Business Unit**", unsafe_allow_html=True)
-                bu_gross_rev = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].sum().reset_index()
-                bu_gross_rev.columns = ['Business Unit', 'Gross Invoiced Revenue Raw']
-                
-                total_macro_sum = bu_gross_rev['Gross Invoiced Revenue Raw'].sum() if bu_gross_rev['Gross Invoiced Revenue Raw'].sum() > 0 else 1.0
-                bu_gross_rev['Rev Share %'] = (bu_gross_rev['Gross Invoiced Revenue Raw'] / total_macro_sum * 100).apply(lambda x: f"{x:.1f}%")
-                
-                bu_gross_rev['Gross Invoiced Revenue'] = bu_gross_rev['Gross Invoiced Revenue Raw'].apply(lambda x: f"${x:,.2f}")
-                st.dataframe(bu_gross_rev[['Business Unit', 'Gross Invoiced Revenue', 'Rev Share %']].reset_index(drop=True), use_container_width=True)
+                st.markdown("<br>**📈 Gross Invoiced Revenue & Payroll by Business Unit**", unsafe_allow_html=True)
+                # FIXED: Render the newly combined financial matrix table mapping pay + percentages side-by-side
+                st.dataframe(bu_financial_matrix[['Business Unit', 'Gross Invoiced Revenue', 'Rev Share %', 'Assumed Pay', 'Pay % of Revenue']].reset_index(drop=True), use_container_width=True)
                 
                 st.markdown("<br>**🎯 Average Ticket Size per BU**", unsafe_allow_html=True)
                 bu_avg_ticket = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].mean().reset_index()
@@ -817,7 +837,7 @@ if time_file and ops_file:
                 tech_data = final_df[final_df['Name'] == selected_tech].iloc[0]
                 report_data = []
                 for full_day, short_day in {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}.items():
-                    report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(tech_data[tech_data['Name'] == selected_tech].iloc[0][short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])})
+                    report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(tech_data[short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])})
                 report_data.append({"Day": "TOTAL WEEKLY", "Jobs": int(tech_data['Total_Weekly_Job_Count']), "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']), "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']), "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])})
                 st.dataframe(pd.DataFrame(report_data), use_container_width=True)
 
