@@ -402,7 +402,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
         
         gaps_df = ops_sorted[ops_sorted['Gap_Hrs'] > 0.75].copy()
         if not gaps_df.empty:
-            # UPDATED: Sorting the gap finder by length (descending) so the biggest gaps surface to the top immediately!
             gaps_df = gaps_df.sort_values(by='Gap_Hrs', ascending=False)
             
             gaps_df['Gap Length'] = gaps_df['Gap_Hrs'].apply(format_hm)
@@ -415,10 +414,23 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
 
     with d_col2:
         st.subheader("🌅 First Job vs. Last Job")
-        st.markdown("*(First punch of the morning, last punch of the afternoon)*")
+        st.markdown("*(First punch of the morning, last punch of the afternoon. Spans over 9 hours are highlighted in red)*")
         bounds_sorted_df = bounds_df.sort_values(by='Total_Span_Hrs', ascending=False).copy()
         show_bounds = bounds_sorted_df[['Assigned Team Members', 'Short_Date', 'First Status Update', 'Last Status Update', 'Total Time']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
-        st.dataframe(show_bounds, use_container_width=True)
+        
+        # UPDATED: Custom highlight function added to flag any shift longer than 9.0 hours
+        def highlight_long_days(row):
+            hrs = parse_hm(row['Total Time'])
+            if hrs > 9.0:
+                return ['background-color: #ffcccc; color: #990000;'] * len(row)
+            return [''] * len(row)
+            
+        try:
+            styled_bounds = show_bounds.reset_index(drop=True).style.hide(axis="index").apply(highlight_long_days, axis=1)
+        except Exception:
+            styled_bounds = show_bounds.reset_index(drop=True).style.apply(highlight_long_days, axis=1)
+            
+        st.dataframe(styled_bounds, use_container_width=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     
