@@ -98,7 +98,7 @@ def parse_diff_to_hours(val):
         pass
     return 0.0
 
-# HELPER FUNCTION: Calculates hyper-precise weekly assumed pay based on mapped team profiles
+# UPDATED: Extended lookups to support 'nate' or 'nathan' strings securely
 def get_assumed_pay(row):
     nl = str(row['Name']).lower()
     clocked = row['Total_Weekly_Clocked_Hrs']
@@ -109,17 +109,17 @@ def get_assumed_pay(row):
     if 'michael owens' in nl:
         return 65000.0 / 52.0
     if 'bryan' in nl or 'erik' in nl:
-        return rev * 0.30  # Piece Rate 30% revenue share commission
+        return rev * 0.30  
         
     rate = 0.0
-    if 'nate' in nl:
+    if 'nate' in nl or 'nathan' in nl:
         rate = 22.50
     elif any(n in nl for n in ['edward', 'matt', 'tanner']):
         rate = 25.00
         
     if rate > 0:
         if clocked > 40.0:
-            return (40.0 * rate) + ((clocked - 40.0) * rate * 1.5)  # Overtime at 1.5x hourly base
+            return (40.0 * rate) + ((clocked - 40.0) * rate * 1.5)  
         else:
             return clocked * rate
     return 0.0
@@ -197,6 +197,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     
     lost_hrs = final_df[final_df['Total_Weekly_Diff_Hrs'] > 0]['Total_Weekly_Diff_Hrs'].sum()
     
+    # UPDATED: Expanded check to dynamically map Nathan Smith's base leakage parameter seamlessly
     def get_custom_loss(row, fallback):
         nl = str(row['Name']).lower()
         diff = row['Total_Weekly_Diff_Hrs']
@@ -204,7 +205,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
         if 'sean marble' in nl: return diff * 33.65
         if 'michael owens' in nl: return diff * 31.25
         if 'bryan' in nl or 'erik' in nl: return 0.0
-        if 'nate' in nl: return diff * 22.50
+        if 'nate' in nl or 'nathan' in nl: return diff * 22.50
         if any(n in nl for n in ['edward', 'matt', 'tanner']): return diff * 25.00
         return diff * fallback
 
@@ -875,7 +876,6 @@ if time_file and ops_file:
         final_df['Total_Weekly_Diff_Hrs'] = final_df['Total_Weekly_Clocked_Hrs'] - final_df['Total_Weekly_Job_Hrs']
         final_df['Daily_Avg_Diff_Hrs'] = np.where(final_df['Days_Worked'] > 0, final_df['Total_Weekly_Diff_Hrs'] / final_df['Days_Worked'], 0.0)
         
-        # --- BU ISOLATED EFFICIENCY CALCULATION ENGINE (WEIGHTED GOALS) ---
         final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
         final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * (3 + (25 / 60.0))
         final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
@@ -1202,10 +1202,10 @@ if time_file and ops_file:
                     ])
                     st.dataframe(store_stats, use_container_width=True)
 
-            # UPDATED DASHBOARD: Added the 'Revenue / Assumed Pay' Leverage Multiple column configuration
+            # UPDATED CONSOLIDATED DASHBOARD PANEL: Swapped gross leverage multiples out for raw "Pay % of Revenue" percentage conversions
             if "📊 Macro Financial Performance Dashboard" in test_choices:
                 st.markdown("### **📊 Macro Financial Performance Dashboard**")
-                st.markdown("*(Unified executive layout tracking top-line volume, individual task velocity, and asset allocation yield)*")
+                st.markdown("*(Target Bracket Goal: **20.0% to 30.0%** of gross ticket values paid out as payroll cost)*")
                 
                 m_col1, m_col2 = st.columns([1, 2])
                 with m_col1:
@@ -1227,19 +1227,19 @@ if time_file and ops_file:
                     )
                     rev_per_hour_df['Total Assigned Value'] = rev_per_hour_df['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
                     
-                    # Core math pipeline injection for labor leverage multiples
                     rev_per_hour_df['Assumed Pay Amount'] = rev_per_hour_df.apply(get_assumed_pay, axis=1)
                     rev_per_hour_df['Assumed Pay'] = rev_per_hour_df['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
                     
-                    rev_per_hour_df['Rev / Pay Multiple'] = np.where(
-                        rev_per_hour_df['Assumed Pay Amount'] > 0,
-                        rev_per_hour_df['Total_Assigned_Revenue'] / rev_per_hour_df['Assumed Pay Amount'],
+                    # UPDATED: Direct percentage calculation instead of historical multiplier strings
+                    rev_per_hour_df['Pay Pct'] = np.where(
+                        rev_per_hour_df['Total_Assigned_Revenue'] > 0,
+                        (rev_per_hour_df['Assumed Pay Amount'] / rev_per_hour_df['Total_Assigned_Revenue']) * 100,
                         0.0
                     )
-                    rev_per_hour_df['Revenue / Assumed Pay'] = rev_per_hour_df['Rev / Pay Multiple'].apply(lambda x: f"{x:.2f}x" if x > 0 else "-")
+                    rev_per_hour_df['Pay % of Revenue'] = rev_per_hour_df['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
                     
                     show_rev_per_hour = rev_per_hour_df.sort_values(by='Rev_Per_Clocked_Hr', ascending=False)[
-                        ['Name', 'Total Clocked', 'Total Assigned Value', 'Gross Revenue / Clocked Hour', 'Assumed Pay', 'Revenue / Assumed Pay']
+                        ['Name', 'Total Clocked', 'Total Assigned Value', 'Gross Revenue / Clocked Hour', 'Assumed Pay', 'Pay % of Revenue']
                     ]
                     st.dataframe(show_rev_per_hour.reset_index(drop=True), use_container_width=True)
 
@@ -1253,10 +1253,10 @@ if time_file and ops_file:
                 bu_rev['Revenue Share %'] = bu_rev['Revenue Share %'].apply(lambda x: f"{x:.1f}%")
                 st.dataframe(bu_rev[['Business Unit', 'Total Revenue', 'Revenue Share %']].reset_index(drop=True), use_container_width=True)
 
-            # UPDATED BOARD: Added 'Revenue / Assumed Pay' Leverage Multiple row rendering configurations cleanly
+            # UPDATED BOARD: Injected percentage evaluation criteria cleanly inside the primary assigned yield table 
             if "🏆 Top Revenue Producer Leaderboard" in test_choices:
                 st.markdown("### **🏆 Top Revenue Producer Leaderboard**")
-                st.markdown("*(Ranks all active technicians cleanly by raw dollar value injected into division gross accounts)*")
+                st.markdown("*(Ranks all active technicians cleanly by raw dollar value injected into division gross accounts. Target Goal: **20.0% - 30.0%**)*")
                 leaderboard_rev = final_df.sort_values(by='Total_Assigned_Revenue', ascending=False).copy()
                 leaderboard_rev['Total Clocked'] = leaderboard_rev['Total_Weekly_Clocked_Hrs'].apply(format_hm)
                 leaderboard_rev['Total Assigned Revenue'] = leaderboard_rev['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
@@ -1265,14 +1265,14 @@ if time_file and ops_file:
                 leaderboard_rev['Assumed Pay Amount'] = leaderboard_rev.apply(get_assumed_pay, axis=1)
                 leaderboard_rev['Assumed Pay'] = leaderboard_rev['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
                 
-                leaderboard_rev['Rev / Pay Multiple'] = np.where(
-                    leaderboard_rev['Assumed Pay Amount'] > 0,
-                    leaderboard_rev['Total_Assigned_Revenue'] / leaderboard_rev['Assumed Pay Amount'],
+                leaderboard_rev['Pay Pct'] = np.where(
+                    leaderboard_rev['Total_Assigned_Revenue'] > 0,
+                    (leaderboard_rev['Assumed Pay Amount'] / leaderboard_rev['Total_Assigned_Revenue']) * 100,
                     0.0
                 )
-                leaderboard_rev['Revenue / Assumed Pay'] = leaderboard_rev['Rev / Pay Multiple'].apply(lambda x: f"{x:.2f}x" if x > 0 else "-")
+                leaderboard_rev['Pay % of Revenue'] = leaderboard_rev['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
                 
-                show_leaderboard_rev = leaderboard_rev[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Revenue', 'Assumed Pay', 'Revenue / Assumed Pay']]
+                show_leaderboard_rev = leaderboard_rev[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Revenue', 'Assumed Pay', 'Pay % of Revenue']]
                 st.dataframe(show_leaderboard_rev.reset_index(drop=True), use_container_width=True)
             
     except Exception as e:
