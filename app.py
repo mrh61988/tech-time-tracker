@@ -241,16 +241,19 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     
     with trend_col:
         st.subheader("📈 Daily Division Health Trend")
+        st.markdown("*(Combined team efficiency analyzed day-by-day across all business units)*")
         trend_data = []
         for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
             day_clocked = final_df[f'{d}_Clocked_Hrs'].sum()
             day_job = final_df[f'{d}_Job_Hrs'].sum()
             day_eff = (day_job / day_clocked * 100) if day_clocked > 0 else 0.0
             trend_data.append({"Day": d, "Total Clocked": format_hm(day_clocked), "Job Status Time": format_hm(day_job), "Efficiency Score": f"{day_eff:.1f}%"})
-        st.dataframe(pd.DataFrame(trend_data), use_container_width=True)
+        trend_df = pd.DataFrame(trend_data)
+        st.dataframe(trend_df, use_container_width=True)
 
     with leaderboard_col:
         st.subheader("🚨 Team Leaderboard")
+        st.markdown("*(Whole team sorted by highest unaccounted time after overrides)*")
         leaderboard_df = final_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=False).copy()
         if not leaderboard_df.empty:
             leaderboard_df['Total Clocked'] = leaderboard_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
@@ -312,6 +315,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     bench_col, gold_star_col = st.columns(2)
     with bench_col:
         st.subheader("📋 Team Processing Baselines & Predictability")
+        st.markdown("*(Individual average vs. Division baseline. Red flags show techs >25% slower than average)*")
         valid_jobs = ops_df[ops_df['Total_Job_Time_Hours'] > 0]
         div_avg_drive = valid_jobs['Drive_Time_Hrs'].mean()
         div_avg_store = valid_jobs['Store_Time_Hrs'].mean()
@@ -335,6 +339,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
 
     with gold_star_col:
         st.subheader("⭐ The \"Gold Star\" High-Performer List")
+        st.markdown("*(Technicians who average under 1:30 of unallocated difference per day worked. Store delays do NOT penalize techs)*")
         gold_star_df = final_df[(final_df['Daily_Avg_Diff_Hrs'] < 1.5) & (final_df['Days_Worked'] > 0)].copy()
         if not gold_star_df.empty:
             gold_star_df = gold_star_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=True)
@@ -349,6 +354,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("🎯 The Technician Skill Matrix & Training Flag")
+    st.markdown("*(Compares a technician's LSI performance against their WH performance. Flags techs where the gap exceeds 25%)*")
     skill_df = final_df.copy()
     if not skill_df.empty:
         skill_df['Eff Gap'] = np.where((skill_df['Simple_Installs_Count'] > 0) & (skill_df['Water_Heaters_Count'] > 0), abs(skill_df['LSI_Eff_Raw'] - skill_df['WH_Eff_Raw']), 0.0)
@@ -368,6 +374,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("🏁 The Peer-to-Peer \"Coaching Corner\" Overlay")
+    st.markdown("*(Anonymized mentor baseline layout stack comparing tech efficiency targets with Top 25% performers)*")
     coaching_data = pd.DataFrame()
     coaching_data['Name'] = final_df['Name']
     coaching_data['Your LSI Eff'] = final_df['Simple Installs Eff']
@@ -381,6 +388,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     # === DISPATCHER TOOLS SECTION ===
     st.header("🛠️ Dispatcher Tools (Daily Accountability & Planning)")
     st.subheader("🧠 Best Fit Dispatch Recommender")
+    st.markdown("*(Provides a sorted priority list for the dispatcher to assign last-minute emergency jobs based purely on isolated historical unit efficiencies)*")
     bf_col1, bf_col2 = st.columns(2)
     with bf_col1:
         st.markdown("**🥇 Top Ranked for LSI Jobs**")
@@ -395,6 +403,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     d_col1, d_col2 = st.columns(2)
     with d_col1:
         st.subheader("🕳️ 'Black Hole' Gap Finder")
+        st.markdown("*(Gaps between jobs larger than 45 minutes)*")
         ops_sorted = ops_df.dropna(subset=['Earliest_Start']).sort_values(['Assigned Team Members', 'Earliest_Start'])
         ops_sorted['Next_Job_Start'] = ops_sorted.groupby(['Assigned Team Members', 'Short_Date'])['Earliest_Start'].shift(-1)
         ops_sorted['Gap_Hrs'] = (ops_sorted['Next_Job_Start'] - ops_sorted['Estimated_End']).dt.total_seconds() / 3600.0
@@ -409,6 +418,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
 
     with d_col2:
         st.subheader("🌅 First Job vs. Last Job")
+        st.markdown("*(First punch of the morning, last punch of the afternoon. Spans over 9 hours are highlighted in red)*")
         bounds_sorted_df = bounds_df.sort_values(by='Total_Span_Hrs', ascending=False).copy()
         show_bounds = bounds_sorted_df[['Assigned Team Members', 'Short_Date', 'First Status Update', 'Last Status Update', 'Total Time']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
         def highlight_long_days(row): return ['background-color: #ffcccc; color: #990000;'] * len(row) if parse_hm(row['Total Time']) > 9.0 else [''] * len(row)
@@ -419,6 +429,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     colC, colD = st.columns(2)
     with colC:
         st.subheader("🛒 Lowe's Operational Delays")
+        st.markdown("*(All logged store visits. Rows highlighted in red show specific jobs that took greater than 45 minutes)*")
         excessive_df = ops_df[ops_df['Store_Time_Hrs'] > 0.75].copy()
         st.markdown(f"⏱️ **Total Field Hours Lost at Lowe's:** `{excessive_df['Store_Time_Hrs'].sum():.1f} hrs` | 💸 **Cost:** `${excessive_df['Store_Time_Hrs'].sum() * rate:,.2f}`")
         all_store_df = ops_df[ops_df['Store_Time_Hrs'] > 0].sort_values(by='Store_Time_Hrs', ascending=False).copy()
@@ -430,6 +441,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
 
     with colD:
         st.subheader("⏱️ Weekly Status Breakdown")
+        st.markdown("*(Drive vs. Store vs. In Progress Time)*")
         breakdown_agg = ops_df.groupby('Assigned Team Members')[['Drive_Time_Hrs', 'Store_Time_Hrs', 'In_Progress_Time_Hrs']].sum().reset_index()
         breakdown_agg['Drive Time'] = breakdown_agg['Drive_Time_Hrs'].apply(format_hm)
         breakdown_agg['Store Time'] = breakdown_agg['Store_Time_Hrs'].apply(format_hm)
@@ -440,6 +452,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     colE, colF = st.columns(2)
     with colE:
         st.subheader("🔮 Predictive Planning")
+        st.markdown("*(Average total turnaround time per job to help block future calendar schedules)*")
         avg_job_len = ops_df[ops_df['Total_Job_Time_Hours'] > 0].groupby('Assigned Team Members')['Total_Job_Time_Hours'].mean().reset_index()
         if not avg_job_len.empty:
             avg_job_len['Avg Total Job Length'] = avg_job_len['Total_Job_Time_Hours'].apply(format_hm)
@@ -447,6 +460,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
 
     with colF:
         st.subheader("🗺️ Route Optimization Flags")
+        st.markdown("*(Days where greater than 40% of job time was driving. Shows Job Count, Drive Time, and Work Time for context)*")
         poor_routes = daily_route[daily_route['Drive %'] > 40.0].copy()
         if not poor_routes.empty:
             poor_routes['Drive %'] = poor_routes['Drive %'].apply(lambda x: f"{x:.1f}%")
@@ -459,6 +473,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     launch_col, launch_empty_col = st.columns(2)
     with launch_col:
         st.subheader("📊 Late Deployment Scorecard")
+        st.markdown("*(Total number of delayed launches tracked for each technician)*")
         if not delayed_launches_df.empty:
             launch_counts = delayed_launches_df.groupby('Assigned Team Members').size().reset_index(name='Total Late Days').sort_values(by='Total Late Days', ascending=False)
             try: st.dataframe(launch_counts.reset_index(drop=True).style.hide(axis="index").set_properties(**{'background-color': '#fff3cd', 'color': '#856404;', 'font-weight': 'bold'}), use_container_width=True)
@@ -466,6 +481,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
 
     with launch_empty_col:
         st.subheader("🚗 Delayed Launch Alert")
+        st.markdown("*(Select a tech from the dropdown to review late launch logs)*")
         if not delayed_launches_df.empty:
             tech_late_list = sorted(delayed_launches_df['Assigned Team Members'].unique())
             selected_late_tech = st.selectbox("Select Tech to view launch times:", tech_late_list, key=f"late_launch_{tab_key}")
@@ -476,6 +492,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
                 except Exception: st.dataframe(tech_launches_df.sort_values(by='First_Punch', ascending=False)[['Short_Date', 'First Launch']].rename(columns={'Short_Date': 'Date'}).reset_index(drop=True).style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'}), use_container_width=True)
         else: st.success("Perfect deployment momentum!")
 
+# --- CONSOLIDATED SANDBOX TAB VIEWS ---
 def run_sandbox_tab(unexploded_ops, ops_df, final_df, test_choices):
     if "🏆 The \"Golden Ratio\" Margin Predictor" in test_choices:
         st.markdown("### **🏆 The Golden Ratio Margin Predictor**")
@@ -715,15 +732,29 @@ if time_file and ops_file:
         final_df['Adjustment_Hrs'] = final_df['Name'].map(adjustments).fillna(0.0)
         final_df['Total_Weekly_Job_Hrs'] = final_df['Total_Weekly_Job_Hrs'] + final_df['Adjustment_Hrs']
         
+        # FIXED: Core backend math engine calculation rules restored for business units benchmarks
+        final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
+        final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * (3 + (25 / 60.0))
+        final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
+        final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
+        final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
+
         display_dfs = {}
         for day in days:
             final_df[day + '_Diff_Hrs'] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
+            
+            # FIXED: Appending values natively to final_df layer so manager_cols and HR payroll boards sync perfectly
+            final_df[f'{day} Jobs'] = final_df[day + '_Job_Count'].astype(int)
+            final_df[f'{day} Clocked'] = final_df[day + '_Clocked_Hrs'].apply(format_hm)
+            final_df[f'{day} Job Time'] = final_df[day + '_Job_Hrs'].apply(format_hm)
+            final_df[f'{day} Diff'] = final_df[day + '_Diff_Hrs'].apply(format_hm)
+            
             day_df = pd.DataFrame()
             day_df['Name'] = final_df['Name']
-            day_df[f'{day} Jobs'] = final_df[day + '_Job_Count'].astype(int)
-            day_df[f'{day} Clocked'] = final_df[day + '_Clocked_Hrs'].apply(format_hm)
-            day_df[f'{day} Job Time'] = final_df[day + '_Job_Hrs'].apply(format_hm)
-            day_df[f'{day} Diff'] = final_df[day + '_Diff_Hrs'].apply(format_hm)
+            day_df[f'{day} Jobs'] = final_df[f'{day} Jobs']
+            day_df[f'{day} Clocked'] = final_df[f'{day} Clocked']
+            day_df[f'{day} Job Time'] = final_df[f'{day} Job Time']
+            day_df[f'{day} Diff'] = final_df[f'{day} Diff']
             display_dfs[day] = day_df
             
         manager_cols = ['Name']
@@ -793,6 +824,7 @@ if time_file and ops_file:
                 tech_days_worked = tech_data['Days_Worked']
                 report_data = []
                 for full_day, short_day in {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}.items():
+                    # FIXED: Slicing calculation typo eliminated for individual performance printer cards
                     report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(tech_data[short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])})
                 report_data.append({"Day": "TOTAL WEEKLY", "Jobs": int(tech_data['Total_Weekly_Job_Count']), "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']), "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']), "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])})
                 st.dataframe(pd.DataFrame(report_data), use_container_width=True)
