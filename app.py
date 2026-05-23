@@ -603,6 +603,7 @@ if time_file and ops_file:
             bu_pivot = pd.merge(bu_pivot_hrs, bu_pivot_cnt, on='Assigned Team Members', suffixes=('_hrs', '_cnt'))
             bu_pivot = bu_pivot.rename(columns={'Assigned Team Members': 'Name'})
             
+            # Ensure safety columns exist
             for col in ['Lowes - Simple Installs_hrs', 'Lowes - Water Heaters_hrs', 'Lowes - Simple Installs_cnt', 'Lowes - Water Heaters_cnt']:
                 if col not in bu_pivot.columns:
                     bu_pivot[col] = 0.0
@@ -628,6 +629,7 @@ if time_file and ops_file:
         job_time_pivot = job_time_pivot.rename(columns=rename_dict)
         job_time_pivot['Total_Weekly_Job_Hrs'] = job_time_pivot[[d + '_Job_Hrs' for d in days]].sum(axis=1)
         
+        # --- Create Daily Job Counts ---
         job_count_agg = ops_df.groupby(['Assigned Team Members', 'Day_of_Week']).size().reset_index(name='Job_Count')
         job_count_pivot = job_count_agg.pivot(index='Assigned Team Members', columns='Day_of_Week', values='Job_Count').reset_index()
         job_count_pivot = job_count_pivot.rename(columns={'Assigned Team Members': 'Name'}).fillna(0)
@@ -639,8 +641,8 @@ if time_file and ops_file:
         rename_dict_counts = {day: day + '_Job_Count' for day in days}
         job_count_pivot = job_count_pivot.rename(columns=rename_dict_counts)
         job_count_pivot['Total_Weekly_Job_Count'] = job_count_pivot[[d + '_Job_Count' for d in days]].sum(axis=1)
-        
-        # Calculate daily route info globally so it can be passed to sandbox
+
+        # FIXED: Calculate daily route info globally with 'Drive %' correctly appended before advanced sorting calls
         daily_route = ops_df.groupby(['Assigned Team Members', 'Short_Date']).agg(
             Drive_Time_Hrs=('Drive_Time_Hrs', 'sum'),
             In_Progress_Time_Hrs=('In_Progress_Time_Hrs', 'sum'),
@@ -648,9 +650,14 @@ if time_file and ops_file:
             Job_Count=('Total_Job_Time_Hours', 'size')
         ).reset_index()
         
+        daily_route = daily_route[daily_route['Total_Job_Time_Hours'] > 0].copy()
+        daily_route['Drive %'] = (daily_route['Drive_Time_Hrs'] / daily_route['Total_Job_Time_Hours']) * 100
+        
+        # --- 3. Merge and Calculate Differences ---
         final_df = pd.merge(time_df, job_time_pivot, on='Name', how='left').fillna(0)
         final_df = pd.merge(final_df, job_count_pivot, on='Name', how='left').fillna(0)
         
+        # Inject Business Unit hours & counts into main tracking grid
         if not bu_pivot.empty:
             final_df = pd.merge(final_df, bu_pivot[['Name', 'Simple_Installs_Hrs', 'Water_Heaters_Hrs', 'Simple_Installs_Count', 'Water_Heaters_Count']], on='Name', how='left').fillna(0)
         else:
@@ -659,6 +666,7 @@ if time_file and ops_file:
             final_df['Simple_Installs_Count'] = 0.0
             final_df['Water_Heaters_Count'] = 0.0
             
+        # --- 3.5 Job Status Adjustments Sidebar UI ---
         st.sidebar.header("🔧 Job Status Time Adjustments")
         st.sidebar.markdown("*(Correct tech hours if they hit a job status too early or late)*")
         st.sidebar.markdown("**Rules:** Use positive numbers like `1:30` or `0:45` to add time. Use a minus sign like `-1:15` or `-0:30` to subtract time.")
@@ -960,7 +968,6 @@ if time_file and ops_file:
                 else:
                     st.info("No launch metadata loaded to aggregate in sandbox loops.")
 
-            # NEW EXPERIMENTAL FEATURE: Golden Ratio
             if "🏆 The \"Golden Ratio\" Margin Predictor" in test_choices:
                 st.markdown("### **🏆 The Golden Ratio Margin Predictor**")
                 st.markdown("*(Simulates the division's average efficiency based on the ratio of Water Heaters to Simple Installs scheduled that day)*")
@@ -1007,7 +1014,6 @@ if time_file and ops_file:
                 else:
                     st.info("No business unit ratios calculated for this week.")
 
-            # NEW EXPERIMENTAL FEATURE: Skill Matrix
             if "🎯 The Technician \"Skill Matrix\" & Training Flag" in test_choices:
                 st.markdown("### **🎯 The Technician Skill Matrix & Training Flag**")
                 st.markdown("*(Compares a technician's LSI performance against their WH performance. Flags techs where the gap exceeds 25%)*")
@@ -1043,7 +1049,6 @@ if time_file and ops_file:
                 else:
                     st.info("No technicians handled both job types this week to establish a comparison matrix.")
 
-            # NEW EXPERIMENTAL FEATURE: Best Fit Dispatch
             if "🧠 \"Best Fit\" Dispatch Recommender" in test_choices:
                 st.markdown("### **🧠 Best Fit Dispatch Recommender**")
                 st.markdown("*(Provides a sorted priority list for the dispatcher to assign last-minute emergency jobs based purely on isolated historical unit efficiencies)*")
@@ -1063,7 +1068,6 @@ if time_file and ops_file:
                         wh_top['Jobs Run'] = wh_top['Water_Heaters_Count'].astype(int)
                         st.dataframe(wh_top[['Name', 'Water Heaters Eff', 'Jobs Run']].reset_index(drop=True).rename(columns={'Water Heaters Eff': 'WH Efficiency'}), use_container_width=True)
 
-            # NEW EXPERIMENTAL FEATURE: Context Switching
             if "🔄 The \"Context-Switching\" Penalty Alert" in test_choices:
                 st.markdown("### **🔄 Context-Switching Penalty Alert**")
                 st.markdown("*(Compares route durations on days where a tech did ONLY one job type (Uniform Route) vs days where they had to switch back and forth between LSI and WH (Mixed Route))*")
