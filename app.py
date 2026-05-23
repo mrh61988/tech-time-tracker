@@ -852,4 +852,321 @@ if time_file and ops_file:
         final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
         
         final_df['LSI_Eff_Raw'] = np.where(final_df['Assumed_LSI_Clocked'] > 0, (final_df['Simple_Installs_Hrs'] / final_df['Assumed_LSI_Clocked']) * 100, 0.0)
-        final_df['WH_Eff_Raw'] = np.where(final_df
+        final_df['WH_Eff_Raw'] = np.where(final_df['Assumed_WH_Clocked'] > 0, (final_df['Water_Heaters_Hrs'] / final_df['Assumed_WH_Clocked']) * 100, 0.0)
+        
+        final_df['Total_Eff'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, (final_df['Total_Weekly_Job_Hrs'] / final_df['Total_Weekly_Clocked_Hrs']) * 100, 0.0)
+        
+        final_df['Simple Installs'] = final_df['Simple_Installs_Hrs'].apply(format_hm)
+        final_df['Water Heaters'] = final_df['Water_Heaters_Hrs'].apply(format_hm)
+        final_df['Simple Installs Eff'] = final_df['LSI_Eff_Raw'].apply(lambda x: f"{x:.1f}%")
+        final_df['Water Heaters Eff'] = final_df['WH_Eff_Raw'].apply(lambda x: f"{x:.1f}%")
+        final_df['Total Eff'] = final_df['Total_Eff'].apply(lambda x: f"{x:.1f}%")
+        
+        final_df = final_df.sort_values(by='WH_Eff_Raw', ascending=False)
+        
+        bu_summary_df = pd.DataFrame()
+        bu_summary_df['Name'] = final_df['Name']
+        bu_summary_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
+        bu_summary_df['Total Jobs'] = final_df['Total_Weekly_Job_Count'].astype(int)
+        
+        bu_summary_df['LSI Jobs'] = final_df['Simple_Installs_Count'].astype(int)
+        bu_summary_df['LSI Job Status Time'] = final_df['Simple_Installs_Hrs'].apply(format_hm)
+        bu_summary_df['LSI Assumed Clocked'] = final_df['Assumed_LSI_Clocked'].apply(format_hm)
+        bu_summary_df['LSI Efficiency'] = final_df['Simple Installs Eff']
+        
+        bu_summary_df['WH Jobs'] = final_df['Water_Heaters_Count'].astype(int)
+        bu_summary_df['WH Job Status Time'] = final_df['Water_Heaters_Hrs'].apply(format_hm)
+        bu_summary_df['WH Assumed Clocked'] = final_df['Assumed_WH_Clocked'].apply(format_hm)
+        bu_summary_df['WH Efficiency'] = final_df['Water Heaters Eff']
+
+        bu_summary_df['Total Efficiency'] = final_df['Total Eff']
+        
+        display_dfs['Weekly'] = bu_summary_df
+        
+        export_df = pd.DataFrame()
+        export_df['Name'] = final_df['Name']
+        export_df['Days Worked'] = final_df['Days_Worked']
+        export_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
+        export_df['Total Job Time'] = final_df['Total_Weekly_Job_Hrs'].apply(format_hm)
+        export_df['Manual Adj'] = final_df['Adjustment_Hrs'].apply(format_hm)
+        export_df['Daily Avg Diff'] = final_df['Daily_Avg_Diff_Hrs'].apply(format_hm) 
+        export_df['Total Diff'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
+        for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
+            export_df[f'{d} Diff'] = final_df[f'{d} Diff']
+        
+        export_df['LSI Job Hours'] = final_df['Simple Installs']
+        export_df['LSI Efficiency %'] = final_df['Simple Installs Eff']
+        export_df['WH Job Hours'] = final_df['Water Heaters']
+        export_df['WH Efficiency %'] = final_df['Water Heaters Eff']
+        
+        ops_sorted = ops_df.dropna(subset=['Earliest_Start']).sort_values(['Assigned Team Members', 'Earliest_Start'])
+        ops_sorted['Next_Job_Start'] = ops_sorted.groupby(['Assigned Team Members', 'Short_Date'])['Earliest_Start'].shift(-1)
+        ops_sorted['Gap_Hrs'] = (ops_sorted['Next_Job_Start'] - ops_sorted['Estimated_End']).dt.total_seconds() / 3600.0
+        
+        bounds_df = ops_sorted.groupby(['Assigned Team Members', 'Short_Date']).agg(
+            First_Punch=('Earliest_Start', 'min'),
+            Last_Punch=('Estimated_End', 'max'),
+            First_Status=('Earliest_Status', 'first')
+        ).reset_index()
+        bounds_df['First Status Update'] = bounds_df['First_Punch'].dt.strftime('%I:%M %p')
+        bounds_df['Last Status Update'] = bounds_df['Last_Punch'].dt.strftime('%I:%M %p')
+        bounds_df['Total_Span_Hrs'] = (bounds_df['Last_Punch'] - bounds_df['First_Punch']).dt.total_seconds() / 3600.0
+        bounds_df['Total Time'] = bounds_df['Total_Span_Hrs'].apply(format_hm)
+        
+        def check_late(row):
+            fp = row['First_Punch']
+            status = row['First_Status']
+            if pd.isna(fp): return False
+            if status in ['On The Way', 'Lowes Store']:
+                return fp.hour >= 8
+            elif status == 'In Progress':
+                return fp.hour > 8 or (fp.hour == 8 and fp.minute >= 30)
+            return False
+            
+        delayed_launches_df = bounds_df[bounds_df.apply(check_late, axis=1)].copy()
+        
+        st.success("Files processed successfully!")
+        
+        # --- 4. Display Results in Tabs ---
+        tab_names = ["Weekly Summary", "Manager Overview", "Individual Tech Report", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "🧪 Test Section"]
+        tabs = st.tabs(tab_names)
+        
+        with tabs[0]:
+            st.markdown('<h3 class="hide-on-print">Weekly Efficiency Summary</h3>', unsafe_allow_html=True)
+            st.markdown("*(Efficiency is calculated by weighting total clocked hours against specific task goals: **Water Heaters = 3:25 hrs**, **LSI = 2:00 hrs**)*")
+            
+            styled_weekly = display_dfs['Weekly'].reset_index(drop=True).style.set_properties(
+                **{'background-color': '#fff3cd', 'font-weight': 'bold', 'color': '#856404'}, subset=['WH Efficiency']
+            )
+            st.dataframe(styled_weekly, use_container_width=True)
+            show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, daily_route, tab_key="summary_tab")
+            
+        with tabs[1]:
+            st.markdown('<h3 class="hide-on-print">Manager Overview - All Techs</h3>', unsafe_allow_html=True)
+            st.markdown('<p class="hide-on-print"><em>Scroll down to see the breakdown for every technician.</em></p>', unsafe_allow_html=True)
+            
+            tech_list = final_df['Name'].unique()
+            for tech in tech_list:
+                st.markdown(f"#### **{tech}**")
+                tech_data = final_df[final_df['Name'] == tech].iloc[0]
+                tech_days_worked = tech_data['Days_Worked']
+                
+                report_data = []
+                day_mapping_long = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
+                for full_day, short_day in day_mapping_long.items():
+                    report_data.append({
+                        "Day": full_day,
+                        "Jobs": int(tech_data[short_day + '_Job_Count']),
+                        "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']),
+                        "Job Time": format_hm(tech_data[short_day + '_Job_Hrs']),
+                        "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])
+                    })
+                
+                report_data.append({
+                    "Day": "TOTAL WEEKLY",
+                    "Jobs": int(tech_data['Total_Weekly_Job_Count']),
+                    "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']),
+                    "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']),
+                    "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])
+                })
+                
+                report_df = pd.DataFrame(report_data)
+                try:
+                    styled_report = report_df.reset_index(drop=True).style.hide(axis="index").apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
+                except Exception:
+                    try:
+                        styled_report = report_df.reset_index(drop=True).style.hide_index().apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
+                    except:
+                        styled_report = report_df.reset_index(drop=True).style.apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
+                st.table(styled_report)
+                st.markdown(f"**Business Unit Efficiency Breakdown:** LSI: `{tech_data['Simple Installs']}` hrs ({tech_data['Simple Installs Eff']}) &nbsp;&nbsp;|&nbsp;&nbsp; Water Heaters: `{tech_data['Water Heaters']}` hrs ({tech_data['Water Heaters Eff']})")
+                st.markdown("---")
+            
+            show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, daily_route, tab_key="manager_tab")
+            
+        with tabs[2]:
+            st.markdown('<h3 class="hide-on-print">Printable Individual Report</h3>', unsafe_allow_html=True)
+            tech_list = final_df['Name'].unique()
+            selected_tech = st.selectbox("Select a Technician:", tech_list)
+            
+            if selected_tech:
+                st.markdown(f"### Time Report for: **{selected_tech}**")
+                st.markdown('<p class="hide-on-print"><em>(Tip: To print this report for the technician, press <strong>Ctrl + P</strong> or <strong>Cmd + P</strong>)</em></p>', unsafe_allow_html=True)
+                tech_data = final_df[final_df['Name'] == selected_tech].iloc[0]
+                tech_days_worked = tech_data['Days_Worked']
+                
+                report_data = []
+                day_mapping_long = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
+                for full_day, short_day in day_mapping_long.items():
+                    report_data.append({
+                        "Day": full_day,
+                        "Jobs": int(tech_data[short_day + '_Job_Count']),
+                        "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']),
+                        "Job Time": format_hm(tech_data[short_day + '_Job_Hrs']),
+                        "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])
+                    })
+                
+                report_data.append({
+                    "Day": "TOTAL WEEKLY",
+                    "Jobs": int(tech_data['Total_Weekly_Job_Count']),
+                    "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']),
+                    "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']),
+                    "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])
+                })
+                
+                report_df = pd.DataFrame(report_data)
+                try:
+                    styled_report = report_df.reset_index(drop=True).style.hide(axis="index").apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
+                except Exception:
+                    try:
+                        styled_report = report_df.reset_index(drop=True).style.hide_index().apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
+                    except:
+                        styled_report = report_df.reset_index(drop=True).style.apply(lambda row: highlight_individual_report(row, tech_days_worked), axis=1)
+                st.table(styled_report)
+                
+                a_col, b_col = st.columns(2)
+                with a_col:
+                    st.markdown(f"**Total Days Clocked In:** {tech_days_worked}")
+                with b_col:
+                    st.markdown(f"**LSI (Simple Installs):** `{tech_data['Simple Installs']}` hrs ({tech_data['Simple Installs Eff']})  \n**Water Heaters:** `{tech_data['Water Heaters']}` hrs ({tech_data['Water Heaters Eff']})")
+
+        day_mapping = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
+        for i, full_day in enumerate(tab_names[3:10]): 
+            with tabs[i+3]:
+                short_day = day_mapping[full_day]
+                st.markdown(f'<h3 class="hide-on-print">{full_day} Breakdown</h3>', unsafe_allow_html=True)
+                try:
+                    styled_daily = display_dfs[short_day].reset_index(drop=True).style.map(highlight_daily, subset=[f'{short_day} Diff'])
+                except AttributeError:
+                    styled_daily = display_dfs[short_day].reset_index(drop=True).style.applymap(highlight_daily, subset=[f'{short_day} Diff'])
+                st.dataframe(styled_daily, use_container_width=True)
+
+        with tabs[10]:
+            st.header("🧪 Isolated Leaderboard Sandbox")
+            st.markdown("Use the selections below to add, remove, or evaluate components without changing the data models in other sections.")
+            
+            test_choices = st.multiselect(
+                "Select active data views to mount inside Test Section:",
+                [
+                    "🏆 The \"Golden Ratio\" Margin Predictor",
+                    "🔄 The \"Context-Switching\" Penalty Alert",
+                    "🕵️ The \"Ghost Punch\" & Payroll Discrepancy Auditor",
+                    "🏬 The Lowe's Store Staging Efficiency Scorecard"
+                ],
+                default=["🏆 The \"Golden Ratio\" Margin Predictor"],
+                key="sandbox_view_choices"
+            )
+
+            if "🏆 The \"Golden Ratio\" Margin Predictor" in test_choices:
+                st.markdown("### **🏆 The Golden Ratio Margin Predictor**")
+                st.markdown("*(Simulates the division's average efficiency based on the ratio of Water Heaters to Simple Installs scheduled that day)*")
+                
+                golden_data = []
+                for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
+                    day_clocked = final_df[f'{d}_Clocked_Hrs'].sum()
+                    day_job = final_df[f'{d}_Job_Hrs'].sum()
+                    day_eff = (day_job / day_clocked * 100) if day_clocked > 0 else 0.0
+                    
+                    day_lsi = ops_df[(ops_df['Day_of_Week'] == d) & (ops_df['Business Unit'] == 'Lowes - Simple Installs')].shape[0]
+                    day_wh = ops_df[(ops_df['Day_of_Week'] == d) & (ops_df['Business Unit'] == 'Lowes - Water Heaters')].shape[0]
+                    total_bu = day_lsi + day_wh
+                    lsi_ratio = (day_lsi / total_bu * 100) if total_bu > 0 else 0
+                    
+                    if total_bu > 0:
+                        profile = "Heavy LSI (>60% LSI)" if lsi_ratio > 60 else ("Heavy WH (<40% LSI)" if lsi_ratio < 40 else "Balanced (40-60%)")
+                        golden_data.append({
+                            "Day": d,
+                            "LSI Jobs": day_lsi,
+                            "WH Jobs": day_wh,
+                            "LSI Mix %": f"{lsi_ratio:.1f}%",
+                            "Daily Efficiency": day_eff,
+                            "Profile": profile
+                        })
+                
+                if golden_data:
+                    golden_df = pd.DataFrame(golden_data)
+                    golden_summary = golden_df.groupby('Profile').agg(
+                        Days=('Day', 'count'),
+                        Avg_Efficiency=('Daily Efficiency', 'mean')
+                    ).reset_index()
+                    golden_summary['Avg Efficiency'] = golden_summary['Avg_Efficiency'].apply(lambda x: f"{x:.1f}%")
+                    
+                    golden_df['Daily Efficiency'] = golden_df['Daily Efficiency'].apply(lambda x: f"{x:.1f}%")
+                    
+                    g_col1, g_col2 = st.columns(2)
+                    with g_col1:
+                        st.markdown("**Performance by Daily Mix Strategy**")
+                        st.dataframe(golden_summary[['Profile', 'Days', 'Avg Efficiency']], use_container_width=True)
+                    with g_col2:
+                        st.markdown("**Raw Daily Breakdown**")
+                        st.dataframe(golden_df[['Day', 'LSI Mix %', 'Profile', 'Daily Efficiency']], use_container_width=True)
+                else:
+                    st.info("No business unit ratios calculated for this week.")
+
+            if "🔄 The \"Context-Switching\" Penalty Alert" in test_choices:
+                st.markdown("### **🔄 Context-Switching Penalty Alert**")
+                st.markdown("*(Compares route durations on days where a tech did ONLY one job type (Uniform Route) vs days where they had to switch back and forth between LSI and WH (Mixed Route))*")
+                
+                if 'Business Unit' in ops_df.columns:
+                    daily_bu = ops_df.groupby(['Assigned Team Members', 'Short_Date', 'Business Unit']).size().unstack(fill_value=0).reset_index()
+                    if 'Lowes - Simple Installs' not in daily_bu.columns: daily_bu['Lowes - Simple Installs'] = 0
+                    if 'Lowes - Water Heaters' not in daily_bu.columns: daily_bu['Lowes - Water Heaters'] = 0
+                    
+                    daily_bu['Day Type'] = np.where((daily_bu['Lowes - Simple Installs'] > 0) & (daily_bu['Lowes - Water Heaters'] > 0), 'Mixed Route (Both)', 'Uniform Route (One Type)')
+                    
+                    daily_merged = pd.merge(daily_route, daily_bu, on=['Assigned Team Members', 'Short_Date'])
+                    daily_merged['Avg Job Time'] = daily_merged['Total_Job_Time_Hours'] / daily_merged['Job_Count']
+                    
+                    context_agg = daily_merged.groupby('Day Type').agg(
+                        Total_Days=('Short_Date', 'count'),
+                        Avg_Job_Turnaround=('Avg Job Time', 'mean')
+                    ).reset_index()
+                    
+                    if not context_agg.empty:
+                        context_agg['Average Fleet Job Turnaround'] = context_agg['Avg_Job_Turnaround'].apply(format_hm)
+                        st.dataframe(context_agg[['Day Type', 'Total_Days', 'Average Fleet Job Turnaround']].rename(columns={'Total_Days': 'Days Analyzed'}), use_container_width=True)
+                    else:
+                        st.info("Could not calculate context-switching averages for this set.")
+
+            if "🕵️ The \"Ghost Punch\" & Payroll Discrepancy Auditor" in test_choices:
+                st.markdown("### **🕵️ The \"Ghost Punch\" & Payroll Discrepancy Auditor**")
+                st.markdown("*(Scans files day-by-day to cross-verify paid hours against active field activity timestamps)*")
+                ghost_alerts = []
+                for idx, row in final_df.iterrows():
+                    tech_name = row['Name']
+                    nl = tech_name.lower()
+                    pay_type = "Hourly"
+                    if "sean marble" in nl or "michael owens" in nl: pay_type = "Salary"
+                    elif "bryan" in nl or "erik" in nl: pay_type = "Piece Rate"
+                    
+                    for d in ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]:
+                        clocked = row[f'{d}_Clocked_Hrs']
+                        jobs = row[f'{d}_Job_Count']
+                        if clocked > 0 and jobs == 0:
+                            ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🕵️ Paid But Idle (Clocked In, 0 Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": 0})
+                        elif clocked == 0 and jobs > 0:
+                            ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🚨 Unpaid Field Work (0 Hours Clocked, Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": int(jobs)})
+                if ghost_alerts:
+                    st.dataframe(pd.DataFrame(ghost_alerts), use_container_width=True)
+                else:
+                    st.success("Perfect alignment! No payroll discrepancy errors detected on current sheets.")
+
+            if "🏬 The Lowe's Store Staging Efficiency Scorecard" in test_choices:
+                st.markdown("### **🏬 The Lowe\'s Store Staging Efficiency Scorecard**")
+                st.markdown("*(Aggregates total field loading bottlenecks across individual store numbers to isolate supplier staging friction)*")
+                store_cols = [c for c in ops_df.columns if 'store' in c.lower() and 'time' not in c.lower() and 'timestamp' not in c.lower() and 'start' not in c.lower()]
+                if store_cols:
+                    s_col = store_cols[0]
+                    store_stats = ops_df.groupby(s_col)['Store_Time_Hrs'].mean().reset_index()
+                    store_stats.columns = ['Store Identifier', 'Avg Delay Length (Hrs)']
+                    store_stats['Avg Delay Length'] = store_stats['Avg Delay Length (Hrs)'].apply(format_hm)
+                    st.dataframe(store_stats.sort_values(by='Avg Delay Length (Hrs)', ascending=False)[['Store Identifier', 'Avg Delay Length']], use_container_width=True)
+                else:
+                    store_stats = pd.DataFrame([
+                        {"Store Identifier": "Lowe's Store #1042 (Sample Baseline Row)", "Avg Delay Length": "0:55"},
+                        {"Store Identifier": "Lowe's Store #0844 (Sample Baseline Row)", "Avg Delay Length": "0:15"}
+                    ])
+                    st.dataframe(store_stats, use_container_width=True)
+            
+    except Exception as e:
+        st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
