@@ -188,7 +188,7 @@ def highlight_pay_pct_row(row):
     return styles
 
 # --- MAIN BLOCK REPORT ENGINE ---
-def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, daily_route, tab_key):
+def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_df, delayed_launches_df, daily_route, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
     # === BOSS TOOLS SECTION ===
@@ -350,7 +350,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
             show_gold = gold_star_df[['Name', 'Total Clocked', 'Total Job Time', 'Daily Avg Diff', 'Total Diff']].copy()
             try: st.dataframe(show_gold.reset_index(drop=True).style.hide(axis="index").set_properties(**{'background-color': '#e6f4ea', 'color': '#137333'}), use_container_width=True)
             except Exception: st.dataframe(show_gold.reset_index(drop=True).style.set_properties(**{'background-color': '#e6f4ea', 'color': '#137333'}), use_container_width=True)
-        else: st.info("No technicians qualified for the Gold Star list this week.")
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("🎯 The Technician Skill Matrix & Training Flag")
@@ -430,8 +429,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     st.markdown("<br>", unsafe_allow_html=True)
     colC, colD = st.columns(2)
     with colC:
-        st.subheader("🛒 Lowe\'s Operational Delays")
-        st.markdown("*(All logged store visits. Rows highlighted in red show specific jobs that took greater than 45 minutes)*")
+        st.subheader("🛒 Lowe's Operational Delays")
         excessive_df = ops_df[ops_df['Store_Time_Hrs'] > 0.75].copy()
         st.markdown(f"⏱️ **Total Field Hours Lost at Lowe's:** `{excessive_df['Store_Time_Hrs'].sum():.1f} hrs` | 💸 **Cost:** `${excessive_df['Store_Time_Hrs'].sum() * rate:,.2f}`")
         all_store_df = ops_df[ops_df['Store_Time_Hrs'] > 0].sort_values(by='Store_Time_Hrs', ascending=False).copy()
@@ -547,7 +545,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         else: st.success("Perfect alignment! No payroll discrepancy errors detected.")
 
     if "🏬 The Lowe's Store Staging Efficiency Scorecard" in test_choices:
-        st.markdown("### **🏬 The Lowe's Store Staging Efficiency Scorecard**")
+        st.markdown("### **¼ The Lowe's Store Staging Efficiency Scorecard**")
         store_cols = [c for c in ops_df.columns if 'store' in c.lower() and 'time' not in c.lower() and 'timestamp' not in c.lower()]
         if store_cols:
             store_stats = ops_df.groupby(store_cols[0])['Store_Time_Hrs'].mean().reset_index()
@@ -635,22 +633,11 @@ if time_file and ops_file:
         ops_df = ops_df.dropna(subset=['Assigned Team Members'])
         time_cols = ['Lowes Store - Completed Total Time in Status', 'On The Way - Completed Total Time in Status', 'In Progress - Completed Total Time in Status', 'On The Way - Completed Total Time in Status.1', 'In Progress - Completed Total Time in Status.1']
         
-        # CLEANUP: Extract shared crew metrics into array layers BEFORE processing splits to completely eliminate duplicate inflation vectors
-        def calculate_tech_count(val):
-            return max(1, len(str(val).split(',')))
-        
+        def calculate_tech_count(val): return max(1, len(str(val).split(',')))
         ops_df['Tech_Count_On_Job'] = ops_df['Assigned Team Members'].apply(calculate_tech_count)
         
-        # Core math split allocation pipeline
-        for col in time_cols: 
-            ops_df[col] = pd.to_numeric(ops_df[col], errors='coerce').fillna(0) / ops_df['Tech_Count_On_Job']
-        
-        ops_df['Total Invoice Amount'] = pd.to_numeric(ops_df['Total Invoice Amount'], errors='coerce').fillna(0.0) / ops_df['Tech_Count_On_Job']
-        
-        ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
-        ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On The Way - Completed Total Time in Status.1', 0)) / 3600.0
-        ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
-        ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
+        for col in time_cols: ops_df[col] = pd.to_numeric(ops_df[col], errors='coerce').fillna(0) / ops_df['Tech_Count_On_Job']
+        ops_df['Total Invoice Amount'] = pd.to_numeric(ops_df.get('Total Invoice Amount', pd.Series([0])), errors='coerce').fillna(0.0) / ops_df['Tech_Count_On_Job']
         unexploded_ops = ops_df.copy()
         
         ts_cols = ['Lowes Store - Start Timestamp', 'On The Way - Start Timestamp', 'In Progress - Start Timestamp', 'On The Way - Start Timestamp.1', 'In Progress - Start Timestamp.1']
@@ -680,6 +667,12 @@ if time_file and ops_file:
         ops_df['Job_Date_Parsed'] = pd.to_datetime(ops_df['Job_Date'].astype(str).str.split(' GMT').str[0], errors='coerce')
         ops_df['Day_of_Week'] = ops_df['Job_Date_Parsed'].dt.day_name().str[:3]
         ops_df['Short_Date'] = ops_df['Job_Date_Parsed'].dt.strftime('%m-%d-%Y')
+        
+        ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
+        ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On The Way - Completed Total Time in Status.1', 0)) / 3600.0
+        ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
+        ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
+
         ops_df['Assigned Team Members'] = ops_df['Assigned Team Members'].astype(str).str.split(',')
         ops_df = ops_df.explode('Assigned Team Members')
         ops_df['Assigned Team Members'] = ops_df['Assigned Team Members'].str.strip()
@@ -752,6 +745,13 @@ if time_file and ops_file:
         final_df['Adjustment_Hrs'] = final_df['Name'].map(adjustments).fillna(0.0)
         final_df['Total_Weekly_Job_Hrs'] = final_df['Total_Weekly_Job_Hrs'] + final_df['Adjustment_Hrs']
         
+        # --- CRITICAL PIPELINE CORRECTION: Compute targets first BEFORE any UI component reads final_df parameters ---
+        final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
+        final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * (3 + (25 / 60.0))
+        final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
+        final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
+        final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
+
         display_dfs = {}
         for day in days:
             final_df[day + '_Diff_Hrs'] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
@@ -790,7 +790,6 @@ if time_file and ops_file:
         bu_summary_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
         bu_summary_df['Total Jobs'] = final_df['Total_Weekly_Job_Count'].astype(int)
         
-        # INJECTED FIXED VISUALS: Rendering the computed durations natively on screen right beside the counts
         bu_summary_df['LSI Jobs'] = final_df['Simple_Installs_Count'].astype(int)
         bu_summary_df['LSI Tracked Hours'] = final_df['Simple Installs']
         bu_summary_df['LSI Efficiency'] = final_df['Simple Installs Eff']
@@ -887,7 +886,7 @@ if time_file and ops_file:
                 st.dataframe(display_dfs[short_day].reset_index(drop=True), use_container_width=True)
 
         with tabs[10]:
-            test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "🏬 The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🏆 Top Revenue Producer Leaderboard"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
+            test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "¼ The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🏆 Top Revenue Producer Leaderboard"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
             run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             
     except Exception as e:
