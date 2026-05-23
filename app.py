@@ -188,7 +188,7 @@ def highlight_pay_pct_row(row):
     return styles
 
 # --- MAIN BLOCK REPORT ENGINE ---
-def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_df, delayed_launches_df, daily_route, tab_key):
+def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, daily_route, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
     # === BOSS TOOLS SECTION ===
@@ -361,7 +361,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_
         def assign_skill_flag(row):
             lsi_cnt, wh_cnt = row['Simple_Installs_Count'], row['Water_Heaters_Count']
             if lsi_cnt > 0 and wh_cnt > 0:
-                if row['Eff Gap'] > 25.0: return "⚠️ Needs WH Ride-Along" if row['LSI_Eff_Raw'] > row['WH_Eff_Raw'] else "⚠️ Needs LSI Ride-Along"
+                if row['Eff Gap'] > 25.0: return "⚠️ WH Ride-Along Required" if row['LSI_Eff_Raw'] > row['WH_Eff_Raw'] else "⚠️ LSI Ride-Along Required"
                 return "✅ Balanced Execution"
             if lsi_cnt > 0: return "ℹ️ Only LSI Jobs Assigned"
             if wh_cnt > 0: return "ℹ️ Only WH Jobs Assigned"
@@ -388,7 +388,6 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_
     # === DISPATCHER TOOLS SECTION ===
     st.header("🛠️ Dispatcher Tools (Daily Accountability & Planning)")
     st.subheader("🧠 Best Fit Dispatch Recommender")
-    st.markdown("*(Provides a sorted priority list for the dispatcher to assign last-minute emergency jobs based purely on isolated historical unit efficiencies)*")
     bf_col1, bf_col2 = st.columns(2)
     with bf_col1:
         st.markdown("**🥇 Top Ranked for LSI Jobs**")
@@ -548,7 +547,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         else: st.success("Perfect alignment! No payroll discrepancy errors detected.")
 
     if "🏬 The Lowe's Store Staging Efficiency Scorecard" in test_choices:
-        st.markdown("### **🏬 The Lowe\'s Store Staging Efficiency Scorecard**")
+        st.markdown("### **🏬 The Lowe's Store Staging Efficiency Scorecard**")
         store_cols = [c for c in ops_df.columns if 'store' in c.lower() and 'time' not in c.lower() and 'timestamp' not in c.lower()]
         if store_cols:
             store_stats = ops_df.groupby(store_cols[0])['Store_Time_Hrs'].mean().reset_index()
@@ -636,12 +635,22 @@ if time_file and ops_file:
         ops_df = ops_df.dropna(subset=['Assigned Team Members'])
         time_cols = ['Lowes Store - Completed Total Time in Status', 'On The Way - Completed Total Time in Status', 'In Progress - Completed Total Time in Status', 'On The Way - Completed Total Time in Status.1', 'In Progress - Completed Total Time in Status.1']
         
-        for col in time_cols: ops_df[col] = pd.to_numeric(ops_df[col], errors='coerce').fillna(0)
+        # CLEANUP: Extract shared crew metrics into array layers BEFORE processing splits to completely eliminate duplicate inflation vectors
+        def calculate_tech_count(val):
+            return max(1, len(str(val).split(',')))
+        
+        ops_df['Tech_Count_On_Job'] = ops_df['Assigned Team Members'].apply(calculate_tech_count)
+        
+        # Core math split allocation pipeline
+        for col in time_cols: 
+            ops_df[col] = pd.to_numeric(ops_df[col], errors='coerce').fillna(0) / ops_df['Tech_Count_On_Job']
+        
+        ops_df['Total Invoice Amount'] = pd.to_numeric(ops_df['Total Invoice Amount'], errors='coerce').fillna(0.0) / ops_df['Tech_Count_On_Job']
+        
         ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
         ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On The Way - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
-        ops_df['Total Invoice Amount'] = pd.to_numeric(ops_df.get('Total Invoice Amount', pd.Series([0])), errors='coerce').fillna(0.0)
         unexploded_ops = ops_df.copy()
         
         ts_cols = ['Lowes Store - Start Timestamp', 'On The Way - Start Timestamp', 'In Progress - Start Timestamp', 'On The Way - Start Timestamp.1', 'In Progress - Start Timestamp.1']
@@ -667,7 +676,7 @@ if time_file and ops_file:
             if 'Way' in str(col): return 'On The Way'
             return 'In Progress'
         ops_df['Earliest_Status'] = ops_df['Earliest_Status_Col'].apply(map_status)
-        ops_df['Estimated_End'] = ops_df['Earliest_Start'] + pd.to_timedelta(ops_df['Total_Job_Time_Hours'] * 3600, unit='s')
+        ops_df['Estimated_End'] = ops_df['Earliest_Start'] + pd.to_timedelta(ops_df['Total_Job_Time_Hours'] * ops_df['Tech_Count_On_Job'] * 3600, unit='s')
         ops_df['Job_Date_Parsed'] = pd.to_datetime(ops_df['Job_Date'].astype(str).str.split(' GMT').str[0], errors='coerce')
         ops_df['Day_of_Week'] = ops_df['Job_Date_Parsed'].dt.day_name().str[:3]
         ops_df['Short_Date'] = ops_df['Job_Date_Parsed'].dt.strftime('%m-%d-%Y')
@@ -743,13 +752,6 @@ if time_file and ops_file:
         final_df['Adjustment_Hrs'] = final_df['Name'].map(adjustments).fillna(0.0)
         final_df['Total_Weekly_Job_Hrs'] = final_df['Total_Weekly_Job_Hrs'] + final_df['Adjustment_Hrs']
         
-        # --- BU Efficiency Calculations Restored Natively ---
-        final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
-        final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * (3 + (25 / 60.0))
-        final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
-        final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
-        final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
-
         display_dfs = {}
         for day in days:
             final_df[day + '_Diff_Hrs'] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
@@ -787,10 +789,15 @@ if time_file and ops_file:
         bu_summary_df['Name'] = final_df['Name']
         bu_summary_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
         bu_summary_df['Total Jobs'] = final_df['Total_Weekly_Job_Count'].astype(int)
+        
+        # INJECTED FIXED VISUALS: Rendering the computed durations natively on screen right beside the counts
         bu_summary_df['LSI Jobs'] = final_df['Simple_Installs_Count'].astype(int)
+        bu_summary_df['LSI Tracked Hours'] = final_df['Simple Installs']
         bu_summary_df['LSI Efficiency'] = final_df['Simple Installs Eff']
         bu_summary_df['WH Jobs'] = final_df['Water_Heaters_Count'].astype(int)
+        bu_summary_df['WH Tracked Hours'] = final_df['Water Heaters']
         bu_summary_df['WH Efficiency'] = final_df['Water Heaters Eff']
+        
         bu_summary_df['Total Efficiency'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, (final_df['Total_Weekly_Job_Hrs'] / final_df['Total_Weekly_Clocked_Hrs']) * 100, 0.0)
         bu_summary_df['Total Efficiency'] = bu_summary_df['Total Efficiency'].apply(lambda x: f"{x:.1f}%")
         display_dfs['Weekly'] = bu_summary_df
@@ -812,7 +819,6 @@ if time_file and ops_file:
             st.markdown('<h3>Weekly Efficiency Summary</h3>', unsafe_allow_html=True)
             st.dataframe(display_dfs['Weekly'].reset_index(drop=True), use_container_width=True)
             
-            # UNIQUE PLACEMENT DIRECTLY IN WEEKLY SUMMARY TAB
             st.markdown("<br><hr><h3>📊 Macro Financial Performance Dashboard</h3>", unsafe_allow_html=True)
             st.markdown("*(Unified executive layout tracking top-line volume. Green highlight = under 20% for hourly/salaried, under 34% for piece-rate. Sorted highest to lowest payload percentage)*")
             m_col1, m_col2 = st.columns([1, 2])
