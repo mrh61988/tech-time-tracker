@@ -563,7 +563,6 @@ if time_file and ops_file:
         for c in available_ts_cols:
             ops_df[c + '_dt'] = pd.to_datetime(ops_df[c].astype(str).str.split(' GMT').str[0], errors='coerce')
         
-        # FIXED: Bulletproof logic to extract earliest timestamp and status column without invoking Pandas .idxmin() bug
         available_ts_dt_cols = [c + '_dt' for c in available_ts_cols]
         ops_df['Earliest_Start'] = ops_df[available_ts_dt_cols].min(axis=1)
         
@@ -665,8 +664,8 @@ if time_file and ops_file:
             final_df['Simple_Installs_Count'] = 0.0
             final_df['Water_Heaters_Count'] = 0.0
             
-        # --- 3.5 Tablet Adjustments Sidebar UI ---
-        st.sidebar.header("🔧 Tablet Time Adjustments")
+        # --- 3.5 Job Status Adjustments Sidebar UI ---
+        st.sidebar.header("🔧 Job Status Time Adjustments")
         st.sidebar.markdown("*(Correct tech hours if they hit a job status too early or late)*")
         st.sidebar.markdown("**Rules:** Use positive numbers like `1:30` or `0:45` to add time. Use a minus sign like `-1:15` or `-0:30` to subtract time.")
         
@@ -956,12 +955,12 @@ if time_file and ops_file:
                 bu_summary_df['Total Efficiency'] = sandbox_df['Total Eff']
                 
                 bu_summary_df['LSI Jobs'] = sandbox_df['Simple_Installs_Count'].astype(int)
-                bu_summary_df['LSI Tablet Hrs'] = sandbox_df['Simple_Installs_Hrs'].apply(format_hm)
+                bu_summary_df['LSI Job Status Time'] = sandbox_df['Simple_Installs_Hrs'].apply(format_hm)
                 bu_summary_df['LSI Assumed Clocked'] = sandbox_df['Assumed_LSI_Clocked'].apply(format_hm)
                 bu_summary_df['LSI Efficiency'] = sandbox_df['Simple Installs Eff']
                 
                 bu_summary_df['WH Jobs'] = sandbox_df['Water_Heaters_Count'].astype(int)
-                bu_summary_df['WH Tablet Hrs'] = sandbox_df['Water_Heaters_Hrs'].apply(format_hm)
+                bu_summary_df['WH Job Status Time'] = sandbox_df['Water_Heaters_Hrs'].apply(format_hm)
                 bu_summary_df['WH Assumed Clocked'] = sandbox_df['Assumed_WH_Clocked'].apply(format_hm)
                 bu_summary_df['WH Efficiency'] = sandbox_df['Water Heaters Eff']
                 
