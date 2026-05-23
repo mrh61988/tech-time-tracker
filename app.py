@@ -103,16 +103,6 @@ def highlight_daily(val):
     if hrs > 1.0: return 'background-color: #ffcccc; color: #990000;'
     return ''
 
-def highlight_weekly_row(row):
-    styles = [''] * len(row)
-    if 'Total Diff' in row and 'Days Worked' in row:
-        diff_idx = row.index.get_loc('Total Diff')
-        diff_hrs = parse_diff_to_hours(row['Total Diff'])
-        days_worked = row['Days Worked']
-        if diff_hrs > (days_worked * 1.0):
-            styles[diff_idx] = 'background-color: #ffcccc; color: #990000;'
-    return styles
-
 def highlight_individual_report(row, days_worked):
     styles = [''] * len(row)
     if 'Difference' in row and 'Day' in row:
@@ -328,9 +318,9 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
         else:
             st.info("No technicians qualified for the Gold Star list this week.")
 
-    st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
     
-    # NEW FEATURE: Skill Matrix & Training Flag
+    # Skill Matrix & Training Flag
     st.subheader("🎯 The Technician Skill Matrix & Training Flag")
     st.markdown("*(Compares a technician's LSI performance against their WH performance. Flags techs where the gap exceeds 25%)*")
     
@@ -370,7 +360,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     # === DISPATCHER TOOLS SECTION ===
     st.header("🛠️ Dispatcher Tools (Daily Accountability & Planning)")
     
-    # NEW FEATURE: Best Fit Dispatch Recommender
+    # Best Fit Dispatch Recommender
     st.subheader("🧠 Best Fit Dispatch Recommender")
     st.markdown("*(Provides a sorted priority list for the dispatcher to assign last-minute emergency jobs based purely on isolated historical unit efficiencies)*")
     
@@ -418,7 +408,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
         bounds_sorted_df = bounds_df.sort_values(by='Total_Span_Hrs', ascending=False).copy()
         show_bounds = bounds_sorted_df[['Assigned Team Members', 'Short_Date', 'First Status Update', 'Last Status Update', 'Total Time']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
         
-        # UPDATED: Custom highlight function added to flag any shift longer than 9.0 hours
         def highlight_long_days(row):
             hrs = parse_hm(row['Total Time'])
             if hrs > 9.0:
@@ -676,6 +665,7 @@ if time_file and ops_file:
             bu_pivot = pd.merge(bu_pivot_hrs, bu_pivot_cnt, on='Assigned Team Members', suffixes=('_hrs', '_cnt'))
             bu_pivot = bu_pivot.rename(columns={'Assigned Team Members': 'Name'})
             
+            # Ensure safety columns exist
             for col in ['Lowes - Simple Installs_hrs', 'Lowes - Water Heaters_hrs', 'Lowes - Simple Installs_cnt', 'Lowes - Water Heaters_cnt']:
                 if col not in bu_pivot.columns:
                     bu_pivot[col] = 0.0
@@ -982,11 +972,16 @@ if time_file and ops_file:
             st.header("🧪 Isolated Leaderboard Sandbox")
             st.markdown("Use the selections below to add, remove, or evaluate components without changing the data models in other sections.")
             
+            # UPDATED: Appended all 4 new feature tokens directly into the selection checklist array layout
             test_choices = st.multiselect(
                 "Select active data views to mount inside Test Section:",
                 [
                     "🏆 The \"Golden Ratio\" Margin Predictor",
-                    "🔄 The \"Context-Switching\" Penalty Alert"
+                    "🔄 The \"Context-Switching\" Penalty Alert",
+                    "🕵️ The \"Ghost Punch\" & Payroll Discrepancy Auditor",
+                    "🏬 The Lowe's Store Staging Efficiency Scorecard",
+                    "🚨 Fleet Overtime Horizon Predictor",
+                    "🏁 The Peer-to-Peer \"Coaching Corner\" Overlay"
                 ],
                 default=["🏆 The \"Golden Ratio\" Margin Predictor"],
                 key="sandbox_view_choices"
@@ -1062,6 +1057,73 @@ if time_file and ops_file:
                         st.dataframe(context_agg[['Day Type', 'Total_Days', 'Average Fleet Job Turnaround']].rename(columns={'Total_Days': 'Days Analyzed'}), use_container_width=True)
                     else:
                         st.info("Could not calculate context-switching averages for this set.")
+
+            # ADDED NEW SANDBOX OPTION: Ghost Punch Auditor
+            if "🕵️ The \"Ghost Punch\" & Payroll Discrepancy Auditor" in test_choices:
+                st.markdown("### **🕵️ The \"Ghost Punch\" & Payroll Discrepancy Auditor**")
+                st.markdown("*(Scans files day-by-day to cross-verify paid hours against active field activity timestamps)*")
+                ghost_alerts = []
+                for idx, row in final_df.iterrows():
+                    tech_name = row['Name']
+                    for d in ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]:
+                        clocked = row[f'{d}_Clocked_Hrs']
+                        jobs = row[f'{d}_Job_Count']
+                        if clocked > 0 and jobs == 0:
+                            ghost_alerts.append({"Technician": tech_name, "Day": d, "Audit Type": "🕵️ Paid But Idle (Clocked In, 0 Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": 0})
+                        elif clocked == 0 and jobs > 0:
+                            ghost_alerts.append({"Technician": tech_name, "Day": d, "Audit Type": "🚨 Unpaid Field Work (0 Hours Clocked, Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": int(jobs)})
+                if ghost_alerts:
+                    st.dataframe(pd.DataFrame(ghost_alerts), use_container_width=True)
+                else:
+                    st.success("Perfect alignment! No payroll discrepancy errors detected on current sheets.")
+
+            # ADDED NEW SANDBOX OPTION: Lowe's Store Staging Card
+            if "🏬 The Lowe's Store Staging Efficiency Scorecard" in test_choices:
+                st.markdown("### **🏬 The Lowe\'s Store Staging Efficiency Scorecard**")
+                st.markdown("*(Aggregates total field loading bottlenecks across individual store numbers to isolate supplier staging friction)*")
+                store_cols = [c for c in ops_df.columns if 'store' in c.lower() and 'time' not in c.lower() and 'timestamp' not in c.lower() and 'start' not in c.lower()]
+                if store_cols:
+                    s_col = store_cols[0]
+                    store_stats = ops_df.groupby(s_col)['Store_Time_Hrs'].mean().reset_index()
+                    store_stats.columns = ['Store Identifier', 'Avg Delay Length (Hrs)']
+                    store_stats['Avg Delay Length'] = store_stats['Avg Delay Length (Hrs)'].apply(format_hm)
+                    st.dataframe(store_stats.sort_values(by='Avg Delay Length (Hrs)', ascending=False)[['Store Identifier', 'Avg Delay Length']], use_container_width=True)
+                else:
+                    store_stats = pd.DataFrame([
+                        {"Store Identifier": "Lowe's Store #1042 (Sample Baseline Row)", "Avg Delay Length": "0:55"},
+                        {"Store Identifier": "Lowe's Store #0844 (Sample Baseline Row)", "Avg Delay Length": "0:15"}
+                    ])
+                    st.dataframe(store_stats, use_container_width=True)
+
+            # ADDED NEW SANDBOX OPTION: Fleet Overtime Predictor
+            if "🚨 Fleet Overtime Horizon Predictor" in test_choices:
+                st.markdown("### **🚨 Fleet Overtime Horizon Predictor**")
+                st.markdown("*(Scans overall accumulated clocked hours to calculate incurred overtime margins and pacing thresholds)*")
+                ot_df = pd.DataFrame()
+                ot_df['Name'] = final_df['Name']
+                ot_df['Weekly Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
+                def calc_ot_status(hrs):
+                    if hrs > 40: return "🚨 Overtime Incurred"
+                    elif hrs > 35: return "⚠️ High Overtime Risk"
+                    return "✅ Safe Strategy"
+                ot_df['Pace Status'] = final_df['Total_Weekly_Clocked_Hrs'].apply(calc_ot_status)
+                ot_df['Overtime Hours'] = final_df['Total_Weekly_Clocked_Hrs'].apply(lambda x: format_hm(x - 40) if x > 40 else "-")
+                st.dataframe(ot_df, use_container_width=True)
+
+            # ADDED NEW SANDBOX OPTION: Coaching Corner
+            if "🏁 The Peer-to-Peer \"Coaching Corner\" Overlay" in test_choices:
+                st.markdown("### **🏁 The Peer-to-Peer \"Coaching Corner\" Overlay**")
+                st.markdown("*(Anonymized high-performance baseline stack. Compares tech execution against top 25% fleet performance thresholds)*")
+                lsi_top25 = final_df[final_df['LSI_Eff_Raw'] > 0]['LSI_Eff_Raw'].quantile(0.75) if not final_df[final_df['LSI_Eff_Raw'] > 0].empty else 100.0
+                wh_top25 = final_df[final_df['WH_Eff_Raw'] > 0]['WH_Eff_Raw'].quantile(0.75) if not final_df[final_df['WH_Eff_Raw'] > 0].empty else 100.0
+                
+                coaching_data = pd.DataFrame()
+                coaching_data['Name'] = final_df['Name']
+                coaching_data['Your LSI Eff'] = final_df['Simple Installs Eff']
+                coaching_data['Fleet Top 25% LSI'] = f"{lsi_top25:.1f}%"
+                coaching_data['Your WH Eff'] = final_df['Water Heaters Eff']
+                coaching_data['Fleet Top 25% WH'] = f"{wh_top25:.1f}%"
+                st.dataframe(coaching_data, use_container_width=True)
             
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
