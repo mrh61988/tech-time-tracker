@@ -431,7 +431,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_
     st.markdown("<br>", unsafe_allow_html=True)
     colC, colD = st.columns(2)
     with colC:
-        st.subheader("🛒 Lowe's Operational Delays")
+        st.subheader("🛒 Lowe\'s Operational Delays")
         st.markdown("*(All logged store visits. Rows highlighted in red show specific jobs that took greater than 45 minutes)*")
         excessive_df = ops_df[ops_df['Store_Time_Hrs'] > 0.75].copy()
         st.markdown(f"⏱️ **Total Field Hours Lost at Lowe's:** `{excessive_df['Store_Time_Hrs'].sum():.1f} hrs` | 💸 **Cost:** `${excessive_df['Store_Time_Hrs'].sum() * rate:,.2f}`")
@@ -548,7 +548,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         else: st.success("Perfect alignment! No payroll discrepancy errors detected.")
 
     if "🏬 The Lowe's Store Staging Efficiency Scorecard" in test_choices:
-        st.markdown("### **🏬 The Lowe's Store Staging Efficiency Scorecard**")
+        st.markdown("### **🏬 The Lowe\'s Store Staging Efficiency Scorecard**")
         store_cols = [c for c in ops_df.columns if 'store' in c.lower() and 'time' not in c.lower() and 'timestamp' not in c.lower()]
         if store_cols:
             store_stats = ops_df.groupby(store_cols[0])['Store_Time_Hrs'].mean().reset_index()
@@ -743,6 +743,13 @@ if time_file and ops_file:
         final_df['Adjustment_Hrs'] = final_df['Name'].map(adjustments).fillna(0.0)
         final_df['Total_Weekly_Job_Hrs'] = final_df['Total_Weekly_Job_Hrs'] + final_df['Adjustment_Hrs']
         
+        # --- BU Efficiency Calculations Restored Natively ---
+        final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
+        final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * (3 + (25 / 60.0))
+        final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
+        final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
+        final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
+
         display_dfs = {}
         for day in days:
             final_df[day + '_Diff_Hrs'] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
@@ -879,5 +886,3 @@ if time_file and ops_file:
             
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
-except Exception as master_err:
-    st.error(f"Master pipeline failure: {master_err}")
