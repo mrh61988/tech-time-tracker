@@ -166,7 +166,7 @@ def highlight_consistency(s):
             styles.append('')
     return styles
 
-# UPDATED: Segmented row highlight engine enforces target ceilings (<20% standard, <34% piece-rate)
+# Row highlight engine enforces target ceilings (<20% standard, <34% piece-rate)
 def highlight_pay_pct_row(row):
     styles = [''] * len(row)
     if 'Pay % vs Assigned Revenue' in row.index and 'Name' in row.index:
@@ -896,6 +896,7 @@ if time_file and ops_file:
         final_df['Total_Weekly_Diff_Hrs'] = final_df['Total_Weekly_Clocked_Hrs'] - final_df['Total_Weekly_Job_Hrs']
         final_df['Daily_Avg_Diff_Hrs'] = np.where(final_df['Days_Worked'] > 0, final_df['Total_Weekly_Diff_Hrs'] / final_df['Days_Worked'], 0.0)
         
+        # --- BU Efficiency Calculations ---
         final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
         final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * (3 + (25 / 60.0))
         final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
@@ -929,7 +930,6 @@ if time_file and ops_file:
         bu_summary_df['WH Job Status Time'] = final_df['Water_Heaters_Hrs'].apply(format_hm)
         bu_summary_df['WH Assumed Clocked'] = final_df['Assumed_WH_Clocked'].apply(format_hm)
         bu_summary_df['WH Efficiency'] = final_df['Water Heaters Eff']
-
         bu_summary_df['Total Efficiency'] = final_df['Total Eff']
         
         display_dfs['Weekly'] = bu_summary_df
@@ -964,16 +964,6 @@ if time_file and ops_file:
         bounds_df['Total_Span_Hrs'] = (bounds_df['Last_Punch'] - bounds_df['First_Punch']).dt.total_seconds() / 3600.0
         bounds_df['Total Time'] = bounds_df['Total_Span_Hrs'].apply(format_hm)
         
-        def check_late(row):
-            fp = row['First_Punch']
-            status = row['First_Status']
-            if pd.isna(fp): return False
-            if status in ['On The Way', 'Lowes Store']:
-                return fp.hour >= 8
-            elif status == 'In Progress':
-                return fp.hour > 8 or (fp.hour == 8 and fp.minute >= 30)
-            return False
-            
         delayed_launches_df = bounds_df[bounds_df.apply(check_late, axis=1)].copy()
         
         st.success("Files processed successfully!")
@@ -1222,10 +1212,10 @@ if time_file and ops_file:
                     ])
                     st.dataframe(store_stats, use_container_width=True)
 
-            # UPDATED PANEL: Combines financial elements sorted ascending by pay performance percentages
+            # === MACRO FINANCIAL PERFORMANCE DASHBOARD ===
             if "📊 Macro Financial Performance Dashboard" in test_choices:
                 st.markdown("### **📊 Macro Financial Performance Dashboard**")
-                st.markdown("*(Unified executive layout tracking top-line volume. Green highlight = under 20% for hourly/salaried, under 34% for piece-rate)*")
+                st.markdown("*(Green highlight = under 20% for hourly/salaried, under 34% for piece-rate. Sorted highest to lowest by pay ratio)*")
                 
                 m_col1, m_col2 = st.columns([1, 2])
                 with m_col1:
@@ -1239,7 +1229,7 @@ if time_file and ops_file:
                     st.dataframe(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True), use_container_width=True)
                     
                 with m_col2:
-                    st.markdown("**📈 Gross Revenue per Clocked Hour**")
+                    st.markdown("**📈 Pay Ratio per Clocked Hour**")
                     rev_per_hour_df = final_df.copy()
                     rev_per_hour_df['Total Clocked'] = rev_per_hour_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
                     rev_per_hour_df['Total Assigned Value'] = rev_per_hour_df['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
@@ -1254,8 +1244,8 @@ if time_file and ops_file:
                     )
                     rev_per_hour_df['Pay % vs Assigned Revenue'] = rev_per_hour_df['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
                     
-                    # UPDATED: Enforces direct ascending sorting (best labor leverage margins show up at the top)
-                    show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=True)[
+                    # UPDATED: Enforces highest to lowest descending sorting format layout dynamically
+                    show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[
                         ['Name', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue']
                     ]
                     
@@ -1272,10 +1262,10 @@ if time_file and ops_file:
                 bu_rev['Revenue Share %'] = bu_rev['Revenue Share %'].apply(lambda x: f"{x:.1f}%")
                 st.dataframe(bu_rev[['Business Unit', 'Total Revenue', 'Revenue Share %']].reset_index(drop=True), use_container_width=True)
 
-            # UPDATED BOARD: Ranks the entire field crew automatically sorted ascending by true Pay % vs Revenue layers
+            # === TOP REVENUE PRODUCER LEADERBOARD ===
             if "🏆 Top Revenue Producer Leaderboard" in test_choices:
                 st.markdown("### **🏆 Top Revenue Producer Leaderboard**")
-                st.markdown("*(Ranks all active technicians by payload percentage ratios. Green highlight = under 20% for hourly/salaried, under 34% for piece-rate)*")
+                st.markdown("*(Ranks technicians by payload ratios. Sorted highest to lowest. Green highlight = under 20% for hourly/salaried, under 34% for piece-rate)*")
                 leaderboard_rev = final_df.copy()
                 leaderboard_rev['Assumed Pay Amount'] = leaderboard_rev.apply(get_assumed_pay, axis=1)
                 leaderboard_rev['Pay Pct'] = np.where(
@@ -1284,8 +1274,8 @@ if time_file and ops_file:
                     0.0
                 )
                 
-                # UPDATED: Enforces ascending payload margins sorting arrays seamlessly
-                leaderboard_rev = leaderboard_rev.sort_values(by='Pay Pct', ascending=True)
+                # UPDATED: Enforces highest to lowest descending payload sorting parameter mapping loop safely
+                leaderboard_rev = leaderboard_rev.sort_values(by='Pay Pct', ascending=False)
                 
                 leaderboard_rev['Total Clocked'] = leaderboard_rev['Total_Weekly_Clocked_Hrs'].apply(format_hm)
                 leaderboard_rev['Total Assigned Revenue'] = leaderboard_rev['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
