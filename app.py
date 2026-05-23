@@ -15,9 +15,6 @@ st.markdown("""
     [data-testid="stSelectbox"] { display: none !important; }
     div[data-baseweb="tab-list"] { display: none !important; }
     h1 { display: none !important; }
-    .hide-on-print { display: none !important; }
-    .stAlert { display: none !important; }
-    
     .main .block-container {
         max-width: 100% !important;
         width: 100% !important;
@@ -98,7 +95,7 @@ def parse_diff_to_hours(val):
         pass
     return 0.0
 
-# UPDATED: Extended lookups to support 'nate' or 'nathan' strings securely
+# HELPER FUNCTION: Calculates hyper-precise weekly assumed pay based on mapped team profiles
 def get_assumed_pay(row):
     nl = str(row['Name']).lower()
     clocked = row['Total_Weekly_Clocked_Hrs']
@@ -169,6 +166,23 @@ def highlight_consistency(s):
             styles.append('')
     return styles
 
+# Custom highlight engine to cross-examine targets between 20.0% and 30.0%
+def highlight_pay_pct_col(s):
+    styles = []
+    for val in s:
+        if val == '-' or pd.isna(val):
+            styles.append('')
+            continue
+        try:
+            v = float(str(val).replace('%', ''))
+            if 20.0 <= v <= 30.0:
+                styles.append('background-color: #e6f4ea; color: #137333; font-weight: bold;')
+            else:
+                styles.append('background-color: #ffcccc; color: #990000;')
+        except:
+            styles.append('')
+    return styles
+
 # --- Advanced Reporting Block Function ---
 def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, daily_route, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
@@ -197,7 +211,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     
     lost_hrs = final_df[final_df['Total_Weekly_Diff_Hrs'] > 0]['Total_Weekly_Diff_Hrs'].sum()
     
-    # UPDATED: Expanded check to dynamically map Nathan Smith's base leakage parameter seamlessly
     def get_custom_loss(row, fallback):
         nl = str(row['Name']).lower()
         diff = row['Total_Weekly_Diff_Hrs']
@@ -294,8 +307,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
             elif hrs > 35:
                 status = "⚠️ High Overtime Risk"
                 ot_hrs = "-"
-            else:
-                status = "✅ Safe Strategy"
+            else = "✅ Safe Strategy"
                 ot_hrs = "-"
         ot_rows.append({"Name": tech_name, "Weekly Clocked": format_hm(hrs), "Pace Status": status, "Overtime Hours": ot_hrs})
     
@@ -876,6 +888,7 @@ if time_file and ops_file:
         final_df['Total_Weekly_Diff_Hrs'] = final_df['Total_Weekly_Clocked_Hrs'] - final_df['Total_Weekly_Job_Hrs']
         final_df['Daily_Avg_Diff_Hrs'] = np.where(final_df['Days_Worked'] > 0, final_df['Total_Weekly_Diff_Hrs'] / final_df['Days_Worked'], 0.0)
         
+        # --- BU ISOLATED EFFICIENCY CALCULATION ENGINE (WEIGHTED GOALS) ---
         final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
         final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * (3 + (25 / 60.0))
         final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
@@ -1202,7 +1215,7 @@ if time_file and ops_file:
                     ])
                     st.dataframe(store_stats, use_container_width=True)
 
-            # UPDATED CONSOLIDATED DASHBOARD PANEL: Swapped gross leverage multiples out for raw "Pay % of Revenue" percentage conversions
+            # UPDATED: Re-mapped text parameters and added the alert styling array overlay safely
             if "📊 Macro Financial Performance Dashboard" in test_choices:
                 st.markdown("### **📊 Macro Financial Performance Dashboard**")
                 st.markdown("*(Target Bracket Goal: **20.0% to 30.0%** of gross ticket values paid out as payroll cost)*")
@@ -1230,18 +1243,20 @@ if time_file and ops_file:
                     rev_per_hour_df['Assumed Pay Amount'] = rev_per_hour_df.apply(get_assumed_pay, axis=1)
                     rev_per_hour_df['Assumed Pay'] = rev_per_hour_df['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
                     
-                    # UPDATED: Direct percentage calculation instead of historical multiplier strings
                     rev_per_hour_df['Pay Pct'] = np.where(
                         rev_per_hour_df['Total_Assigned_Revenue'] > 0,
                         (rev_per_hour_df['Assumed Pay Amount'] / rev_per_hour_df['Total_Assigned_Revenue']) * 100,
                         0.0
                     )
-                    rev_per_hour_df['Pay % of Revenue'] = rev_per_hour_df['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
+                    rev_per_hour_df['Pay % vs Assigned Revenue'] = rev_per_hour_df['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
                     
                     show_rev_per_hour = rev_per_hour_df.sort_values(by='Rev_Per_Clocked_Hr', ascending=False)[
-                        ['Name', 'Total Clocked', 'Total Assigned Value', 'Gross Revenue / Clocked Hour', 'Assumed Pay', 'Pay % of Revenue']
+                        ['Name', 'Total Clocked', 'Total Assigned Value', 'Gross Revenue / Clocked Hour', 'Assumed Pay', 'Pay % vs Assigned Revenue']
                     ]
-                    st.dataframe(show_rev_per_hour.reset_index(drop=True), use_container_width=True)
+                    
+                    # UPDATED: Enforces target conditional color codes dynamically onto this table view
+                    styled_rev_per_hour = show_rev_per_hour.reset_index(drop=True).style.apply(highlight_pay_pct_col, subset=['Pay % vs Assigned Revenue'])
+                    st.dataframe(styled_rev_per_hour, use_container_width=True)
 
             if "📊 Business Unit Revenue Velocity" in test_choices:
                 st.markdown("### **📊 Business Unit Revenue Velocity**")
@@ -1253,7 +1268,7 @@ if time_file and ops_file:
                 bu_rev['Revenue Share %'] = bu_rev['Revenue Share %'].apply(lambda x: f"{x:.1f}%")
                 st.dataframe(bu_rev[['Business Unit', 'Total Revenue', 'Revenue Share %']].reset_index(drop=True), use_container_width=True)
 
-            # UPDATED BOARD: Injected percentage evaluation criteria cleanly inside the primary assigned yield table 
+            # UPDATED BOARD: Added exact 'Pay % vs Assigned Revenue' column mappings with dynamic color styling engine activated here too
             if "🏆 Top Revenue Producer Leaderboard" in test_choices:
                 st.markdown("### **🏆 Top Revenue Producer Leaderboard**")
                 st.markdown("*(Ranks all active technicians cleanly by raw dollar value injected into division gross accounts. Target Goal: **20.0% - 30.0%**)*")
@@ -1270,10 +1285,12 @@ if time_file and ops_file:
                     (leaderboard_rev['Assumed Pay Amount'] / leaderboard_rev['Total_Assigned_Revenue']) * 100,
                     0.0
                 )
-                leaderboard_rev['Pay % of Revenue'] = leaderboard_rev['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
+                leaderboard_rev['Pay % vs Assigned Revenue'] = leaderboard_rev['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
                 
-                show_leaderboard_rev = leaderboard_rev[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Revenue', 'Assumed Pay', 'Pay % of Revenue']]
-                st.dataframe(show_leaderboard_rev.reset_index(drop=True), use_container_width=True)
+                show_leaderboard_rev = leaderboard_rev[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Revenue', 'Assumed Pay', 'Pay % vs Assigned Revenue']]
+                
+                styled_leaderboard_rev = show_leaderboard_rev.reset_index(drop=True).style.apply(highlight_pay_pct_col, subset=['Pay % vs Assigned Revenue'])
+                st.dataframe(styled_leaderboard_rev, use_container_width=True)
             
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
