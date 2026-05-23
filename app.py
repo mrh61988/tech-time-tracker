@@ -195,11 +195,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
     # === BOSS TOOLS SECTION ===
     st.header("💼 Boss Tools (Financials & Efficiency)")
     
-    b_col1, b_col2, b_col3, b_col4 = st.columns(4)
-    with b_col1:
-        st.markdown("**Calculate Lost Revenue**")
-        rate = st.number_input("Fallback Rate for Unmapped Techs ($)", value=25.0, step=1.0, key=f"rate_{tab_key}")
-        
+    # Compute tracking totals at the backend level first
     total_clocked = final_df['Total_Weekly_Clocked_Hrs'].sum()
     total_job = final_df['Total_Weekly_Job_Hrs'].sum()
     efficiency = (total_job / total_clocked * 100) if total_clocked > 0 else 0
@@ -215,6 +211,12 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
     
     lost_hrs = final_df[final_df['Total_Weekly_Diff_Hrs'] > 0]['Total_Weekly_Diff_Hrs'].sum()
     
+    # High-density 6-column unified executive layout row banner
+    b_col1, b_col2, b_col3, b_col4, b_col5, b_col6 = st.columns([1.3, 1, 1, 1, 1, 1])
+    
+    with b_col1:
+        rate = st.number_input("Fallback Rate ($/hr)", value=25.0, step=1.0, key=f"rate_{tab_key}")
+        
     def get_custom_loss(row, fallback):
         nl = str(row['Name']).lower()
         diff = row['Total_Weekly_Diff_Hrs']
@@ -228,14 +230,11 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
 
     lost_money = final_df.apply(lambda r: get_custom_loss(r, rate), axis=1).sum()
     
-    with b_col2: st.metric(label="Total Unaccounted Hours", value=f"{lost_hrs:.1f} hrs")
-    with b_col3: st.metric(label="Financial Leakage (Loss)", value=f"${lost_money:,.2f}")
-    with b_col4: st.metric(label="Overall Div Efficiency", value=f"{efficiency:.1f}%")
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    bu_col1, bu_col2, bu_col3 = st.columns(3)
-    with bu_col1: st.metric(label="LSI (Simple Installs) Efficiency", value=f"{lsi_eff:.1f}%", delta=f"{total_lsi:.1f} Job Hrs", delta_color="off")
-    with bu_col2: st.metric(label="Water Heaters Efficiency", value=f"{wh_eff:.1f}%", delta=f"{total_wh:.1f} Job Hrs", delta_color="off")
+    with b_col2: st.metric(label="Total Unaccounted", value=f"{lost_hrs:.1f} hrs")
+    with b_col3: st.metric(label="Financial Leakage", value=f"${lost_money:,.2f}")
+    with b_col4: st.metric(label="Overall Efficiency", value=f"{efficiency:.1f}%")
+    with b_col5: st.metric(label="LSI Efficiency", value=f"{lsi_eff:.1f}%", delta=f"{total_lsi:.1f} Job Hrs", delta_color="off")
+    with b_col6: st.metric(label="Water Heaters Eff", value=f"{wh_eff:.1f}%", delta=f"{total_wh:.1f} Job Hrs", delta_color="off")
 
     st.markdown("<br>", unsafe_allow_html=True)
     trend_col, leaderboard_col = st.columns(2)
@@ -308,7 +307,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # === REWARDS ===
+    # === OPS MANAGER TOOLS ===
     st.header("📊 Ops Manager Tools (Benchmarking & Performance)")
     bench_col, gold_star_col = st.columns(2)
     with bench_col:
@@ -758,7 +757,7 @@ if time_file and ops_file:
             total_assumed_pay = rev_per_hour_df_calc['Assumed Pay Amount'].sum()
             pay_ratio_pct = (total_assumed_pay / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
             
-            # FIXED: Aligned top performance stats metrics on the exact same row using container columns
+            # FIXED: Positioned summary KPI cards side-by-side symmetrically on the same level to resolve 'tab_key' positional issues
             dash_metric_col1, dash_metric_col2, dash_metric_col3 = st.columns(3)
             with dash_metric_col1:
                 st.metric(label="Division Gross Invoiced Volume", value=f"${raw_unsplit_volume:,.2f}")
@@ -788,10 +787,7 @@ if time_file and ops_file:
                 st.markdown("**📈 Pay Ratio per Clocked Hour**")
                 rev_per_hour_df = final_df.copy()
                 rev_per_hour_df['Total Clocked'] = rev_per_hour_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
-                
-                # FIXED: Injected Total Jobs as column #2 into layout columns parameter mapping
                 rev_per_hour_df['Total Jobs'] = rev_per_hour_df['Total_Weekly_Job_Count'].astype(int)
-                
                 rev_per_hour_df['Total Assigned Value'] = rev_per_hour_df['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
                 rev_per_hour_df['Assumed Pay Amount'] = rev_per_hour_df.apply(get_assumed_pay, axis=1)
                 rev_per_hour_df['Assumed Pay'] = rev_per_hour_df['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
@@ -821,7 +817,7 @@ if time_file and ops_file:
                 tech_data = final_df[final_df['Name'] == selected_tech].iloc[0]
                 report_data = []
                 for full_day, short_day in {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}.items():
-                    report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(tech_data[short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])})
+                    report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(tech_data[tech_data['Name'] == selected_tech].iloc[0][short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])})
                 report_data.append({"Day": "TOTAL WEEKLY", "Jobs": int(tech_data['Total_Weekly_Job_Count']), "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']), "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']), "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])})
                 st.dataframe(pd.DataFrame(report_data), use_container_width=True)
 
