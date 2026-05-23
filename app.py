@@ -638,6 +638,12 @@ if time_file and ops_file:
         
         for col in time_cols: ops_df[col] = pd.to_numeric(ops_df[col], errors='coerce').fillna(0) / ops_df['Tech_Count_On_Job']
         ops_df['Total Invoice Amount'] = pd.to_numeric(ops_df.get('Total Invoice Amount', pd.Series([0])), errors='coerce').fillna(0.0) / ops_df['Tech_Count_On_Job']
+        
+        # --- CRITICAL PIPELINE CORRECTION: Compute task total time components first BEFORE reading them anywhere else ---
+        ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
+        ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On The Way - Completed Total Time in Status.1', 0)) / 3600.0
+        ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
+        ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
         unexploded_ops = ops_df.copy()
         
         ts_cols = ['Lowes Store - Start Timestamp', 'On The Way - Start Timestamp', 'In Progress - Start Timestamp', 'On The Way - Start Timestamp.1', 'In Progress - Start Timestamp.1']
@@ -667,11 +673,6 @@ if time_file and ops_file:
         ops_df['Job_Date_Parsed'] = pd.to_datetime(ops_df['Job_Date'].astype(str).str.split(' GMT').str[0], errors='coerce')
         ops_df['Day_of_Week'] = ops_df['Job_Date_Parsed'].dt.day_name().str[:3]
         ops_df['Short_Date'] = ops_df['Job_Date_Parsed'].dt.strftime('%m-%d-%Y')
-        
-        ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
-        ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On The Way - Completed Total Time in Status.1', 0)) / 3600.0
-        ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
-        ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
 
         ops_df['Assigned Team Members'] = ops_df['Assigned Team Members'].astype(str).str.split(',')
         ops_df = ops_df.explode('Assigned Team Members')
@@ -745,7 +746,7 @@ if time_file and ops_file:
         final_df['Adjustment_Hrs'] = final_df['Name'].map(adjustments).fillna(0.0)
         final_df['Total_Weekly_Job_Hrs'] = final_df['Total_Weekly_Job_Hrs'] + final_df['Adjustment_Hrs']
         
-        # --- CRITICAL PIPELINE CORRECTION: Compute targets first BEFORE any UI component reads final_df parameters ---
+        # Enforce budget targets calculation sequence
         final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
         final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * (3 + (25 / 60.0))
         final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
@@ -789,27 +790,15 @@ if time_file and ops_file:
         bu_summary_df['Name'] = final_df['Name']
         bu_summary_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
         bu_summary_df['Total Jobs'] = final_df['Total_Weekly_Job_Count'].astype(int)
-        
         bu_summary_df['LSI Jobs'] = final_df['Simple_Installs_Count'].astype(int)
         bu_summary_df['LSI Tracked Hours'] = final_df['Simple Installs']
         bu_summary_df['LSI Efficiency'] = final_df['Simple Installs Eff']
         bu_summary_df['WH Jobs'] = final_df['Water_Heaters_Count'].astype(int)
         bu_summary_df['WH Tracked Hours'] = final_df['Water Heaters']
         bu_summary_df['WH Efficiency'] = final_df['Water Heaters Eff']
-        
         bu_summary_df['Total Efficiency'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, (final_df['Total_Weekly_Job_Hrs'] / final_df['Total_Weekly_Clocked_Hrs']) * 100, 0.0)
         bu_summary_df['Total Efficiency'] = bu_summary_df['Total Efficiency'].apply(lambda x: f"{x:.1f}%")
         display_dfs['Weekly'] = bu_summary_df
-        
-        export_df = pd.DataFrame()
-        export_df['Name'] = final_df['Name']
-        export_df['Days Worked'] = final_df['Days_Worked']
-        export_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
-        export_df['Total Job Time'] = final_df['Total_Weekly_Job_Hrs'].apply(format_hm)
-        export_df['Manual Adj'] = final_df['Adjustment_Hrs'].apply(format_hm)
-        export_df['Daily Avg Diff'] = final_df['Daily_Avg_Diff_Hrs'].apply(format_hm) 
-        export_df['Total Diff'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
-        for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]: export_df[f'{d} Diff'] = final_df[d + '_Diff_Hrs'].apply(format_hm)
         
         tab_names = ["Weekly Summary", "Manager Overview", "Individual Tech Report", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "🧪 Test Section"]
         tabs = st.tabs(tab_names)
@@ -859,7 +848,6 @@ if time_file and ops_file:
             for tech in final_df['Name'].unique():
                 st.markdown(f"#### **{tech}**")
                 tech_data = final_df[final_df['Name'] == tech].iloc[0]
-                tech_days_worked = tech_data['Days_Worked']
                 report_data = []
                 for full_day, short_day in {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}.items():
                     report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(tech_data[short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])})
@@ -872,7 +860,6 @@ if time_file and ops_file:
             selected_tech = st.selectbox("Select a Technician:", final_df['Name'].unique())
             if selected_tech:
                 tech_data = final_df[final_df['Name'] == selected_tech].iloc[0]
-                tech_days_worked = tech_data['Days_Worked']
                 report_data = []
                 for full_day, short_day in {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}.items():
                     report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(tech_data[short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])})
