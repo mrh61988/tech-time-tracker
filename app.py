@@ -310,7 +310,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # === OPS MANAGER TOOLS ===
+    # === REWARDS ===
     st.header("📊 Ops Manager Tools (Benchmarking & Performance)")
     bench_col, gold_star_col = st.columns(2)
     with bench_col:
@@ -524,7 +524,7 @@ if time_file and ops_file:
         data = []
         for i in range(0, len(time_lines), 9):
             if i + 8 < len(time_lines):
-                name = time_lines[i].strip().rstrip(',').strip('"') # FIXED STRING SANITATION
+                name = time_lines[i].strip().rstrip(',').strip('"')
                 sun = time_lines[i+1].strip()
                 mon = time_lines[i+2].strip()
                 tue = time_lines[i+3].strip()
@@ -658,7 +658,6 @@ if time_file and ops_file:
         final_df['Adjustment_Hrs'] = final_df['Name'].map(adjustments).fillna(0.0)
         final_df['Total_Weekly_Job_Hrs'] = final_df['Total_Weekly_Job_Hrs'] + final_df['Adjustment_Hrs']
         
-        # Enforce budget targets calculation sequence
         final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
         final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * (3 + (25 / 60.0))
         final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
@@ -695,8 +694,12 @@ if time_file and ops_file:
         final_df['Water Heaters Eff'] = np.where(final_df['Assumed_WH_Clocked'] > 0, (final_df['Water_Heaters_Hrs'] / final_df['Assumed_WH_Clocked']) * 100, 0.0)
         final_df['LSI_Eff_Raw'] = final_df['Simple Installs Eff']
         final_df['WH_Eff_Raw'] = final_df['Water Heaters Eff']
-        final_df['Simple Installs Eff'] = final_df['Simple Installs Eff'].apply(lambda x: f"{x:.1f}%")
-        final_df['Water Heaters Eff'] = final_df['Water Heaters Eff'].apply(lambda x: f"{x:.1f}%")
+        
+        # FIXED: Sort layout matrix ascending/descending exactly by raw float WH efficiency fields before string parsing
+        final_df = final_df.sort_values(by='WH_Eff_Raw', ascending=False)
+        
+        final_df['Simple Installs Eff'] = final_df['LSI_Eff_Raw'].apply(lambda x: f"{x:.1f}%")
+        final_df['Water Heaters Eff'] = final_df['WH_Eff_Raw'].apply(lambda x: f"{x:.1f}%")
         
         bu_summary_df = pd.DataFrame()
         bu_summary_df['Name'] = final_df['Name']
@@ -717,17 +720,35 @@ if time_file and ops_file:
         
         with tabs[0]:
             st.markdown('<h3>Weekly Efficiency Summary</h3>', unsafe_allow_html=True)
-            st.dataframe(display_dfs['Weekly'].reset_index(drop=True), use_container_width=True)
+            # FIXED: Added the requested target goal specs to summary dashboard context
+            st.markdown("💡 **Operational Baselines Tasks / Goals per Business Unit:** `Water Heaters Goal = 3:25 hrs` &nbsp;&nbsp;|&nbsp;&nbsp; `Simple Installs Goal = 2:00 hrs` *(Table automatically sorted by highest WH Efficiency)*")
             
+            # FIXED: Active highlighting style block injected cleanly into 'WH Efficiency' column matrix fields
+            try:
+                styled_weekly = display_dfs['Weekly'].reset_index(drop=True).style.set_properties(**{'background-color': '#fff3cd', 'font-weight': 'bold', 'color': '#856404;'}, subset=['WH Efficiency'])
+                st.dataframe(styled_weekly, use_container_width=True)
+            except Exception:
+                st.dataframe(display_dfs['Weekly'].reset_index(drop=True), use_container_width=True)
+            
+            # UNIQUE PLACEMENT DIRECTLY IN WEEKLY SUMMARY TAB
             st.markdown("<br><hr><h3>📊 Macro Financial Performance Dashboard</h3>", unsafe_allow_html=True)
             st.markdown("*(Unified executive layout tracking top-line volume. Green highlight = under 20% for hourly/salaried, under 34% for piece-rate. Sorted highest to lowest payload percentage)*")
             m_col1, m_col2 = st.columns([1, 2])
             with m_col1:
                 st.metric(label="Division Gross Invoiced Volume", value=f"${unexploded_ops['Total Invoice Amount'].sum():,.2f}")
+                
+                # FIXED: Render dynamic top-line gross calculations segmented straight by product category tiers
+                st.markdown("<br>**📈 Gross Invoiced Revenue by Business Unit**", unsafe_allow_html=True)
+                bu_gross_rev = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].sum().reset_index()
+                bu_gross_rev.columns = ['Business Unit', 'Gross Invoiced Revenue Raw']
+                bu_gross_rev['Gross Invoiced Revenue'] = bu_gross_rev['Gross Invoiced Revenue Raw'].apply(lambda x: f"${x:,.2f}")
+                st.dataframe(bu_gross_rev[['Business Unit', 'Gross Invoiced Revenue']].reset_index(drop=True), use_container_width=True)
+                
+                st.markdown("<br>**🎯 Average Ticket Size per BU**", unsafe_allow_html=True)
                 bu_avg_ticket = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].mean().reset_index()
-                bu_avg_ticket.columns = ['Business Unit', 'Average Ticket Size']
-                bu_avg_ticket['Average Ticket Size'] = bu_avg_ticket['Average Ticket Size'].apply(lambda x: f"${x:,.2f}")
-                st.dataframe(bu_avg_ticket.reset_index(drop=True), use_container_width=True)
+                bu_avg_ticket.columns = ['Business Unit', 'Average Ticket Size Raw']
+                bu_avg_ticket['Average Ticket Size'] = bu_avg_ticket['Average Ticket Size Raw'].apply(lambda x: f"${x:,.2f}")
+                st.dataframe(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True), use_container_width=True)
             with m_col2:
                 st.markdown("**📈 Pay Ratio per Clocked Hour**")
                 rev_per_hour_df = final_df.copy()
