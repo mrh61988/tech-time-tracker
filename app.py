@@ -181,7 +181,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     
     lost_hrs = final_df[final_df['Total_Weekly_Diff_Hrs'] > 0]['Total_Weekly_Diff_Hrs'].sum()
     
-    # UPDATED: Injected custom salary mapping parameters for Michael Owens ($31.25/hr baseline)
     def get_custom_loss(row, fallback):
         nl = str(row['Name']).lower()
         diff = row['Total_Weekly_Diff_Hrs']
@@ -1080,7 +1079,6 @@ if time_file and ops_file:
                     else:
                         st.info("Could not calculate context-switching averages for this set.")
 
-            # UPDATED: Included Michael Owens in Salaried profile tracking logic loop securely
             if "🕵️ The \"Ghost Punch\" & Payroll Discrepancy Auditor" in test_choices:
                 st.markdown("### **🕵️ The \"Ghost Punch\" & Payroll Discrepancy Auditor**")
                 st.markdown("*(Scans files day-by-day to cross-verify paid hours against active field activity timestamps)*")
@@ -1121,7 +1119,7 @@ if time_file and ops_file:
                     ])
                     st.dataframe(store_stats, use_container_width=True)
 
-            # UPDATED: Tied Michael Owens to Salary status loops cleanly with a fixed 40-hour weekly baseline goal threshold validation mapping rule
+            # UPDATED: Overtime Horizon Engine now isolates pacing status & flags red formatting dynamically based on your custom thresholds
             if "🚨 Fleet Overtime Horizon Predictor" in test_choices:
                 st.markdown("### **🚨 Fleet Overtime Horizon Predictor**")
                 st.markdown("*(Scans overall accumulated clocked hours to calculate incurred overtime margins and pacing thresholds)*")
@@ -1132,10 +1130,16 @@ if time_file and ops_file:
                     hrs = row['Total_Weekly_Clocked_Hrs']
                     
                     if "sean marble" in nl or "michael owens" in nl:
-                        status = "✅ Salary - Exempt"
+                        if hrs < 35.0:
+                            status = "⚠️ Low Volume Warning (Under 35 Hrs)"
+                        else:
+                            status = "✅ Salary - Exempt"
                         ot_hrs = "-"
                     elif "bryan" in nl or "erik" in nl:
-                        status = "✅ Piece Rate - Exempt"
+                        if hrs > 45.0:
+                            status = "🚨 High Burnout Risk (Over 45 Hrs)"
+                        else:
+                            status = "✅ Piece Rate - Exempt"
                         ot_hrs = "-"
                     else:
                         if hrs > 40:
@@ -1148,7 +1152,21 @@ if time_file and ops_file:
                             status = "✅ Safe Strategy"
                             ot_hrs = "-"
                     ot_rows.append({"Name": tech_name, "Weekly Clocked": format_hm(hrs), "Pace Status": status, "Overtime Hours": ot_hrs})
-                st.dataframe(pd.DataFrame(ot_rows), use_container_width=True)
+                
+                if ot_rows:
+                    ot_predictor_df = pd.DataFrame(ot_rows)
+                    def style_ot_predictor(row):
+                        st_val = row['Pace Status']
+                        if "🚨" in st_val or "⚠️ Low Volume" in st_val:
+                            return ['background-color: #ffcccc; color: #990000;'] * len(row)
+                        elif "⚠️ High Overtime" in st_val:
+                            return ['background-color: #fff3cd; color: #856404;'] * len(row)
+                        return [''] * len(row)
+                    try:
+                        styled_ot = ot_predictor_df.reset_index(drop=True).style.hide(axis="index").apply(style_ot_predictor, axis=1)
+                    except Exception:
+                        styled_ot = ot_predictor_df.reset_index(drop=True).style.apply(style_ot_predictor, axis=1)
+                    st.dataframe(styled_ot, use_container_width=True)
 
             if "🏁 The Peer-to-Peer \"Coaching Corner\" Overlay" in test_choices:
                 st.markdown("### **🏁 The Peer-to-Peer \"Coaching Corner\" Overlay**")
