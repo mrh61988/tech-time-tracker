@@ -15,6 +15,8 @@ st.markdown("""
     [data-testid="stSelectbox"] { display: none !important; }
     div[data-baseweb="tab-list"] { display: none !important; }
     h1 { display: none !important; }
+    .hide-on-print { display: none !important; }
+    .stAlert { display: none !important; }
     
     .main .block-container {
         max-width: 100% !important;
@@ -305,7 +307,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
             
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # === OPS MANAGER TOOLS (BENCHMARKING & REWARDS) ===
+    # === OPS MANAGER TOOLS ===
     st.header("📊 Ops Manager Tools (Benchmarking & Performance)")
     bench_col, gold_star_col = st.columns(2)
     with bench_col:
@@ -451,7 +453,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
             poor_routes['Drive Time'] = poor_routes['Drive_Time_Hrs'].apply(format_hm)
             poor_routes['Work Time'] = poor_routes['In_Progress_Time_Hrs'].apply(format_hm)
             st.dataframe(poor_routes[['Assigned Team Members', 'Short_Date', 'Job_Count', 'Drive Time', 'Work Time', 'Drive %']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date', 'Job_Count': 'Jobs'}), use_container_width=True)
-        else: st.success("Great routing! No days hit greater than 40% drive time.")
+        else: st.success("Great routing!")
 
     st.markdown("<br>", unsafe_allow_html=True)
     launch_col, launch_empty_col = st.columns(2)
@@ -474,7 +476,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
                 except Exception: st.dataframe(tech_launches_df.sort_values(by='First_Punch', ascending=False)[['Short_Date', 'First Launch']].rename(columns={'Short_Date': 'Date'}).reset_index(drop=True).style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'}), use_container_width=True)
         else: st.success("Perfect deployment momentum!")
 
-# Create a clean standalone sandbox controller to support custom percentage highlights safely
 def run_sandbox_tab(unexploded_ops, ops_df, final_df, test_choices):
     if "🏆 The \"Golden Ratio\" Margin Predictor" in test_choices:
         st.markdown("### **🏆 The Golden Ratio Margin Predictor**")
@@ -557,7 +558,6 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, test_choices):
             rev_per_hour_df['Assumed Pay'] = rev_per_hour_df['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
             rev_per_hour_df['Pay Pct'] = np.where(rev_per_hour_df['Total_Assigned_Revenue'] > 0, (rev_per_hour_df['Assumed Pay Amount'] / rev_per_hour_df['Total_Assigned_Revenue']) * 100, 0.0)
             rev_per_hour_df['Pay % vs Assigned Revenue'] = rev_per_hour_df['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
-            
             show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[['Name', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue']]
             st.dataframe(show_rev_per_hour.reset_index(drop=True).style.apply(highlight_pay_pct_row, axis=1), use_container_width=True)
 
@@ -584,6 +584,13 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, test_choices):
         st.dataframe(show_leaderboard_rev.reset_index(drop=True).style.apply(highlight_pay_pct_row, axis=1), use_container_width=True)
 
 # --- RUN EXECUTION PIPELINE ---
+# Create file uploading interfaces globally first so scoping cannot fail
+col1, col2 = st.columns(2)
+with col1:
+    time_file = st.file_uploader("Upload Time Sheet (CSV)", type=['csv'])
+with col2:
+    ops_file = st.file_uploader("Upload Lowes Ops Export (CSV)", type=['csv'])
+
 if time_file and ops_file:
     try:
         EXCLUDE_NAMES = ['Luis Ortiz', 'Roman Twardoz', 'Dave Barber Show Low (Contactor)', 'Oak Wrench AZ Jarrod Scully (Contractor)', 'Presidio Plumbing Eric (Contractor)', 'AtoZ Remodel LLC Ken (Contractor)', 'Steve Walpole']
@@ -630,7 +637,18 @@ if time_file and ops_file:
         for c in available_ts_cols: ops_df[c + '_dt'] = pd.to_datetime(ops_df[c].astype(str).str.split(' GMT').str[0], errors='coerce')
         available_ts_dt_cols = [c + '_dt' for c in available_ts_cols]
         ops_df['Earliest_Start'] = ops_df[available_ts_dt_cols].min(axis=1)
-        ops_df['Earliest_Status_Col'] = ops_df.apply(lambda r: min([c for c in available_ts_dt_cols if pd.notna(r[c])], default='Unknown'), axis=1)
+        
+        def get_first_status_col(row):
+            min_t = pd.NaT
+            best_c = 'Unknown'
+            for c in available_ts_dt_cols:
+                t = row[c]
+                if pd.notna(t):
+                    if pd.isna(min_t) or t < min_t:
+                        min_t = t
+                        best_c = c
+            return best_c
+        ops_df['Earliest_Status_Col'] = ops_df.apply(get_first_status_col, axis=1)
         def map_status(col):
             if 'Store' in str(col): return 'Lowes Store'
             if 'Way' in str(col): return 'On The Way'
@@ -660,14 +678,14 @@ if time_file and ops_file:
         job_time_pivot = job_time_agg.pivot(index='Assigned Team Members', columns='Day_of_Week', values='Total_Job_Time_Hours').reset_index().rename(columns={'Assigned Team Members': 'Name'}).fillna(0)
         for day in days:
             if day not in job_time_pivot.columns: job_time_pivot[day] = 0.0
-        job_time_pivot = job_time_pivot.rename(columns={day: day + '_Job_Hrs' for day in days})
+        job_time_pivot = job_time_pivot.rename(columns={d: d + '_Job_Hrs' for d in days})
         job_time_pivot['Total_Weekly_Job_Hrs'] = job_time_pivot[[d + '_Job_Hrs' for d in days]].sum(axis=1)
         
         job_count_agg = ops_df.groupby(['Assigned Team Members', 'Day_of_Week']).size().reset_index(name='Job_Count')
         job_count_pivot = job_count_agg.pivot(index='Assigned Team Members', columns='Day_of_Week', values='Job_Count').reset_index().rename(columns={'Assigned Team Members': 'Name'}).fillna(0)
         for day in days:
             if day not in job_count_pivot.columns: job_count_pivot[day] = 0
-        job_count_pivot = job_count_pivot.rename(columns={day: day + '_Job_Count' for day in days})
+        job_count_pivot = job_count_pivot.rename(columns={d: d + '_Job_Count' for d in days})
         job_count_pivot['Total_Weekly_Job_Count'] = job_count_pivot[[d + '_Job_Count' for d in days]].sum(axis=1)
         
         daily_route = ops_df.groupby(['Assigned Team Members', 'Short_Date']).agg(Drive_Time_Hrs=('Drive_Time_Hrs', 'sum'), In_Progress_Time_Hrs=('In_Progress_Time_Hrs', 'sum'), Total_Job_Time_Hours=('Total_Job_Time_Hours', 'sum'), Job_Count=('Total_Job_Time_Hours', 'size')).reset_index()
@@ -744,7 +762,7 @@ if time_file and ops_file:
         export_df['Manual Adj'] = final_df['Adjustment_Hrs'].apply(format_hm)
         export_df['Daily Avg Diff'] = final_df['Daily_Avg_Diff_Hrs'].apply(format_hm) 
         export_df['Total Diff'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
-        for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]: export_df[f'{d} Diff'] = final_df[day + '_Diff_Hrs'].apply(format_hm)
+        for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]: export_df[f'{d} Diff'] = final_df[d + '_Diff_Hrs'].apply(format_hm)
         
         tab_names = ["Weekly Summary", "Manager Overview", "Individual Tech Report", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "🧪 Test Section"]
         tabs = st.tabs(tab_names)
