@@ -253,19 +253,52 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
             st.dataframe(styled_leaderboard, use_container_width=True)
         else:
             st.info("No tech data available to display.")
+
+    # PROMOTED TO PRODUCTION: Fleet Overtime Horizon Predictor inside Boss Tools
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.subheader("🚨 Fleet Overtime Horizon Predictor")
+    st.markdown("*(Monitors pacing thresholds. Salaried under 35 hrs and Piece-Rate over 45 hrs flag red automatically)*")
+    ot_rows = []
+    for idx, row in final_df.iterrows():
+        tech_name = row['Name']
+        nl = tech_name.lower()
+        hrs = row['Total_Weekly_Clocked_Hrs']
+        
+        if "sean marble" in nl or "michael owens" in nl:
+            status = "⚠️ Low Volume Warning (Under 35 Hrs)" if hrs < 35.0 else "✅ Salary - Exempt"
+            ot_hrs = "-"
+        elif "bryan" in nl or "erik" in nl:
+            status = "🚨 High Burnout Risk (Over 45 Hrs)" if hrs > 45.0 else "✅ Piece Rate - Exempt"
+            ot_hrs = "-"
+        else:
+            if hrs > 40:
+                status = "🚨 Overtime Incurred"
+                ot_hrs = format_hm(hrs - 40)
+            elif hrs > 35:
+                status = "⚠️ High Overtime Risk"
+                ot_hrs = "-"
+            else:
+                status = "✅ Safe Strategy"
+                ot_hrs = "-"
+        ot_rows.append({"Name": tech_name, "Weekly Clocked": format_hm(hrs), "Pace Status": status, "Overtime Hours": ot_hrs})
+    
+    if ot_rows:
+        ot_predictor_df = pd.DataFrame(ot_rows)
+        def style_ot_predictor(row):
+            st_val = row['Pace Status']
+            if "🚨" in st_val or "⚠️ Low Volume" in st_val:
+                return ['background-color: #ffcccc; color: #990000;'] * len(row)
+            elif "⚠️ High Overtime" in st_val:
+                return ['background-color: #fff3cd; color: #856404;'] * len(row)
+            return [''] * len(row)
+        try:
+            styled_ot = ot_predictor_df.reset_index(drop=True).style.hide(axis="index").apply(style_ot_predictor, axis=1)
+        except Exception:
+            styled_ot = ot_predictor_df.reset_index(drop=True).style.apply(style_ot_predictor, axis=1)
+        st.dataframe(styled_ot, use_container_width=True)
             
     st.markdown("<br>", unsafe_allow_html=True)
-    csv_data = export_df.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="💾 Download Final Weekly Report (CSV for Payroll/HR)",
-        data=csv_data,
-        file_name="Tech_Time_Weekly_Summary.csv",
-        mime="text/csv",
-        key=f"download_{tab_key}"
-    )
 
-    st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
-    
     # === OPS MANAGER TOOLS (BENCHMARKING & REWARDS) ===
     st.header("📊 Ops Manager Tools (Benchmarking & Performance)")
     
@@ -280,7 +313,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
         div_avg_ip = valid_jobs['In_Progress_Time_Hrs'].mean()
         div_avg_total = valid_jobs['Total_Job_Time_Hours'].mean()
         
-        # Calculate consistency metrics based on the standard deviation of In Progress times
         tech_stats = valid_jobs.groupby('Assigned Team Members').agg(
             Drive_Avg=('Drive_Time_Hrs', 'mean'),
             Store_Avg=('Store_Time_Hrs', 'mean'),
@@ -377,6 +409,20 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     else:
         st.info("No technicians handled both job types this week to establish a comparison matrix.")
 
+    # PROMOTED TO PRODUCTION: Peer-to-Peer Coaching Corner Overlay inside Ops Tools
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.subheader("🏁 The Peer-to-Peer \"Coaching Corner\" Overlay")
+    st.markdown("*(Anonymized mentor baseline layout stack comparing tech efficiency targets with Top 25% performers)*")
+    lsi_top25 = final_df[final_df['LSI_Eff_Raw'] > 0]['LSI_Eff_Raw'].quantile(0.75) if not final_df[final_df['LSI_Eff_Raw'] > 0].empty else 100.0
+    wh_top25 = final_df[final_df['WH_Eff_Raw'] > 0]['WH_Eff_Raw'].quantile(0.75) if not final_df[final_df['WH_Eff_Raw'] > 0].empty else 100.0
+    coaching_data = pd.DataFrame()
+    coaching_data['Name'] = final_df['Name']
+    coaching_data['Your LSI Eff'] = final_df['Simple Installs Eff']
+    coaching_data['Fleet Top 25% LSI'] = f"{lsi_top25:.1f}%"
+    coaching_data['Your WH Eff'] = final_df['Water Heaters Eff']
+    coaching_data['Fleet Top 25% WH'] = f"{wh_top25:.1f}%"
+    st.dataframe(coaching_data, use_container_width=True)
+
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
     # === DISPATCHER TOOLS SECTION ===
@@ -415,7 +461,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
         gaps_df = ops_sorted[ops_sorted['Gap_Hrs'] > 0.75].copy()
         if not gaps_df.empty:
             gaps_df = gaps_df.sort_values(by='Gap_Hrs', ascending=False)
-            
             gaps_df['Gap Length'] = gaps_df['Gap_Hrs'].apply(format_hm)
             gaps_df['End of Job 1'] = gaps_df['Estimated_End'].dt.strftime('%I:%M %p')
             gaps_df['Start of Job 2'] = gaps_df['Next_Job_Start'].dt.strftime('%I:%M %p')
@@ -451,7 +496,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
         st.subheader("🛒 Lowe's Operational Delays")
         st.markdown("*(All logged store visits. Rows highlighted in red show specific jobs that took greater than 45 minutes)*")
         
-        # Calculate summary metrics strictly on jobs over 45 minutes
         excessive_df = ops_df[ops_df['Store_Time_Hrs'] > 0.75].copy()
         total_delayed_store_hrs = excessive_df['Store_Time_Hrs'].sum()
         store_loss_cost = total_delayed_store_hrs * rate
@@ -463,7 +507,6 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
             all_store_df['Store Time'] = all_store_df['Store_Time_Hrs'].apply(format_hm)
             show_store = all_store_df[['Assigned Team Members', 'Short_Date', 'Store Time']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
             
-            # Highlight function targeting rows where time > 45 mins
             def highlight_store_jobs(row):
                 hrs = parse_hm(row['Store Time'])
                 if hrs > 0.75:
@@ -687,7 +730,6 @@ if time_file and ops_file:
             bu_pivot = pd.merge(bu_pivot_hrs, bu_pivot_cnt, on='Assigned Team Members', suffixes=('_hrs', '_cnt'))
             bu_pivot = bu_pivot.rename(columns={'Assigned Team Members': 'Name'})
             
-            # Ensure safety columns exist
             for col in ['Lowes - Simple Installs_hrs', 'Lowes - Water Heaters_hrs', 'Lowes - Simple Installs_cnt', 'Lowes - Water Heaters_cnt']:
                 if col not in bu_pivot.columns:
                     bu_pivot[col] = 0.0
@@ -990,6 +1032,7 @@ if time_file and ops_file:
                     styled_daily = display_dfs[short_day].reset_index(drop=True).style.applymap(highlight_daily, subset=[f'{short_day} Diff'])
                 st.dataframe(styled_daily, use_container_width=True)
 
+        # CLEANED UP TEST TAB: Removed the newly graduated features from choices pool
         with tabs[10]:
             st.header("🧪 Isolated Leaderboard Sandbox")
             st.markdown("Use the selections below to add, remove, or evaluate components without changing the data models in other sections.")
@@ -1000,9 +1043,7 @@ if time_file and ops_file:
                     "🏆 The \"Golden Ratio\" Margin Predictor",
                     "🔄 The \"Context-Switching\" Penalty Alert",
                     "🕵️ The \"Ghost Punch\" & Payroll Discrepancy Auditor",
-                    "🏬 The Lowe's Store Staging Efficiency Scorecard",
-                    "🚨 Fleet Overtime Horizon Predictor",
-                    "🏁 The Peer-to-Peer \"Coaching Corner\" Overlay"
+                    "🏬 The Lowe's Store Staging Efficiency Scorecard"
                 ],
                 default=["🏆 The \"Golden Ratio\" Margin Predictor"],
                 key="sandbox_view_choices"
@@ -1118,69 +1159,6 @@ if time_file and ops_file:
                         {"Store Identifier": "Lowe's Store #0844 (Sample Baseline Row)", "Avg Delay Length": "0:15"}
                     ])
                     st.dataframe(store_stats, use_container_width=True)
-
-            # UPDATED: Overtime Horizon Engine now isolates pacing status & flags red formatting dynamically based on your custom thresholds
-            if "🚨 Fleet Overtime Horizon Predictor" in test_choices:
-                st.markdown("### **🚨 Fleet Overtime Horizon Predictor**")
-                st.markdown("*(Scans overall accumulated clocked hours to calculate incurred overtime margins and pacing thresholds)*")
-                ot_rows = []
-                for idx, row in final_df.iterrows():
-                    tech_name = row['Name']
-                    nl = tech_name.lower()
-                    hrs = row['Total_Weekly_Clocked_Hrs']
-                    
-                    if "sean marble" in nl or "michael owens" in nl:
-                        if hrs < 35.0:
-                            status = "⚠️ Low Volume Warning (Under 35 Hrs)"
-                        else:
-                            status = "✅ Salary - Exempt"
-                        ot_hrs = "-"
-                    elif "bryan" in nl or "erik" in nl:
-                        if hrs > 45.0:
-                            status = "🚨 High Burnout Risk (Over 45 Hrs)"
-                        else:
-                            status = "✅ Piece Rate - Exempt"
-                        ot_hrs = "-"
-                    else:
-                        if hrs > 40:
-                            status = "🚨 Overtime Incurred"
-                            ot_hrs = format_hm(hrs - 40)
-                        elif hrs > 35:
-                            status = "⚠️ High Overtime Risk"
-                            ot_hrs = "-"
-                        else:
-                            status = "✅ Safe Strategy"
-                            ot_hrs = "-"
-                    ot_rows.append({"Name": tech_name, "Weekly Clocked": format_hm(hrs), "Pace Status": status, "Overtime Hours": ot_hrs})
-                
-                if ot_rows:
-                    ot_predictor_df = pd.DataFrame(ot_rows)
-                    def style_ot_predictor(row):
-                        st_val = row['Pace Status']
-                        if "🚨" in st_val or "⚠️ Low Volume" in st_val:
-                            return ['background-color: #ffcccc; color: #990000;'] * len(row)
-                        elif "⚠️ High Overtime" in st_val:
-                            return ['background-color: #fff3cd; color: #856404;'] * len(row)
-                        return [''] * len(row)
-                    try:
-                        styled_ot = ot_predictor_df.reset_index(drop=True).style.hide(axis="index").apply(style_ot_predictor, axis=1)
-                    except Exception:
-                        styled_ot = ot_predictor_df.reset_index(drop=True).style.apply(style_ot_predictor, axis=1)
-                    st.dataframe(styled_ot, use_container_width=True)
-
-            if "🏁 The Peer-to-Peer \"Coaching Corner\" Overlay" in test_choices:
-                st.markdown("### **🏁 The Peer-to-Peer \"Coaching Corner\" Overlay**")
-                st.markdown("*(Anonymized high-performance baseline stack. Compares tech execution against top 25% fleet performance thresholds)*")
-                lsi_top25 = final_df[final_df['LSI_Eff_Raw'] > 0]['LSI_Eff_Raw'].quantile(0.75) if not final_df[final_df['LSI_Eff_Raw'] > 0].empty else 100.0
-                wh_top25 = final_df[final_df['WH_Eff_Raw'] > 0]['WH_Eff_Raw'].quantile(0.75) if not final_df[final_df['WH_Eff_Raw'] > 0].empty else 100.0
-                
-                coaching_data = pd.DataFrame()
-                coaching_data['Name'] = final_df['Name']
-                coaching_data['Your LSI Eff'] = final_df['Simple Installs Eff']
-                coaching_data['Fleet Top 25% LSI'] = f"{lsi_top25:.1f}%"
-                coaching_data['Your WH Eff'] = final_df['Water Heaters Eff']
-                coaching_data['Fleet Top 25% WH'] = f"{wh_top25:.1f}%"
-                st.dataframe(coaching_data, use_container_width=True)
             
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
