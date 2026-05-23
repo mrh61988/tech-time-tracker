@@ -1,4 +1,4 @@
-import streamlit st
+import streamlit as st
 import pandas as pd
 import numpy as np
 
@@ -188,7 +188,7 @@ def highlight_pay_pct_row(row):
     return styles
 
 # --- MAIN BLOCK REPORT ENGINE ---
-def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_df, delayed_launches_df, daily_route, tab_key):
+def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, daily_route, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
     # === BOSS TOOLS SECTION ===
@@ -236,86 +236,22 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_
     with bu_col1: st.metric(label="LSI (Simple Installs) Efficiency", value=f"{lsi_eff:.1f}%", delta=f"{total_lsi:.1f} Job Hrs", delta_color="off")
     with bu_col2: st.metric(label="Water Heaters Efficiency", value=f"{wh_eff:.1f}%", delta=f"{total_wh:.1f} Job Hrs", delta_color="off")
 
-    # === PRODUCTION DEPLOYMENT: MACRO DASHBOARD AND LEADERBOARD MOUNTED NATIVELY ===
-    st.markdown("<br><hr>", unsafe_allow_html=True)
-    st.subheader("📊 Macro Financial Performance Dashboard")
-    st.markdown("*(Unified executive layout tracking top-line volume. Green highlight = under 20% for hourly/salaried, under 34% for piece-rate. Sorted highest to lowest payload percentage)*")
-    
-    m_col1, m_col2 = st.columns([1, 2])
-    with m_col1:
-        total_rev = unexploded_ops['Total Invoice Amount'].sum()
-        st.metric(label="Division Gross Invoiced Volume", value=f"${total_rev:,.2f}")
-        
-        st.markdown("<br>**🎯 Average Ticket Size per BU**", unsafe_allow_html=True)
-        bu_avg_ticket = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].mean().reset_index()
-        bu_avg_ticket.columns = ['Business Unit', 'Average Ticket Size Raw']
-        bu_avg_ticket['Average Ticket Size'] = bu_avg_ticket['Average Ticket Size Raw'].apply(lambda x: f"${x:,.2f}")
-        st.dataframe(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True), use_container_width=True)
-        
-    with m_col2:
-        st.markdown("**📈 Pay Ratio per Clocked Hour**")
-        rev_per_hour_df = final_df.copy()
-        rev_per_hour_df['Total Clocked'] = rev_per_hour_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
-        rev_per_hour_df['Total Assigned Value'] = rev_per_hour_df['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
-        
-        rev_per_hour_df['Assumed Pay Amount'] = rev_per_hour_df.apply(get_assumed_pay, axis=1)
-        rev_per_hour_df['Assumed Pay'] = rev_per_hour_df['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
-        
-        rev_per_hour_df['Pay Pct'] = np.where(
-            rev_per_hour_df['Total_Assigned_Revenue'] > 0,
-            (rev_per_hour_df['Assumed Pay Amount'] / rev_per_hour_df['Total_Assigned_Revenue']) * 100,
-            0.0
-        )
-        rev_per_hour_df['Pay % vs Assigned Revenue'] = rev_per_hour_df['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
-        
-        show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[
-            ['Name', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue']
-        ]
-        st.dataframe(show_rev_per_hour.reset_index(drop=True).style.apply(highlight_pay_pct_row, axis=1), use_container_width=True)
-
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("🏆 Top Revenue Producer Leaderboard")
-    st.markdown("*(Ranks all active technicians by payload percentage ratios. Sorted highest to lowest. Green highlight = under 20% for hourly/salaried, under 34% for piece-rate)*")
-    leaderboard_rev = final_df.copy()
-    leaderboard_rev['Assumed Pay Amount'] = leaderboard_rev.apply(get_assumed_pay, axis=1)
-    leaderboard_rev['Pay Pct'] = np.where(
-        leaderboard_rev['Total_Assigned_Revenue'] > 0,
-        (leaderboard_rev['Assumed Pay Amount'] / leaderboard_rev['Total_Assigned_Revenue']) * 100,
-        0.0
-    )
-    leaderboard_rev = leaderboard_rev.sort_values(by='Pay Pct', ascending=False)
-    leaderboard_rev['Total Clocked'] = leaderboard_rev['Total_Weekly_Clocked_Hrs'].apply(format_hm)
-    leaderboard_rev['Total Assigned Revenue'] = leaderboard_rev['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
-    leaderboard_rev['Total Jobs'] = leaderboard_rev['Total_Weekly_Job_Count'].astype(int)
-    leaderboard_rev['Assumed Pay'] = leaderboard_rev['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
-    leaderboard_rev['Pay % vs Assigned Revenue'] = leaderboard_rev['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
-    
-    show_leaderboard_rev = leaderboard_rev[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Revenue', 'Assumed Pay', 'Pay % vs Assigned Revenue']]
-    st.dataframe(show_leaderboard_rev.reset_index(drop=True).style.apply(highlight_pay_pct_row, axis=1), use_container_width=True)
-
-    st.markdown("<br><hr>", unsafe_allow_html=True)
     trend_col, leaderboard_col = st.columns(2)
     
     with trend_col:
         st.subheader("📈 Daily Division Health Trend")
-        st.markdown("*(Combined team efficiency analyzed day-by-day across all business units)*")
         trend_data = []
         for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
             day_clocked = final_df[f'{d}_Clocked_Hrs'].sum()
             day_job = final_df[f'{d}_Job_Hrs'].sum()
             day_eff = (day_job / day_clocked * 100) if day_clocked > 0 else 0.0
-            trend_data.append({
-                "Day": d, 
-                "Total Clocked": format_hm(day_clocked), 
-                "Job Status Time": format_hm(day_job), 
-                "Efficiency Score": f"{day_eff:.1f}%"
-            })
+            trend_data.append({"Day": d, "Total Clocked": format_hm(day_clocked), "Job Status Time": format_hm(day_job), "Efficiency Score": f"{day_eff:.1f}%"})
         trend_df = pd.DataFrame(trend_data)
         st.dataframe(trend_df, use_container_width=True)
 
     with leaderboard_col:
         st.subheader("🚨 Team Leaderboard")
-        st.markdown("*(Whole team sorted by highest unaccounted time after overrides)*")
         leaderboard_df = final_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=False).copy()
         if not leaderboard_df.empty:
             leaderboard_df['Total Clocked'] = leaderboard_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
@@ -328,8 +264,10 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_
             def highlight_leaderboard(row):
                 val = parse_diff_to_hours(row['Total Diff'])
                 return ['background-color: #ffcccc; color: #990000;'] * len(row) if val > 0 else [''] * len(row)
-            try: styled_leaderboard = show_leaderboard.reset_index(drop=True).style.hide(axis="index").apply(highlight_leaderboard, axis=1)
-            except Exception: styled_leaderboard = show_leaderboard.reset_index(drop=True).style.apply(highlight_leaderboard, axis=1)
+            try:
+                styled_leaderboard = show_leaderboard.reset_index(drop=True).style.hide(axis="index").apply(highlight_leaderboard, axis=1)
+            except Exception:
+                styled_leaderboard = show_leaderboard.reset_index(drop=True).style.apply(highlight_leaderboard, axis=1)
             st.dataframe(styled_leaderboard, use_container_width=True)
 
     # === OVERTIME HORIZON PREDICTOR ===
@@ -341,12 +279,11 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_
         tech_name = row['Name']
         nl = tech_name.lower()
         hrs = row['Total_Weekly_Clocked_Hrs']
-        
         if "sean marble" in nl or "michael owens" in nl:
             status = "⚠️ Low Volume Warning (Under 35 Hrs)" if hrs < 35.0 else "✅ Salary - Exempt"
             ot_hrs = "-"
         elif "bryan" in nl or "erik" in nl:
-            status = "🚨 High Burnout Risk (Over 45 Hrs)" if hrs > 45.0 else "✅ Piece Rate - Exempt"
+            status = "🚨 High Burnout Risk (Over 45 Hrs)" if hrs > 45.0 else "Piece Rate - Exempt"
             ot_hrs = "-"
         else:
             if hrs > 40:
@@ -359,23 +296,21 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_
                 status = "✅ Safe Strategy"
                 ot_hrs = "-"
         ot_rows.append({"Name": tech_name, "Weekly Clocked": format_hm(hrs), "Pace Status": status, "Overtime Hours": ot_hrs})
-    
     if ot_rows:
         ot_predictor_df = pd.DataFrame(ot_rows)
         def style_ot_predictor(row):
             st_val = row['Pace Status']
             if "🚨" in st_val or "⚠️ Low Volume" in st_val: return ['background-color: #ffcccc; color: #990000;'] * len(row)
-            elif "⚠️ High Overtime" in st_val: return ['background-color: #fff3cd; color: #856404;'] * len(row)
+            if "⚠️ High Overtime" in st_val: return ['background-color: #fff3cd; color: #856404;'] * len(row)
             return [''] * len(row)
         try: st.dataframe(ot_predictor_df.reset_index(drop=True).style.hide(axis="index").apply(style_ot_predictor, axis=1), use_container_width=True)
         except Exception: st.dataframe(ot_predictor_df.reset_index(drop=True).style.apply(style_ot_predictor, axis=1), use_container_width=True)
             
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # === REWARDS ===
+    # === OPS MANAGER TOOLS ===
     st.header("📊 Ops Manager Tools (Benchmarking & Performance)")
     bench_col, gold_star_col = st.columns(2)
-    
     with bench_col:
         st.subheader("📋 Team Processing Baselines & Predictability")
         st.markdown("*(Individual average vs. Division baseline. Red flags show techs >25% slower than average)*")
@@ -386,14 +321,15 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_
         div_avg_total = valid_jobs['Total_Job_Time_Hours'].mean()
         
         tech_stats = valid_jobs.groupby('Assigned Team Members').agg(Drive_Avg=('Drive_Time_Hrs', 'mean'), Store_Avg=('Store_Time_Hrs', 'mean'), IP_Avg=('In_Progress_Time_Hrs', 'mean'), Total_Avg=('Total_Job_Time_Hours', 'mean'), IP_Std=('In_Progress_Time_Hrs', 'std'), Job_Count=('Total_Job_Time_Hours', 'size')).reset_index()
+        def format_bench_local(val, div_val): return f"{format_hm(val)} (Div: {format_hm(div_val)})" if pd.notna(val) else "-"
         def assign_predictability(row):
             if row['Job_Count'] < 2 or pd.isna(row['IP_Std']): return "Establishing Baseline"
             return "⚠️ Low Consistency" if row['IP_Std'] > 0.75 else "⭐ High Consistency"
             
-        tech_stats['Avg Drive/Job'] = tech_stats['Drive_Avg'].apply(lambda x: format_bench(x, div_avg_drive) if pd.notna(x) else "-")
-        tech_stats['Avg Store/Job'] = tech_stats['Store_Avg'].apply(lambda x: format_bench(x, div_avg_store) if pd.notna(x) else "-")
-        tech_stats['Avg In-Progress/Job'] = tech_stats['IP_Avg'].apply(lambda x: format_bench(x, div_avg_ip) if pd.notna(x) else "-")
-        tech_stats['Avg Total Job Length'] = tech_stats['Total_Avg'].apply(lambda x: format_bench(x, div_avg_total) if pd.notna(x) else "-")
+        tech_stats['Avg Drive/Job'] = tech_stats['Drive_Avg'].apply(lambda x: format_bench_local(x, div_avg_drive))
+        tech_stats['Avg Store/Job'] = tech_stats['Store_Avg'].apply(lambda x: format_bench_local(x, div_avg_store))
+        tech_stats['Avg In-Progress/Job'] = tech_stats['IP_Avg'].apply(lambda x: format_bench_local(x, div_avg_ip))
+        tech_stats['Avg Total Job Length'] = tech_stats['Total_Avg'].apply(lambda x: format_bench_local(x, div_avg_total))
         tech_stats['Predictability Index'] = tech_stats.apply(assign_predictability, axis=1)
         show_bench = tech_stats[['Assigned Team Members', 'Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job', 'Avg Total Job Length', 'Predictability Index']].rename(columns={'Assigned Team Members': 'Name'})
         try: st.dataframe(show_bench.reset_index(drop=True).style.hide(axis="index").apply(highlight_bench_col, subset=['Avg Drive/Job', 'Avg Store/Job', 'Avg In-Progress/Job', 'Avg Total Job Length']).apply(highlight_consistency, subset=['Predictability Index']), use_container_width=True)
@@ -416,6 +352,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("🎯 The Technician Skill Matrix & Training Flag")
+    st.markdown("*(Compares a technician's LSI performance against their WH performance. Flags techs where the gap exceeds 25%)*")
     skill_df = final_df.copy()
     if not skill_df.empty:
         skill_df['Eff Gap'] = np.where((skill_df['Simple_Installs_Count'] > 0) & (skill_df['Water_Heaters_Count'] > 0), abs(skill_df['LSI_Eff_Raw'] - skill_df['WH_Eff_Raw']), 0.0)
@@ -435,6 +372,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("🏁 The Peer-to-Peer \"Coaching Corner\" Overlay")
+    st.markdown("*(Anonymized mentor baseline layout stack comparing tech efficiency targets with Top 25% performers)*")
     coaching_data = pd.DataFrame()
     coaching_data['Name'] = final_df['Name']
     coaching_data['Your LSI Eff'] = final_df['Simple Installs Eff']
@@ -448,6 +386,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_
     # === DISPATCHER TOOLS SECTION ===
     st.header("🛠️ Dispatcher Tools (Daily Accountability & Planning)")
     st.subheader("🧠 Best Fit Dispatch Recommender")
+    st.markdown("*(Provides a sorted priority list for the dispatcher to assign last-minute emergency jobs based purely on isolated historical unit efficiencies)*")
     bf_col1, bf_col2 = st.columns(2)
     with bf_col1:
         st.markdown("**🥇 Top Ranked for LSI Jobs**")
@@ -466,6 +405,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_
     d_col1, d_col2 = st.columns(2)
     with d_col1:
         st.subheader("🕳️ 'Black Hole' Gap Finder")
+        st.markdown("*(Gaps between jobs larger than 45 minutes)*")
         ops_sorted = ops_df.dropna(subset=['Earliest_Start']).sort_values(['Assigned Team Members', 'Earliest_Start'])
         ops_sorted['Next_Job_Start'] = ops_sorted.groupby(['Assigned Team Members', 'Short_Date'])['Earliest_Start'].shift(-1)
         ops_sorted['Gap_Hrs'] = (ops_sorted['Next_Job_Start'] - ops_sorted['Estimated_End']).dt.total_seconds() / 3600.0
@@ -476,10 +416,10 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_
             gaps_df['End of Job 1'] = gaps_df['Estimated_End'].dt.strftime('%I:%M %p')
             gaps_df['Start of Job 2'] = gaps_df['Next_Job_Start'].dt.strftime('%I:%M %p')
             st.dataframe(gaps_df[['Assigned Team Members', 'Short_Date', 'End of Job 1', 'Start of Job 2', 'Gap Length']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'}), use_container_width=True)
-        else: st.success("No major routing gaps detected!")
 
     with d_col2:
         st.subheader("🌅 First Job vs. Last Job")
+        st.markdown("*(First punch of the morning, last punch of the afternoon. Spans over 9 hours are highlighted in red)*")
         bounds_sorted_df = bounds_df.sort_values(by='Total_Span_Hrs', ascending=False).copy()
         show_bounds = bounds_sorted_df[['Assigned Team Members', 'Short_Date', 'First Status Update', 'Last Status Update', 'Total Time']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
         def highlight_long_days(row): return ['background-color: #ffcccc; color: #990000;'] * len(row) if parse_hm(row['Total Time']) > 9.0 else [''] * len(row)
@@ -546,7 +486,6 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_
                 try: st.dataframe(tech_launches_df.sort_values(by='First_Punch', ascending=False)[['Short_Date', 'First Launch']].rename(columns={'Short_Date': 'Date'}).reset_index(drop=True).style.hide(axis="index").set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'}), use_container_width=True)
                 except Exception: st.dataframe(tech_launches_df.sort_values(by='First_Punch', ascending=False)[['Short_Date', 'First Launch']].rename(columns={'Short_Date': 'Date'}).reset_index(drop=True).style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'}), use_container_width=True)
 
-# --- CONSOLIDATED SANDBOX TAB VIEWS ---
 def run_sandbox_tab(unexploded_ops, ops_df, final_df, test_choices):
     if "🏆 The \"Golden Ratio\" Margin Predictor" in test_choices:
         st.markdown("### **🏆 The Golden Ratio Margin Predictor**")
@@ -866,6 +805,42 @@ if time_file and ops_file:
         with tabs[0]:
             st.markdown('<h3>Weekly Efficiency Summary</h3>', unsafe_allow_html=True)
             st.dataframe(display_dfs['Weekly'].reset_index(drop=True), use_container_width=True)
+            
+            # UNIQUE PLACEMENT DIRECTLY IN WEEKLY SUMMARY TAB
+            st.markdown("<br><hr><h3>📊 Macro Financial Performance Dashboard</h3>", unsafe_allow_html=True)
+            st.markdown("*(Unified executive layout tracking top-line volume. Green highlight = under 20% for hourly/salaried, under 34% for piece-rate. Sorted highest to lowest payload percentage)*")
+            m_col1, m_col2 = st.columns([1, 2])
+            with m_col1:
+                st.metric(label="Division Gross Invoiced Volume", value=f"${unexploded_ops['Total Invoice Amount'].sum():,.2f}")
+                bu_avg_ticket = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].mean().reset_index()
+                bu_avg_ticket.columns = ['Business Unit', 'Average Ticket Size']
+                bu_avg_ticket['Average Ticket Size'] = bu_avg_ticket['Average Ticket Size'].apply(lambda x: f"${x:,.2f}")
+                st.dataframe(bu_avg_ticket.reset_index(drop=True), use_container_width=True)
+            with m_col2:
+                st.markdown("**📈 Pay Ratio per Clocked Hour**")
+                rev_per_hour_df = final_df.copy()
+                rev_per_hour_df['Total Clocked'] = rev_per_hour_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
+                rev_per_hour_df['Total Assigned Value'] = rev_per_hour_df['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
+                rev_per_hour_df['Assumed Pay Amount'] = rev_per_hour_df.apply(get_assumed_pay, axis=1)
+                rev_per_hour_df['Assumed Pay'] = rev_per_hour_df['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
+                rev_per_hour_df['Pay Pct'] = np.where(rev_per_hour_df['Total_Assigned_Revenue'] > 0, (rev_per_hour_df['Assumed Pay Amount'] / rev_per_hour_df['Total_Assigned_Revenue']) * 100, 0.0)
+                rev_per_hour_df['Pay % vs Assigned Revenue'] = rev_per_hour_df['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
+                show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[['Name', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue']]
+                st.dataframe(show_rev_per_hour.reset_index(drop=True).style.apply(highlight_pay_pct_row, axis=1), use_container_width=True)
+
+            st.markdown("<br><h3>🏆 Top Revenue Producer Leaderboard</h3>", unsafe_allow_html=True)
+            leaderboard_rev = final_df.copy()
+            leaderboard_rev['Assumed Pay Amount'] = leaderboard_rev.apply(get_assumed_pay, axis=1)
+            leaderboard_rev['Pay Pct'] = np.where(leaderboard_rev['Total_Assigned_Revenue'] > 0, (leaderboard_rev['Assumed Pay Amount'] / leaderboard_rev['Total_Assigned_Revenue']) * 100, 0.0)
+            leaderboard_rev = leaderboard_rev.sort_values(by='Pay Pct', ascending=False)
+            leaderboard_rev['Total Clocked'] = leaderboard_rev['Total_Weekly_Clocked_Hrs'].apply(format_hm)
+            leaderboard_rev['Total Assigned Revenue'] = leaderboard_rev['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
+            leaderboard_rev['Total Jobs'] = leaderboard_rev['Total_Weekly_Job_Count'].astype(int)
+            leaderboard_rev['Assumed Pay'] = leaderboard_rev['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
+            leaderboard_rev['Pay % vs Assigned Revenue'] = leaderboard_rev['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
+            show_leaderboard_rev = leaderboard_rev[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Revenue', 'Assumed Pay', 'Pay % vs Assigned Revenue']]
+            st.dataframe(show_leaderboard_rev.reset_index(drop=True).style.apply(highlight_pay_pct_row, axis=1), use_container_width=True)
+            
             show_advanced_reporting(unexploded_ops, ops_df, final_df, export_df, bounds_df, delayed_launches_df, daily_route, tab_key="summary_tab")
             
         with tabs[1]:
@@ -905,3 +880,4 @@ if time_file and ops_file:
             
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
+"""
