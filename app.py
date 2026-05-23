@@ -328,7 +328,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
         else:
             st.info("No technicians qualified for the Gold Star list this week.")
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
     # NEW FEATURE: Skill Matrix & Training Flag
     st.subheader("🎯 The Technician Skill Matrix & Training Flag")
@@ -402,6 +402,9 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
         
         gaps_df = ops_sorted[ops_sorted['Gap_Hrs'] > 0.75].copy()
         if not gaps_df.empty:
+            # UPDATED: Sorting the gap finder by length (descending) so the biggest gaps surface to the top immediately!
+            gaps_df = gaps_df.sort_values(by='Gap_Hrs', ascending=False)
+            
             gaps_df['Gap Length'] = gaps_df['Gap_Hrs'].apply(format_hm)
             gaps_df['End of Job 1'] = gaps_df['Estimated_End'].dt.strftime('%I:%M %p')
             gaps_df['Start of Job 2'] = gaps_df['Next_Job_Start'].dt.strftime('%I:%M %p')
@@ -698,7 +701,6 @@ if time_file and ops_file:
         job_count_pivot = job_count_pivot.rename(columns=rename_dict_counts)
         job_count_pivot['Total_Weekly_Job_Count'] = job_count_pivot[[d + '_Job_Count' for d in days]].sum(axis=1)
         
-        # Calculate daily route info globally so it can be passed to sandbox
         daily_route = ops_df.groupby(['Assigned Team Members', 'Short_Date']).agg(
             Drive_Time_Hrs=('Drive_Time_Hrs', 'sum'),
             In_Progress_Time_Hrs=('In_Progress_Time_Hrs', 'sum'),
