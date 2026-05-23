@@ -103,6 +103,16 @@ def highlight_daily(val):
     if hrs > 1.0: return 'background-color: #ffcccc; color: #990000;'
     return ''
 
+def highlight_weekly_row(row):
+    styles = [''] * len(row)
+    if 'Total Diff' in row and 'Days Worked' in row:
+        diff_idx = row.index.get_loc('Total Diff')
+        diff_hrs = parse_diff_to_hours(row['Total Diff'])
+        days_worked = row['Days Worked']
+        if diff_hrs > (days_worked * 1.0):
+            styles[diff_idx] = 'background-color: #ffcccc; color: #990000;'
+    return styles
+
 def highlight_individual_report(row, days_worked):
     styles = [''] * len(row)
     if 'Difference' in row and 'Day' in row:
@@ -154,7 +164,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     
     with b_col1:
         st.markdown("**Calculate Lost Revenue**")
-        rate = st.number_input("Average Tech Hourly Rate ($)", value=25.0, step=1.0, key=f"rate_{tab_key}")
+        rate = st.number_input("Fallback Rate for Unmapped Techs ($)", value=25.0, step=1.0, key=f"rate_{tab_key}")
         
     total_clocked = final_df['Total_Weekly_Clocked_Hrs'].sum()
     total_job = final_df['Total_Weekly_Job_Hrs'].sum()
@@ -170,7 +180,19 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
     wh_eff = (total_wh / total_wh_assumed * 100) if total_wh_assumed > 0 else 0
     
     lost_hrs = final_df[final_df['Total_Weekly_Diff_Hrs'] > 0]['Total_Weekly_Diff_Hrs'].sum()
-    lost_money = lost_hrs * rate
+    
+    # UPDATED: Hyper-accurate dynamic payroll leakage calculator mapping specific pay rules
+    def get_custom_loss(row, fallback):
+        nl = str(row['Name']).lower()
+        diff = row['Total_Weekly_Diff_Hrs']
+        if diff <= 0: return 0.0
+        if 'sean marble' in nl: return diff * 33.65
+        if 'bryan' in nl or 'erik' in nl: return 0.0 # Piece rate doesn't penalize hourly base
+        if 'nate' in nl: return diff * 22.50
+        if any(n in nl for n in ['edward', 'matt', 'tanner']): return diff * 25.00
+        return diff * fallback
+
+    lost_money = final_df.apply(lambda r: get_custom_loss(r, rate), axis=1).sum()
     
     with b_col2:
         st.metric(label="Total Unaccounted Hours", value=f"{lost_hrs:.1f} hrs")
@@ -770,7 +792,7 @@ if time_file and ops_file:
         
         final_df['Daily_Avg_Diff_Hrs'] = np.where(final_df['Days_Worked'] > 0, final_df['Total_Weekly_Diff_Hrs'] / final_df['Days_Worked'], 0.0)
         
-        # --- NEW BU ISOLATED EFFICIENCY CALCULATION ENGINE (WEIGHTED GOALS) ---
+        # --- BU ISOLATED EFFICIENCY CALCULATION ENGINE (WEIGHTED GOALS) ---
         final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
         final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * (3 + (25 / 60.0))
         final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
@@ -972,7 +994,6 @@ if time_file and ops_file:
             st.header("🧪 Isolated Leaderboard Sandbox")
             st.markdown("Use the selections below to add, remove, or evaluate components without changing the data models in other sections.")
             
-            # UPDATED: Appended all 4 new feature tokens directly into the selection checklist array layout
             test_choices = st.multiselect(
                 "Select active data views to mount inside Test Section:",
                 [
@@ -1058,26 +1079,30 @@ if time_file and ops_file:
                     else:
                         st.info("Could not calculate context-switching averages for this set.")
 
-            # ADDED NEW SANDBOX OPTION: Ghost Punch Auditor
+            # UPDATED: Cross-verifies specialized paid codes dynamically based on custom profiles
             if "🕵️ The \"Ghost Punch\" & Payroll Discrepancy Auditor" in test_choices:
                 st.markdown("### **🕵️ The \"Ghost Punch\" & Payroll Discrepancy Auditor**")
                 st.markdown("*(Scans files day-by-day to cross-verify paid hours against active field activity timestamps)*")
                 ghost_alerts = []
                 for idx, row in final_df.iterrows():
                     tech_name = row['Name']
+                    nl = tech_name.lower()
+                    pay_type = "Hourly"
+                    if "sean marble" in nl: pay_type = "Salary"
+                    elif "bryan" in nl or "erik" in nl: pay_type = "Piece Rate"
+                    
                     for d in ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]:
                         clocked = row[f'{d}_Clocked_Hrs']
                         jobs = row[f'{d}_Job_Count']
                         if clocked > 0 and jobs == 0:
-                            ghost_alerts.append({"Technician": tech_name, "Day": d, "Audit Type": "🕵️ Paid But Idle (Clocked In, 0 Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": 0})
+                            ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🕵️ Paid But Idle (Clocked In, 0 Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": 0})
                         elif clocked == 0 and jobs > 0:
-                            ghost_alerts.append({"Technician": tech_name, "Day": d, "Audit Type": "🚨 Unpaid Field Work (0 Hours Clocked, Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": int(jobs)})
+                            ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🚨 Unpaid Field Work (0 Hours Clocked, Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": int(jobs)})
                 if ghost_alerts:
                     st.dataframe(pd.DataFrame(ghost_alerts), use_container_width=True)
                 else:
                     st.success("Perfect alignment! No payroll discrepancy errors detected on current sheets.")
 
-            # ADDED NEW SANDBOX OPTION: Lowe's Store Staging Card
             if "🏬 The Lowe's Store Staging Efficiency Scorecard" in test_choices:
                 st.markdown("### **🏬 The Lowe\'s Store Staging Efficiency Scorecard**")
                 st.markdown("*(Aggregates total field loading bottlenecks across individual store numbers to isolate supplier staging friction)*")
@@ -1095,22 +1120,35 @@ if time_file and ops_file:
                     ])
                     st.dataframe(store_stats, use_container_width=True)
 
-            # ADDED NEW SANDBOX OPTION: Fleet Overtime Predictor
+            # UPDATED: Incorporates the dynamic exemption status calculations safely
             if "🚨 Fleet Overtime Horizon Predictor" in test_choices:
                 st.markdown("### **🚨 Fleet Overtime Horizon Predictor**")
                 st.markdown("*(Scans overall accumulated clocked hours to calculate incurred overtime margins and pacing thresholds)*")
-                ot_df = pd.DataFrame()
-                ot_df['Name'] = final_df['Name']
-                ot_df['Weekly Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
-                def calc_ot_status(hrs):
-                    if hrs > 40: return "🚨 Overtime Incurred"
-                    elif hrs > 35: return "⚠️ High Overtime Risk"
-                    return "✅ Safe Strategy"
-                ot_df['Pace Status'] = final_df['Total_Weekly_Clocked_Hrs'].apply(calc_ot_status)
-                ot_df['Overtime Hours'] = final_df['Total_Weekly_Clocked_Hrs'].apply(lambda x: format_hm(x - 40) if x > 40 else "-")
-                st.dataframe(ot_df, use_container_width=True)
+                ot_rows = []
+                for idx, row in final_df.iterrows():
+                    tech_name = row['Name']
+                    nl = tech_name.lower()
+                    hrs = row['Total_Weekly_Clocked_Hrs']
+                    
+                    if "sean marble" in nl:
+                        status = "✅ Salary - Exempt"
+                        ot_hrs = "-"
+                    elif "bryan" in nl or "erik" in nl:
+                        status = "✅ Piece Rate - Exempt"
+                        ot_hrs = "-"
+                    else:
+                        if hrs > 40:
+                            status = "🚨 Overtime Incurred"
+                            ot_hrs = format_hm(hrs - 40)
+                        elif hrs > 35:
+                            status = "⚠️ High Overtime Risk"
+                            ot_hrs = "-"
+                        else:
+                            status = "✅ Safe Strategy"
+                            ot_hrs = "-"
+                    ot_rows.append({"Name": tech_name, "Weekly Clocked": format_hm(hrs), "Pace Status": status, "Overtime Hours": ot_hrs})
+                st.dataframe(pd.DataFrame(ot_rows), use_container_width=True)
 
-            # ADDED NEW SANDBOX OPTION: Coaching Corner
             if "🏁 The Peer-to-Peer \"Coaching Corner\" Overlay" in test_choices:
                 st.markdown("### **🏁 The Peer-to-Peer \"Coaching Corner\" Overlay**")
                 st.markdown("*(Anonymized high-performance baseline stack. Compares tech execution against top 25% fleet performance thresholds)*")
