@@ -103,16 +103,6 @@ def highlight_daily(val):
     if hrs > 1.0: return 'background-color: #ffcccc; color: #990000;'
     return ''
 
-def highlight_weekly_row(row):
-    styles = [''] * len(row)
-    if 'Total Diff' in row and 'Days Worked' in row:
-        diff_idx = row.index.get_loc('Total Diff')
-        diff_hrs = parse_diff_to_hours(row['Total Diff'])
-        days_worked = row['Days Worked']
-        if diff_hrs > (days_worked * 1.0):
-            styles[diff_idx] = 'background-color: #ffcccc; color: #990000;'
-    return styles
-
 def highlight_individual_report(row, days_worked):
     styles = [''] * len(row)
     if 'Difference' in row and 'Day' in row:
@@ -612,7 +602,6 @@ if time_file and ops_file:
             bu_pivot = pd.merge(bu_pivot_hrs, bu_pivot_cnt, on='Assigned Team Members', suffixes=('_hrs', '_cnt'))
             bu_pivot = bu_pivot.rename(columns={'Assigned Team Members': 'Name'})
             
-            # Ensure safety columns exist
             for col in ['Lowes - Simple Installs_hrs', 'Lowes - Water Heaters_hrs', 'Lowes - Simple Installs_cnt', 'Lowes - Water Heaters_cnt']:
                 if col not in bu_pivot.columns:
                     bu_pivot[col] = 0.0
@@ -638,7 +627,6 @@ if time_file and ops_file:
         job_time_pivot = job_time_pivot.rename(columns=rename_dict)
         job_time_pivot['Total_Weekly_Job_Hrs'] = job_time_pivot[[d + '_Job_Hrs' for d in days]].sum(axis=1)
         
-        # --- Create Daily Job Counts ---
         job_count_agg = ops_df.groupby(['Assigned Team Members', 'Day_of_Week']).size().reset_index(name='Job_Count')
         job_count_pivot = job_count_agg.pivot(index='Assigned Team Members', columns='Day_of_Week', values='Job_Count').reset_index()
         job_count_pivot = job_count_pivot.rename(columns={'Assigned Team Members': 'Name'}).fillna(0)
@@ -651,11 +639,9 @@ if time_file and ops_file:
         job_count_pivot = job_count_pivot.rename(columns=rename_dict_counts)
         job_count_pivot['Total_Weekly_Job_Count'] = job_count_pivot[[d + '_Job_Count' for d in days]].sum(axis=1)
         
-        # --- 3. Merge and Calculate Differences ---
         final_df = pd.merge(time_df, job_time_pivot, on='Name', how='left').fillna(0)
         final_df = pd.merge(final_df, job_count_pivot, on='Name', how='left').fillna(0)
         
-        # Inject Business Unit hours & counts into main tracking grid
         if not bu_pivot.empty:
             final_df = pd.merge(final_df, bu_pivot[['Name', 'Simple_Installs_Hrs', 'Water_Heaters_Hrs', 'Simple_Installs_Count', 'Water_Heaters_Count']], on='Name', how='left').fillna(0)
         else:
@@ -664,7 +650,6 @@ if time_file and ops_file:
             final_df['Simple_Installs_Count'] = 0.0
             final_df['Water_Heaters_Count'] = 0.0
             
-        # --- 3.5 Job Status Adjustments Sidebar UI ---
         st.sidebar.header("🔧 Job Status Time Adjustments")
         st.sidebar.markdown("*(Correct tech hours if they hit a job status too early or late)*")
         st.sidebar.markdown("**Rules:** Use positive numbers like `1:30` or `0:45` to add time. Use a minus sign like `-1:15` or `-0:30` to subtract time.")
@@ -730,23 +715,36 @@ if time_file and ops_file:
         final_df['Water Heaters Eff'] = final_df['WH_Eff_Raw'].apply(lambda x: f"{x:.1f}%")
         final_df['Total Eff'] = final_df['Total_Eff'].apply(lambda x: f"{x:.1f}%")
         
-        final_df = final_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=False)
+        # Sort master array safely by WH efficiency to populate Weekly summary dynamically
+        final_df = final_df.sort_values(by='WH_Eff_Raw', ascending=False)
         
-        weekly_df = pd.DataFrame()
-        weekly_df['Name'] = final_df['Name']
-        weekly_df['Days Worked'] = final_df['Days_Worked']
-        weekly_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
-        weekly_df['Total Job Time'] = final_df['Total_Weekly_Job_Hrs'].apply(format_hm)
+        bu_summary_df = pd.DataFrame()
+        bu_summary_df['Name'] = final_df['Name']
+        bu_summary_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
+        bu_summary_df['Total Jobs'] = final_df['Total_Weekly_Job_Count'].astype(int)
         
-        weekly_df['LSI Time (Eff %)'] = final_df['Simple Installs'] + " (" + final_df['Simple Installs Eff'] + ")"
-        weekly_df['WH Time (Eff %)'] = final_df['Water Heaters'] + " (" + final_df['Water Heaters Eff'] + ")"
+        bu_summary_df['LSI Jobs'] = final_df['Simple_Installs_Count'].astype(int)
+        bu_summary_df['LSI Job Status Time'] = final_df['Simple_Installs_Hrs'].apply(format_hm)
+        bu_summary_df['LSI Assumed Clocked'] = final_df['Assumed_LSI_Clocked'].apply(format_hm)
+        bu_summary_df['LSI Efficiency'] = final_df['Simple Installs Eff']
         
-        weekly_df['Manual Adj'] = final_df['Adjustment_Hrs'].apply(format_hm)
-        weekly_df['Daily Avg Diff'] = final_df['Daily_Avg_Diff_Hrs'].apply(format_hm) 
-        weekly_df['Total Diff'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
-        display_dfs['Weekly'] = weekly_df
+        bu_summary_df['WH Jobs'] = final_df['Water_Heaters_Count'].astype(int)
+        bu_summary_df['WH Job Status Time'] = final_df['Water_Heaters_Hrs'].apply(format_hm)
+        bu_summary_df['WH Assumed Clocked'] = final_df['Assumed_WH_Clocked'].apply(format_hm)
+        bu_summary_df['WH Efficiency'] = final_df['Water Heaters Eff']
+
+        bu_summary_df['Total Efficiency'] = final_df['Total Eff']
         
-        export_df = weekly_df.copy()
+        display_dfs['Weekly'] = bu_summary_df
+        
+        export_df = pd.DataFrame()
+        export_df['Name'] = final_df['Name']
+        export_df['Days Worked'] = final_df['Days_Worked']
+        export_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
+        export_df['Total Job Time'] = final_df['Total_Weekly_Job_Hrs'].apply(format_hm)
+        export_df['Manual Adj'] = final_df['Adjustment_Hrs'].apply(format_hm)
+        export_df['Daily Avg Diff'] = final_df['Daily_Avg_Diff_Hrs'].apply(format_hm) 
+        export_df['Total Diff'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
         for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
             export_df[f'{d} Diff'] = final_df[f'{d} Diff']
         
@@ -788,8 +786,12 @@ if time_file and ops_file:
         tabs = st.tabs(tab_names)
         
         with tabs[0]:
-            st.markdown('<h3 class="hide-on-print">Weekly Summary</h3>', unsafe_allow_html=True)
-            styled_weekly = display_dfs['Weekly'].reset_index(drop=True).style.apply(highlight_weekly_row, axis=1)
+            st.markdown('<h3 class="hide-on-print">Weekly Efficiency Summary</h3>', unsafe_allow_html=True)
+            st.markdown("*(Efficiency is calculated by weighting total clocked hours against specific task goals: **Water Heaters = 3:25 hrs**, **LSI = 2:00 hrs**)*")
+            
+            styled_weekly = display_dfs['Weekly'].reset_index(drop=True).style.set_properties(
+                **{'background-color': '#fff3cd', 'font-weight': 'bold', 'color': '#856404'}, subset=['WH Efficiency']
+            )
             st.dataframe(styled_weekly, use_container_width=True)
             show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_launches_df, tab_key="summary_tab")
             
@@ -899,7 +901,7 @@ if time_file and ops_file:
             
             test_choices = st.multiselect(
                 "Select active data views to mount inside Test Section:",
-                ["🚨 Team Leaderboard", "⭐ Gold Star Performance Roll", "📊 Late Deployment Scorecard", "📊 Business Unit Weekly Efficiency Summary"],
+                ["🚨 Team Leaderboard", "⭐ Gold Star Performance Roll", "📊 Late Deployment Scorecard"],
                 default=["🚨 Team Leaderboard"],
                 key="sandbox_view_choices"
             )
@@ -941,36 +943,6 @@ if time_file and ops_file:
                     st.dataframe(launch_counts.reset_index(drop=True).style.set_properties(**{'background-color': '#fff3cd', 'color': '#856404;', 'font-weight': 'bold'}), use_container_width=True)
                 else:
                     st.info("No launch metadata loaded to aggregate in sandbox loops.")
-
-            if "📊 Business Unit Weekly Efficiency Summary" in test_choices:
-                st.markdown("### **📊 Business Unit Weekly Efficiency Summary (Sandbox View)**")
-                st.markdown("*(Efficiency is calculated by weighting total clocked hours against specific task goals: **Water Heaters = 3:25 hrs**, **LSI = 2:00 hrs**)*")
-                
-                sandbox_df = final_df.sort_values(by='WH_Eff_Raw', ascending=False).copy()
-                
-                bu_summary_df = pd.DataFrame()
-                bu_summary_df['Name'] = sandbox_df['Name']
-                bu_summary_df['Total Clocked'] = sandbox_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
-                bu_summary_df['Total Jobs'] = sandbox_df['Total_Weekly_Job_Count'].astype(int)
-                
-                bu_summary_df['LSI Jobs'] = sandbox_df['Simple_Installs_Count'].astype(int)
-                bu_summary_df['LSI Job Status Time'] = sandbox_df['Simple_Installs_Hrs'].apply(format_hm)
-                bu_summary_df['LSI Assumed Clocked'] = sandbox_df['Assumed_LSI_Clocked'].apply(format_hm)
-                bu_summary_df['LSI Efficiency'] = sandbox_df['Simple Installs Eff']
-                
-                bu_summary_df['WH Jobs'] = sandbox_df['Water_Heaters_Count'].astype(int)
-                bu_summary_df['WH Job Status Time'] = sandbox_df['Water_Heaters_Hrs'].apply(format_hm)
-                bu_summary_df['WH Assumed Clocked'] = sandbox_df['Assumed_WH_Clocked'].apply(format_hm)
-                bu_summary_df['WH Efficiency'] = sandbox_df['Water Heaters Eff']
-
-                # UPDATED: Pushed Total Efficiency to the far right end of the view
-                bu_summary_df['Total Efficiency'] = sandbox_df['Total Eff']
-                
-                styled_bu = bu_summary_df.reset_index(drop=True).style.set_properties(
-                    **{'background-color': '#fff3cd', 'font-weight': 'bold', 'color': '#856404'}, subset=['WH Efficiency']
-                )
-                
-                st.dataframe(styled_bu, use_container_width=True)
             
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
