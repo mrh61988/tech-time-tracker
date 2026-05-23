@@ -188,7 +188,7 @@ def highlight_pay_pct_row(row):
     return styles
 
 # --- MAIN BLOCK REPORT ENGINE ---
-def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
+def show_advanced_reporting(ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
     # === BOSS TOOLS SECTION ===
@@ -544,7 +544,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         if ghost_alerts: st.dataframe(pd.DataFrame(ghost_alerts), use_container_width=True)
         else: st.success("Perfect alignment! No payroll discrepancy errors detected.")
 
-    if "¼ The Lowe's Store Staging Efficiency Scorecard" in test_choices:
+    if "🏬 The Lowe's Store Staging Efficiency Scorecard" in test_choices:
         st.markdown("### **¼ The Lowe's Store Staging Efficiency Scorecard**")
         store_cols = [c for c in ops_df.columns if 'store' in c.lower() and 'time' not in c.lower() and 'timestamp' not in c.lower()]
         if store_cols:
@@ -576,11 +576,12 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
 
     if "📊 Business Unit Revenue Velocity" in test_choices:
         st.markdown("### **📊 Business Unit Revenue Velocity**")
-        bu_rev = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].sum().reset_index()
-        bu_rev['Revenue Share %'] = (bu_rev['Total Invoice Amount'] / unexploded_ops['Total Invoice Amount'].sum()) * 100
-        bu_rev['Total Revenue'] = bu_rev['Total Invoice Amount'].apply(lambda x: f"${x:,.2f}")
-        bu_rev['Revenue Share %'] = bu_rev['Revenue Share %'].apply(lambda x: f"{x:.1f}%")
-        st.dataframe(bu_rev[['Business Unit', 'Total Revenue', 'Revenue Share %']].reset_index(drop=True), use_container_width=True)
+        bu_rev = unexploded_ops['Total Invoice Amount'].sum()
+        bu_rev_df = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].sum().reset_index()
+        bu_rev_df['Revenue Share %'] = (bu_rev_df['Total Invoice Amount'] / bu_rev) * 100
+        bu_rev_df['Total Revenue'] = bu_rev_df['Total Invoice Amount'].apply(lambda x: f"${x:,.2f}")
+        bu_rev_df['Revenue Share %'] = bu_rev_df['Revenue Share %'].apply(lambda x: f"{x:.1f}%")
+        st.dataframe(bu_rev_df[['Business Unit', 'Total Revenue', 'Revenue Share %']].reset_index(drop=True), use_container_width=True)
 
     if "🏆 Top Revenue Producer Leaderboard" in test_choices:
         st.markdown("### **🏆 Top Revenue Producer Leaderboard**")
@@ -636,6 +637,7 @@ if time_file and ops_file:
         def calculate_tech_count(val): return max(1, len(str(val).split(',')))
         ops_df['Tech_Count_On_Job'] = ops_df['Assigned Team Members'].apply(calculate_tech_count)
         
+        # FIXED: Core tracking metrics math arrays computed FIRST before being split or read anywhere else
         for col in time_cols: ops_df[col] = pd.to_numeric(ops_df[col], errors='coerce').fillna(0) / ops_df['Tech_Count_On_Job']
         ops_df['Total Invoice Amount'] = pd.to_numeric(ops_df.get('Total Invoice Amount', pd.Series([0])), errors='coerce').fillna(0.0) / ops_df['Tech_Count_On_Job']
         
@@ -745,6 +747,7 @@ if time_file and ops_file:
         final_df['Adjustment_Hrs'] = final_df['Name'].map(adjustments).fillna(0.0)
         final_df['Total_Weekly_Job_Hrs'] = final_df['Total_Weekly_Job_Hrs'] + final_df['Adjustment_Hrs']
         
+        # --- CRITICAL RE-ALIGNMENT: Compute benchmarks immediately upon joining dataframe parameters safely ---
         final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
         final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * (3 + (25 / 60.0))
         final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
