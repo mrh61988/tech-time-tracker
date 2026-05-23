@@ -370,7 +370,7 @@ def show_advanced_reporting(ops_df, final_df, export_df, bounds_df, delayed_laun
 
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # UPDATED: Skill Matrix & Training Flag updated to securely loop and evaluate ALL technicians natively
+    # Skill Matrix & Training Flag
     st.subheader("🎯 The Technician Skill Matrix & Training Flag")
     st.markdown("*(Compares a technician's LSI performance against their WH performance. Flags techs where the gap exceeds 25%)*")
     
@@ -676,6 +676,15 @@ if time_file and ops_file:
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
         
+        # Safely convert Total Invoice Amount fields to float array models
+        if 'Total Invoice Amount' in ops_df.columns:
+            ops_df['Total Invoice Amount'] = pd.to_numeric(ops_df['Total Invoice Amount'], errors='coerce').fillna(0.0)
+        else:
+            ops_df['Total Invoice Amount'] = 0.0
+            
+        # Capture raw copy baseline before split/explode operations distort unique calculations
+        unexploded_ops = ops_df.copy()
+        
         ts_cols = [
             'Lowes Store - Start Timestamp',
             'On The Way - Start Timestamp',
@@ -796,6 +805,17 @@ if time_file and ops_file:
             final_df['Water_Heaters_Hrs'] = 0.0
             final_df['Simple_Installs_Count'] = 0.0
             final_df['Water_Heaters_Count'] = 0.0
+            
+        # Aggregate total revenue loops assigned contextually per tech string mapping
+        tech_rev_agg = ops_df.groupby('Assigned Team Members')['Total Invoice Amount'].sum().reset_index()
+        tech_rev_agg.columns = ['Name', 'Total_Assigned_Revenue']
+        final_df = pd.merge(final_df, tech_rev_agg, on='Name', how='left').fillna(0.0)
+        
+        final_df['Rev_Per_Clocked_Hr'] = np.where(
+            final_df['Total_Weekly_Clocked_Hrs'] > 0,
+            final_df['Total_Assigned_Revenue'] / final_df['Total_Weekly_Clocked_Hrs'],
+            0.0
+        )
             
         st.sidebar.header("🔧 Job Status Time Adjustments")
         st.sidebar.markdown("*(Correct tech hours if they hit a job status too early or late)*")
@@ -1045,13 +1065,19 @@ if time_file and ops_file:
             st.header("🧪 Isolated Leaderboard Sandbox")
             st.markdown("Use the selections below to add, remove, or evaluate components without changing the data models in other sections.")
             
+            # UPDATED: Appended financial selection flags directly into multi-select layout checklists
             test_choices = st.multiselect(
                 "Select active data views to mount inside Test Section:",
                 [
                     "🏆 The \"Golden Ratio\" Margin Predictor",
                     "🔄 The \"Context-Switching\" Penalty Alert",
                     "🕵️ The \"Ghost Punch\" & Payroll Discrepancy Auditor",
-                    "🏬 The Lowe's Store Staging Efficiency Scorecard"
+                    "🏬 The Lowe's Store Staging Efficiency Scorecard",
+                    "💰 Total Invoiced Gross Revenue",
+                    "📈 Gross Revenue per Clocked Hour",
+                    "📊 Business Unit Revenue Velocity",
+                    "🏆 Top Revenue Producer Leaderboard",
+                    "🎯 Average Ticket Size per BU"
                 ],
                 default=["🏆 The \"Golden Ratio\" Margin Predictor"],
                 key="sandbox_view_choices"
@@ -1167,6 +1193,57 @@ if time_file and ops_file:
                         {"Store Identifier": "Lowe's Store #0844 (Sample Baseline Row)", "Avg Delay Length": "0:15"}
                     ])
                     st.dataframe(store_stats, use_container_width=True)
+
+            # ADDED NEW SANDBOX FEATURE: Total Invoiced Gross Revenue
+            if "💰 Total Invoiced Gross Revenue" in test_choices:
+                st.markdown("### **💰 Total Invoiced Gross Revenue**")
+                st.markdown("*(Sum of all raw work-order payouts compiled before technician split explosion variables)*")
+                total_rev = unexploded_ops['Total Invoice Amount'].sum()
+                st.metric(label="Division-Wide Gross Invoiced Volume", value=f"${total_rev:,.2f}")
+
+            # ADDED NEW SANDBOX FEATURE: Gross Revenue per Clocked Hour
+            if "📈 Gross Revenue per Clocked Hour" in test_choices:
+                st.markdown("### **📈 Gross Revenue per Clocked Hour**")
+                st.markdown("*(Calculates gross value added to operations for every hour a tech is active on timesheets)*")
+                rev_per_hour_df = final_df.copy()
+                rev_per_hour_df['Gross Revenue / Clocked Hour'] = rev_per_hour_df.apply(
+                    lambda r: f"${r['Rev_Per_Clocked_Hr']:.2f}/hr" if r['Total_Weekly_Clocked_Hrs'] > 0 else "-", axis=1
+                )
+                rev_per_hour_df['Total Assigned Value'] = rev_per_hour_df['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
+                show_rev_per_hour = rev_per_hour_df.sort_values(by='Rev_Per_Clocked_Hr', ascending=False)[
+                    ['Name', 'Total Clocked', 'Total Assigned Value', 'Gross Revenue / Clocked Hour']
+                ]
+                st.dataframe(show_rev_per_hour.reset_index(drop=True), use_container_width=True)
+
+            # ADDED NEW SANDBOX FEATURE: Business Unit Revenue Velocity
+            if "📊 Business Unit Revenue Velocity" in test_choices:
+                st.markdown("### **📊 Business Unit Revenue Velocity**")
+                st.markdown("*(Measures core revenue velocity distributions across plumbing vs appliance business channels)*")
+                total_rev = unexploded_ops['Total Invoice Amount'].sum()
+                bu_rev = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].sum().reset_index()
+                bu_rev['Revenue Share %'] = np.where(total_rev > 0, (bu_rev['Total Invoice Amount'] / total_rev) * 100, 0.0)
+                bu_rev['Total Revenue'] = bu_rev['Total Invoice Amount'].apply(lambda x: f"${x:,.2f}")
+                bu_rev['Revenue Share %'] = bu_rev['Revenue Share %'].apply(lambda x: f"{x:.1f}%")
+                st.dataframe(bu_rev[['Business Unit', 'Total Revenue', 'Revenue Share %']].reset_index(drop=True), use_container_width=True)
+
+            # ADDED NEW SANDBOX FEATURE: Top Revenue Producer Leaderboard
+            if "🏆 Top Revenue Producer Leaderboard" in test_choices:
+                st.markdown("### **🏆 Top Revenue Producer Leaderboard**")
+                st.markdown("*(Ranks all active technicians cleanly by raw dollar value injected into division gross accounts)*")
+                leaderboard_rev = final_df.sort_values(by='Total_Assigned_Revenue', ascending=False).copy()
+                leaderboard_rev['Total Assigned Revenue'] = leaderboard_rev['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
+                leaderboard_rev['Total Jobs'] = leaderboard_rev['Total_Weekly_Job_Count'].astype(int)
+                show_leaderboard_rev = leaderboard_rev[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Revenue']]
+                st.dataframe(show_leaderboard_rev.reset_index(drop=True), use_container_width=True)
+
+            # ADDED NEW SANDBOX FEATURE: Average Ticket Size per BU
+            if "🎯 Average Ticket Size per BU" in test_choices:
+                st.markdown("### **🎯 Average Ticket Size per BU**")
+                st.markdown("*(Isolates the actual baseline job value assigned per completed work ticket format)*")
+                bu_avg_ticket = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].mean().reset_index()
+                bu_avg_ticket.columns = ['Business Unit', 'Average Ticket Size Raw']
+                bu_avg_ticket['Average Ticket Size'] = bu_avg_ticket['Average Ticket Size Raw'].apply(lambda x: f"${x:,.2f}")
+                st.dataframe(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True), use_container_width=True)
             
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
