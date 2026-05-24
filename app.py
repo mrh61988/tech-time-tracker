@@ -686,7 +686,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             rev_per_hour_df['Pay Pct'] = np.where(rev_per_hour_df['Total_Assigned_Revenue'] > 0, (rev_per_hour_df['Assumed Pay Amount'] / rev_per_hour_df['Total_Assigned_Revenue']) * 100, 0.0)
             rev_per_hour_df['Pay % vs Assigned Revenue'] = rev_per_hour_df['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
             show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[['Name', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue']]
-            st.dataframe(show_rev_per_hour.reset_index(drop=True), use_container_width=True)
+            st.dataframe(show_rev_per_hour.reset_index(drop=True).style.apply(highlight_pay_pct_row, axis=1), use_container_width=True)
 
     if "📊 Business Unit Revenue Velocity" in test_choices:
         st.markdown("### **📊 Business Unit Revenue Velocity**")
@@ -907,7 +907,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 
             st.markdown("   ")
             
-            # Itemized register matches filter lookup step and completely removes pure contractors from the log rows view
+            # Itemized register removes pure contractors from the log rows view
             df_prof_filtered = df_prof.copy()
             if selected_bu_filter != "All Sectors":
                 df_prof_filtered = df_prof_filtered[df_prof_filtered['Business Unit'] == selected_bu_filter]
@@ -1133,8 +1133,19 @@ if time_file and ops_file:
         unexploded_ops = ops_df.copy()
         raw_unsplit_volume = unexploded_ops['Total Invoice Amount'].sum()
         
-        # CALCULATE BOUNDS_DF AND DELAYED LAUNCHES SAFELY BEFORE TEAM CLONING OCCURS
-        ops_sorted = ops_df.dropna(subset=['Earliest_Start']).sort_values(['Assigned Team Members', 'Earliest_Start'])
+        # CRITICAL RE-REALIGNMENT FIX: Map bounds metric tracking precisely to the first interno core tech listed string parameter
+        def get_first_core_tech(tech_str):
+            raw_members = [m.strip() for m in str(tech_str).split(',') if m.strip()]
+            core_members_on_job = [m for m in raw_members if m in CORE_TECHS]
+            if core_members_on_job:
+                return core_members_on_job[0]
+            return None
+
+        ops_for_bounds = ops_df.copy()
+        ops_for_bounds['Assigned Team Members'] = ops_for_bounds['Assigned Team Members'].apply(get_first_core_tech)
+        ops_for_bounds = ops_for_bounds.dropna(subset=['Assigned Team Members', 'Earliest_Start'])
+
+        ops_sorted = ops_for_bounds.sort_values(['Assigned Team Members', 'Earliest_Start'])
         bounds_df = ops_sorted.groupby(['Assigned Team Members', 'Short_Date']).agg(
             First_Punch=('Earliest_Start', 'min'),
             Last_Punch=('Estimated_End', 'max'),
@@ -1365,7 +1376,7 @@ if time_file and ops_file:
                 bu_avg_ticket.columns = ['Business Unit', 'Average Ticket Size Raw']
                 bu_avg_ticket['Average Ticket Size'] = bu_avg_ticket['Average Ticket Size Raw'].apply(lambda x: f"${x:,.2f}")
                 st.dataframe(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True), use_container_width=True)
-                create_copy_button(bu_avg_ticket[['Business Unit', 'Average Ticket Size']], "bu_avg_ticket")
+                create_copy_button(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True), "bu_avg_ticket")
             with m_col2:
                 st.markdown("**📈 Pay Ratio per Clocked Hour**", unsafe_allow_html=True)
                 rev_per_hour_df = final_df.copy()
