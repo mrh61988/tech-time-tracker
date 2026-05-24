@@ -611,7 +611,6 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             gold_star_df['Total Diff'] = gold_star_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
             show_gold = gold_star_df[['Name', 'Total Clocked', 'Total Job Time', 'Daily Avg Diff', 'Total Diff']].copy()
             
-            # FIXED SYNTAX BINDING: Swapped out nested dictionary keyword assignment expressions burden parameters
             try: st.table(show_gold.reset_index(drop=True).style.set_properties(**{'background-color': '#e6f4ea', 'color': '#137333'}))
             except Exception: st.table(show_gold.reset_index(drop=True))
             create_copy_button(show_gold.reset_index(drop=True), f"gold_star_{tab_key}")
@@ -902,9 +901,10 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         else:
             st.info("No invoice details located inside loaded operations datasets.")
 
+    # INTERACTIVE FILTERABLE REVENUE NET PROFITABILITY MATRIX PANEL
     if "🛢️ Water Heater True Net Profitability Margin Auditor" in test_choices:
         st.markdown("### **💵 Division True Net Profitability Margin Auditor**")
-        st.markdown("*(Evaluates net profitability fields factoring applied $100 solo/$175 team WH flat rates and LSI allocated hourly payouts)*")
+        st.markdown("*(Evaluates net profitability metrics across selected sectors factoring applied contract payout structures)*")
         if not unexploded_ops.empty and 'Total Product Cost [tax inc]' in unexploded_ops.columns:
             df_prof = unexploded_ops.copy()
             df_prof['Product_Cost'] = pd.to_numeric(df_prof['Total Product Cost [tax inc]'], errors='coerce').fillna(0.0)
@@ -912,12 +912,14 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             df_prof['Combined_Lowe_Costs'] = df_prof['Product_Cost'] + df_prof['Service_Cost']
             df_prof['Tech_Count'] = df_prof['Assigned Team Members'].apply(lambda x: len([m.strip() for m in str(x).split(',') if m.strip()]))
             
-            # Map pay calculations across both lines of business dynamically
-            df_prof['Assumed_Labor_Payload'] = np.where(
+            # CRITICAL EVALUATION UPDATED: Compare flat wage floors vs logged time payroll payouts and choose maximum payload
+            df_prof['Flat_Rate_Labor'] = np.where(
                 df_prof['Business Unit'] == 'Lowes - Water Heaters',
                 np.where(df_prof['Tech_Count'] > 1, 175.0, 100.0),
-                df_prof['#ID'].map(ops_df.groupby('#ID')['Allocated_Job_Pay'].sum().to_dict()).fillna(0.0)
+                0.0
             )
+            df_prof['Logged_Time_Pay'] = df_prof['#ID'].map(ops_df.groupby('#ID')['Allocated_Job_Pay'].sum().to_dict()).fillna(0.0)
+            df_prof['Assumed_Labor_Payload'] = np.maximum(df_prof['Flat_Rate_Labor'], df_prof['Logged_Time_Pay'])
             df_prof['Net_Profit_Raw'] = df_prof['Total Invoice Amount'] - df_prof['Combined_Lowe_Costs'] - df_prof['Assumed_Labor_Payload']
             
             # Interactive filtering controls loop layout block
@@ -943,10 +945,10 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 st.table(totals_summary_df)
                 create_copy_button(totals_summary_df, "profitability_summary_totals")
                 
-                st.markdown("#### 🗢 Itemized Job-by-Job Margin Performance Register")
+                st.markdown("   ")
                 df_prof_filtered['Profit Margin %'] = np.where(df_prof_filtered['Total Invoice Amount'] > 0, (df_prof_filtered['Net_Profit_Raw'] / df_prof_filtered['Total Invoice Amount'] * 100), 0.0)
                 
-                # Apply dynamic interactive sorting layout metrics
+                # Apply dynamic interactive sorting configurations
                 if selected_sort_choice == "Highest Net Profit": df_prof_filtered = df_prof_filtered.sort_values(by='Net_Profit_Raw', ascending=False)
                 elif selected_sort_choice == "Lowest Net Profit": df_prof_filtered = df_prof_filtered.sort_values(by='Net_Profit_Raw', ascending=True)
                 elif selected_sort_choice == "Highest Gross Invoice": df_prof_filtered = df_prof_filtered.sort_values(by='Total Invoice Amount', ascending=False)
@@ -973,7 +975,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
 
     if "📦 Product vs. Service Cost Component Breakdown Matrix" in test_choices:
         st.markdown("### **📦 Lowe's Combined Cost Performance Matrix**")
-        st.markdown("*(Isolates combined material purchasing and service costs totals and maps relative cost share and net profit metrics by sector)*")
+        st.markdown("*(Isolates combined material and service expenses metrics and maps accurate Net Profit thresholds by sector)*")
         if not unexploded_ops.empty and 'Total Product Cost [tax inc]' in unexploded_ops.columns:
             df_cc = unexploded_ops.copy()
             df_cc['Prod_Cost'] = pd.to_numeric(df_cc['Total Product Cost [tax inc]'], errors='coerce').fillna(0.0)
@@ -981,11 +983,14 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             df_cc['Combined_Cost'] = df_cc['Prod_Cost'] + df_cc['Serv_Cost']
             df_cc['Tech_Count'] = df_cc['Assigned Team Members'].apply(lambda x: len([m.strip() for m in str(x).split(',') if m.strip()]))
             
-            df_cc['Assumed_Labor_Payload'] = np.where(
+            # CRITICAL EVALUATION UPDATED: Match comparison engine on macro sector summary matrix sheets
+            df_cc['Flat_Rate_Labor'] = np.where(
                 df_cc['Business Unit'] == 'Lowes - Water Heaters',
                 np.where(df_cc['Tech_Count'] > 1, 175.0, 100.0),
-                df_cc['#ID'].map(ops_df.groupby('#ID')['Allocated_Job_Pay'].sum().to_dict()).fillna(0.0)
+                0.0
             )
+            df_cc['Logged_Time_Pay'] = df_cc['#ID'].map(ops_df.groupby('#ID')['Allocated_Job_Pay'].sum().to_dict()).fillna(0.0)
+            df_cc['Assumed_Labor_Payload'] = np.maximum(df_cc['Flat_Rate_Labor'], df_cc['Logged_Time_Pay'])
             df_cc['Net_Profit_Raw'] = df_cc['Total Invoice Amount'] - df_cc['Combined_Cost'] - df_cc['Assumed_Labor_Payload']
             
             cc_matrix = df_cc.groupby('Business Unit').agg(
@@ -1121,7 +1126,7 @@ if time_file and ops_file:
         unexploded_ops = ops_df.copy()
         raw_unsplit_volume = unexploded_ops['Total Invoice Amount'].sum()
         
-        # CRITICAL STRUCTURAL INJECTION LAYER: CALCULATE BOUNDS_DF AND DELAYED LAUNCHES SAFELY BEFORE TEAM CLONING OCCURS
+        # CALCULATE BOUNDS_DF AND DELAYED LAUNCHES SAFELY BEFORE TEAM CLONING OCCURS
         ops_sorted = ops_df.dropna(subset=['Earliest_Start']).sort_values(['Assigned Team Members', 'Earliest_Start'])
         bounds_df = ops_sorted.groupby(['Assigned Team Members', 'Short_Date']).agg(
             First_Punch=('Earliest_Start', 'min'),
