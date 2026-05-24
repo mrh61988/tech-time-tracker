@@ -111,7 +111,7 @@ st.markdown("""
         text-align: left !important;
         line-height: 1.25 !important;
     }
-    thead {
+    for thead {
         display: table-header-group !important;
     }
 }
@@ -916,10 +916,10 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         else:
             st.info("No invoice details located inside loaded operations datasets.")
 
-    # Sortable Filterable revenue profit margins table panel layer block
+    # INTERACTIVE SORTABLE COMPREHENSIVE REVENUE NET PROFITABILITY MATRIX PANEL
     if "🛢️ Water Heater True Net Profitability Margin Auditor" in test_choices:
         st.markdown("### **💵 Division True Net Profitability Margin Auditor**")
-        st.markdown("*(Evaluates net profitability fields factoring contract back-outs, payroll thresholds floors, and automated warning highlight thresholds)*")
+        st.markdown("*(Evaluates net profitability metrics across selected sectors factoring applied contract structures and cost back-outs)*")
         if not unexploded_ops.empty and 'Total Product Cost [tax inc]' in unexploded_ops.columns:
             df_prof = unexploded_ops.copy()
             df_prof['Product_Cost'] = pd.to_numeric(df_prof['Total Product Cost [tax inc]'], errors='coerce').fillna(0.0)
@@ -927,14 +927,14 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             df_prof['Combined_Lowe_Costs'] = df_prof['Product_Cost'] + df_prof['Service_Cost']
             df_prof['Tech_Count'] = df_prof['Assigned Team Members'].apply(lambda x: len([m.strip() for m in str(x).split(',') if m.strip()]))
             
-            # Contractor lookup sequence logic variables mapping rules
+            # Helper logic to isolate contractor scopes
             CORE_TECHS = ['Bryan Pickett', 'Edward Lopez', 'Erik Tange', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
             def check_contractor(tech_str):
                 raw_members = [m.strip() for m in str(tech_str).split(',') if m.strip()]
                 return not any(m in CORE_TECHS for m in raw_members)
             df_prof['Is_Contractor'] = df_prof['Assigned Team Members'].apply(check_contractor)
             
-            # CRITICAL REQUIREMENT IMPLEMENTED: Non-negative bounding floor limits subtract adjustments from parameters
+            # Non-negative bounding floor limits subtract adjustments from parameters
             df_prof['Cost_Burden_Sub'] = np.where(
                 df_prof['Business Unit'] == 'Lowes - Water Heaters',
                 np.where(df_prof['Tech_Count'] > 1, 175.0, 100.0),
@@ -957,6 +957,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             )
             df_prof['Net_Profit_Raw'] = df_prof['Total Invoice Amount'] - df_prof['Combined_Lowe_Costs'] - df_prof['Assumed_Labor_Payload']
             
+            # Interactive filtering controls loop layout block
             sort_pane_col, filter_pane_col = st.columns(2)
             with filter_pane_col:
                 selected_bu_filter = st.selectbox("Filter Performance Register By Line of Business:", ["All Sectors", "Lowes - Water Heaters", "Lowes - Simple Installs"], key="bu_perf_filter_matrix")
@@ -967,7 +968,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             if selected_bu_filter != "All Sectors":
                 df_prof_filtered = df_prof_filtered[df_prof_filtered['Business Unit'] == selected_bu_filter]
                 
-            # Filter pure contractor dispatches out of onscreen register grids list rows
+            # Completely eliminate contractor jobs from onscreen table display
             df_prof_filtered = df_prof_filtered[~df_prof_filtered['Is_Contractor']]
                 
             if not df_prof_filtered.empty:
@@ -985,7 +986,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 st.markdown("   ")
                 df_prof_filtered['Profit Margin %'] = np.where(df_prof_filtered['Total Invoice Amount'] > 0, (df_prof_filtered['Net_Profit_Raw'] / df_prof_filtered['Total Invoice Amount'] * 100), 0.0)
                 
-                # Apply sorting parameters configuration trees logic map rows
+                # Apply dynamic interactive sorting configurations
                 if selected_sort_choice == "Highest Net Profit": df_prof_filtered = df_prof_filtered.sort_values(by='Net_Profit_Raw', ascending=False)
                 elif selected_sort_choice == "Lowest Net Profit": df_prof_filtered = df_prof_filtered.sort_values(by='Net_Profit_Raw', ascending=True)
                 elif selected_sort_choice == "Highest Gross Invoice": df_prof_filtered = df_prof_filtered.sort_values(by='Total Invoice Amount', ascending=False)
@@ -1031,7 +1032,10 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 return not any(m in CORE_TECHS for m in raw_members)
             df_cc['Is_Contractor'] = df_cc['Assigned Team Members'].apply(check_contractor_cc)
             
-            # CRITICAL MATRICES ADJUSTMENT REQUIREMENT: Apply non-negative bounding updates to summary model engines
+            # CRITICAL SYNC FIX: Filter contractor dispatches out of cost matrix to ensure absolute alignment
+            df_cc = df_cc[~df_cc['Is_Contractor']]
+            
+            # Non-negative bounding floor limits subtract adjustments from parameters
             df_cc['Cost_Burden_Sub'] = np.where(
                 df_cc['Business Unit'] == 'Lowes - Water Heaters',
                 np.where(df_cc['Tech_Count'] > 1, 175.0, 100.0),
@@ -1416,7 +1420,7 @@ if time_file and ops_file:
                 bu_avg_ticket.columns = ['Business Unit', 'Average Ticket Size Raw']
                 bu_avg_ticket['Average Ticket Size'] = bu_avg_ticket['Average Ticket Size Raw'].apply(lambda x: f"${x:,.2f}")
                 st.table(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True))
-                create_copy_button(bu_avg_ticket[['Business Unit', 'Average Ticket Size']], "bu_avg_ticket")
+                create_copy_button(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True), "bu_avg_ticket")
             with m_col2:
                 st.markdown("**📈 Pay Ratio per Clocked Hour**", unsafe_allow_html=True)
                 rev_per_hour_df = final_df.copy()
