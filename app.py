@@ -600,6 +600,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
     
     with col_left:
         st.subheader("⭐ The Gold Star High-Performer List")
+        st.markdown("*(Technicians who average under 1:30 of unallocated difference per day worked. Store delays do NOT penalize techs)*")
         gold_star_df = final_df[(final_df['Daily_Avg_Diff_Hrs'] < 1.5) & (final_df['Days_Worked'] > 0)].copy()
         if not gold_star_df.empty:
             gold_star_df = gold_star_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=True)
@@ -614,6 +615,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
 
     with col_right:
         st.subheader("🎯 The Technician Skill Matrix & Training Flag")
+        st.markdown("*(Compares a technician's LSI performance against their WH performance. Flags techs where the gap exceeds 15% sorted by priority warnings)*")
         skill_df = final_df.copy()
         if not skill_df.empty:
             skill_df['Eff Gap'] = np.where((skill_df['Simple_Installs_Count'] > 0) & (skill_df['Water_Heaters_Count'] > 0), abs(skill_df['LSI_Eff_Raw'] - skill_df['WH_Eff_Raw']), 0.0)
@@ -626,6 +628,11 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 if wh_cnt > 0: return "ℹ️ Only WH Jobs Assigned"
                 return "ℹ️ No BU Jobs Assigned"
             skill_df['Action Required'] = skill_df.apply(assign_skill_flag, axis=1)
+            
+            # CRITICAL WARNING SORT ENGINE IMPLEMENTATION
+            skill_df['sort_action'] = skill_df['Action Required'].apply(lambda x: 0 if '⚠️' in str(x) else (1 if 'ℹ️' in str(x) else 2))
+            skill_df = skill_df.sort_values(by='sort_action', ascending=True)
+            
             show_skill = skill_df[['Name', 'Simple Installs Eff', 'Water Heaters Eff', 'Action Required']].rename(columns={'Simple Installs Eff': 'LSI Efficiency', 'Water Heaters Eff': 'WH Efficiency'})
             def style_flags(row): return ['background-color: #fff3cd; color: #856404; font-weight: bold;'] * len(row) if '⚠️' in row['Action Required'] else [''] * len(row)
             try: st.table(show_skill.reset_index(drop=True).style.apply(style_flags, axis=1))
@@ -634,6 +641,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("🗺️ Route Optimization Flags")
+    st.markdown("*(Identifies service days where a technician spent over 40% of their billable shift driving to audit route density)*")
     poor_routes = daily_route[daily_route['Drive %'] > 40.0].copy()
     if not poor_routes.empty:
         poor_routes['Drive %'] = poor_routes['Drive %'].apply(lambda x: f"{x:.1f}%")
@@ -647,6 +655,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
     launch_col, launch_empty_col = st.columns(2)
     with launch_col:
         st.subheader("📊 Late Deployment Scorecard")
+        st.markdown("*(Aggregates the total number of delayed morning launches per technician across the week)*")
         if not delayed_launches_df.empty:
             launch_counts = delayed_launches_df.groupby('Assigned Team Members').size().reset_index(name='Total Late Days').sort_values(by='Total Late Days', ascending=False)
             try: st.table(launch_counts.reset_index(drop=True).style.set_properties(**{'background-color': '#fff3cd', 'color': '#856404;'}, subset=['Total Late Days']))
@@ -655,6 +664,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
 
     with launch_empty_col:
         st.subheader("🚗 Delayed Launch Alert")
+        st.markdown("*(Provides a day-by-day chronological log of start-of-day timeline compliance delays)*")
         if not delayed_launches_df.empty:
             tech_late_list = sorted(delayed_launches_df['Assigned Team Members'].unique())
             selected_late_tech = st.selectbox("Select Tech to view launch times:", tech_late_list, key=f"late_launch_{tab_key}")
@@ -666,7 +676,6 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 except Exception: st.table(show_launches)
                 create_copy_button(show_launches, f"late_alert_{tab_key}")
 
-# --- CONSOLIDATED SANDBOX TAB VIEWS ENGINE ---
 def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices):
     if "🏆 The Golden Ratio Margin Predictor" in test_choices:
         st.markdown("### **🏆 The Golden Ratio Margin Predictor**")
@@ -770,7 +779,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         route_eff = route_eff.sort_values(by='Rev per Drive Hour Raw', ascending=False)
         route_eff['Total Assigned Revenue'] = route_eff['Total_Revenue'].apply(lambda x: f"${x:,.2f}")
         route_eff['Total Drive Hours'] = route_eff['Total_Drive_Hrs'].apply(lambda x: f"{x:.1f} hrs")
-        route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"${x:.1f}/hr")
+        route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"{x:.1f}/hr")
         st.table(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True))
 
     if "🦺 Multi-Tech Labor Yield vs. Solo Runs" in test_choices:
@@ -834,10 +843,10 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         else:
             st.info("No material store staging records discovered inside loaded field parameters.")
 
-    # NEW TESTING OPTION 2: OVERTIME ROI COST-BENEFIT AUDITOR
+    # MODULE 11: OVERTIME ROI AUDITOR
     if "📊 Overtime ROI Cost-Benefit Auditor" in test_choices:
         st.markdown("### **📊 Overtime ROI Cost-Benefit Auditor**")
-        st.markdown("*(Analyzes the direct financial return on investment for technicians producing premium overtime wage hours)*")
+        st.markdown("*(Measures generated invoice revenue returns against the premium wage burden expenses of overtime dispatches)*")
         ot_audit_rows = []
         for idx, row in final_df.iterrows():
             name = row['Name']
@@ -864,16 +873,16 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                     "Revenue Yield per OT Pay Dollar": f"${roi_ratio:,.2f}/$"
                 })
         if ot_audit_rows:
-            ot_audit_df = pd.DataFrame(ot_rows_out := ot_audit_rows)
+            ot_audit_df = pd.DataFrame(ot_audit_rows)
             st.table(ot_audit_df)
             create_copy_button(ot_audit_df, "overtime_roi_auditor")
         else:
             st.success("✅ Zero hourly technicians incurred premium overtime thresholds during this invoice cycle.")
 
-    # NEW TESTING OPTION 4: SINGLE-JOB SINGLE-TICKET WHALE LEADERBOARD
+    # MODULE 12:True SINGLE JOB WHALE LEADERBOARD
     if "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard" in test_choices:
         st.markdown("### **🏆 Single-Job \"Whale Alert\" Revenue Leaderboard**")
-        st.markdown("*(Highlights the top 5 highest-grossing unexploded individual ticket invoices completed across the division)*")
+        st.markdown("*(Highlights the top 5 highest-grossing individual unexploded invoices completed this cycle across the division)*")
         if not unexploded_ops.empty and 'Total Invoice Amount' in unexploded_ops.columns:
             whale_df = unexploded_ops.sort_values(by='Total Invoice Amount', ascending=False).head(5).copy()
             whale_summary = []
@@ -900,7 +909,7 @@ if time_file and ops_file:
     try:
         CORE_TECHS = ['Bryan Pickett', 'Edward Lopez', 'Erik Tange', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
         
-        # --- 1. Intelligent Dual-Engine Parser for Time Sheets ---
+        # --- 1. Parser Engine for Time Sheets ---
         time_bytes = time_file.getvalue()
         try:
             sample_df = pd.read_csv(io.BytesIO(time_bytes))
@@ -971,7 +980,7 @@ if time_file and ops_file:
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
 
-        # PRE-FETCH TIMESTAMPS AT BASE TO SECURE TIME RECOGNITION BEFORE MERGING
+        # TIMESTAMPS CRITICAL LIFECYCLE DISPATCH HOOK 
         ts_cols = ['Lowes Store - Start Timestamp', 'On The Way - Start Timestamp', 'In Progress - Start Timestamp', 'On The Way - Start Timestamp.1', 'In Progress - Start Timestamp.1']
         available_ts_cols = [c for c in ts_cols if c in ops_df.columns]
         ops_df['Job_Date'] = ops_df[available_ts_cols].bfill(axis=1).iloc[:, 0]
@@ -1027,29 +1036,10 @@ if time_file and ops_file:
         else:
             ops_df = pd.DataFrame(columns=ops_df.columns)
 
-        ops_sorted = ops_df.dropna(subset=['Earliest_Start']).sort_values(['Assigned Team Members', 'Earliest_Start'])
-        bounds_df = ops_sorted.groupby(['Assigned Team Members', 'Short_Date']).agg(
-            First_Punch=('Earliest_Start', 'min'),
-            Last_Punch=('Estimated_End', 'max'),
-            First_Status=('Earliest_Status', 'first')
-        ).reset_index()
-        bounds_df['First Status Update'] = bounds_df['First_Punch'].dt.strftime('%I:%M %p')
-        bounds_df['Last Status Update'] = bounds_df['Last_Punch'].dt.strftime('%I:%M %p')
-        bounds_df['Total_Span_Hrs'] = (bounds_df['Last_Punch'] - bounds_df['First_Punch']).dt.total_seconds() / 3600.0
-        bounds_df['Total Time'] = bounds_df['Total_Span_Hrs'].apply(format_hm)
-        
-        delayed_launches_df = bounds_df[bounds_df.apply(check_late, axis=1)].copy()
-        
-        if 'Business Unit' in ops_df.columns:
-            bu_agg = ops_df.groupby(['Assigned Team Members', 'Business Unit']).agg(Total_Job_Time_Hours=('Total_Job_Time_Hours', 'sum'), BU_Job_Count=('Total_Job_Time_Hours', 'size')).reset_index()
-            bu_pivot_hrs = bu_agg.pivot(index='Assigned Team Members', columns='Business Unit', values='Total_Job_Time_Hours').reset_index().fillna(0)
-            bu_pivot_cnt = bu_agg.pivot(index='Assigned Team Members', columns='Business Unit', values='BU_Job_Count').reset_index().fillna(0)
-            bu_pivot = pd.merge(bu_pivot_hrs, bu_pivot_cnt, on='Assigned Team Members', suffixes=('_hrs', '_cnt'))
-            bu_pivot = bu_pivot.rename(columns={'Assigned Team Members': 'Name'})
-            for col in ['Lowes - Simple Installs_hrs', 'Lowes - Water Heaters_hrs', 'Lowes - Simple Installs_cnt', 'Lowes - Water Heaters_cnt']:
-                if col not in bu_pivot.columns: bu_pivot[col] = 0.0
-            bu_pivot = bu_pivot.rename(columns={'Lowes - Simple Installs_hrs': 'Simple_Installs_Hrs', 'Lowes - Water Heaters_hrs': 'Water_Heaters_Hrs', 'Lowes - Simple Installs_cnt': 'Simple_Installs_Count', 'Lowes - Water Heaters_cnt': 'Water_Heaters_Count'})
-        else: bu_pivot = pd.DataFrame(columns=['Name', 'Simple_Installs_Hrs', 'Water_Heaters_Hrs', 'Simple_Installs_Count', 'Water_Heaters_Count'])
+        ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
+        ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On The Way - Completed Total Time in Status.1', 0)) / 3600.0
+        ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
+        ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
 
         job_time_agg = ops_df.groupby(['Assigned Team Members', 'Day_of_Week'])['Total_Job_Time_Hours'].sum().reset_index()
         job_time_pivot = job_time_agg.pivot(index='Assigned Team Members', columns='Day_of_Week', values='Total_Job_Time_Hours').reset_index().rename(columns={'Assigned Team Members': 'Name'}).fillna(0)
