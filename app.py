@@ -373,6 +373,32 @@ def run_baselines_matrix(ops_df):
         matrix_df = matrix_df.sort_values(by='sort_key', ascending=False).drop(columns=['sort_key'])
         
     try:
+        def highlight_matrix_overhead(s):
+            styles = []
+            for val in s:
+                try:
+                    if ' (Div: ' in str(val):
+                        tech_str, div_str = val.split(' (Div: ')
+                        t_h = parse_hm(tech_str)
+                        d_h = parse_hm(div_str.replace(')', ''))
+                        if t_h > d_h * 1.25 and t_h > 0:
+                            styles.append('background-color: #ffcccc; color: #990000;')
+                            continue
+                    styles.append('')
+                except:
+                    styles.append('')
+            return styles
+            
+        def highlight_over_hour_row(row):
+            styles = [''] * len(row)
+            if 'Over Division Average By' in row.index:
+                val = row['Over Division Average By']
+                if '+' in str(val):
+                    hrs = parse_hm(str(val).replace('+', ''))
+                    if hrs > 1.0:
+                        return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row)
+            return styles
+            
         styled_matrix = matrix_df.reset_index(drop=True).style.apply(highlight_matrix_overhead, subset=['Total Avg Job Time', 'Avg WH Time', 'Avg LSI Time', 'Avg WH Store Time', 'Avg LSI Store Time'])
         st.dataframe(styled_matrix, use_container_width=True) 
     except Exception:
@@ -671,10 +697,14 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, bu_financial_
             for d in ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]:
                 clocked = row[f'{d}_Clocked_Hrs']
                 jobs = row[f'{d}_Job_Count']
-                if clocked > 0 and jobs == 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🕵️ Paid But Idle (Clocked In, 0 Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": 0})
-                elif clocked == 0 and jobs > 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🚨 Unpaid Field Work (0 Hours Clocked, Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": int(jobs)})
-        if ghost_alerts: st.dataframe(pd.DataFrame(ghost_alerts), use_container_width=True)
-        else: st.success("Perfect alignment! No payroll discrepancy errors detected on current sheets.")
+                if clocked > 0 and jobs == 0: 
+                    ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🕵️ Paid But Idle (Clocked In, 0 Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": 0})
+                elif clocked == 0 and jobs > 0: 
+                    ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🚨 Unpaid Field Work (0 Hours Clocked, Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": int(jobs)})
+        if ghost_alerts: 
+            st.dataframe(pd.DataFrame(ghost_alerts), use_container_width=True)
+        else: 
+            st.success("Perfect alignment! No payroll discrepancy errors detected.")
 
     if "¼ The Lowe's Store Staging Efficiency Scorecard" in test_choices:
         st.markdown("### **¼ The Lowe's Store Staging Efficiency Scorecard**")
@@ -705,7 +735,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, bu_financial_
             rev_per_hour_df['Pay Pct'] = np.where(rev_per_hour_df['Total_Assigned_Revenue'] > 0, (rev_per_hour_df['Assumed Pay Amount'] / rev_per_hour_df['Total_Assigned_Revenue']) * 100, 0.0)
             rev_per_hour_df['Pay % vs Assigned Revenue'] = rev_per_hour_df['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
             show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[['Name', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue']]
-            st.dataframe(show_rev_per_hour.reset_index(drop=True), use_container_width=True)
+            st.dataframe(show_rev_per_hour.reset_index(drop=True).style.apply(highlight_pay_pct_row, axis=1), use_container_width=True)
 
     if "📊 Business Unit Revenue Velocity" in test_choices:
         st.markdown("### **📊 Business Unit Revenue Velocity**")
@@ -939,7 +969,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, bu_financial_
         cc_matrix['Cost Ratio % vs Rev'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Combined_Cost_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
         cc_matrix['Cost Ratio % vs Rev'] = cc_matrix['Cost Ratio % vs Rev'].apply(lambda x: f"{x:.1f}%")
         cc_matrix['Net Profit (%)'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Net_Profit_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
-        cc_matrix['Net Profit (%)'] = cc_matrix['Net_Profit (%)'].apply(lambda x: f"{x:.1f}%")
+        cc_matrix['Net Profit (%)'] = cc_matrix['Net Profit (%)'].apply(lambda x: f"{x:.1f}%")
         cc_matrix['Gross Invoiced Revenue'] = cc_matrix['Gross_Invoiced_Raw'].apply(lambda x: f"${x:,.2f}")
         cc_matrix['Total Combined Cost'] = cc_matrix['Combined_Cost_Total_Raw'].apply(lambda x: f"${x:,.2f}")
         cc_matrix['Tech Wage Burden'] = cc_matrix['Assumed_Labor_Payload_Raw'].apply(lambda x: f"${x:,.2f}")
@@ -948,6 +978,6 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, bu_financial_
         show_cc = cc_matrix[['Business Unit', 'Jobs', 'Gross Invoiced Revenue', 'Total Combined Cost', 'Cost Ratio % vs Rev', 'Tech Wage Burden', 'Net Profit ($)', 'Net Profit (%)']].rename(columns={'Jobs': 'Jobs Assigned'})
         st.dataframe(show_cc, use_container_width=True)
         create_copy_button(show_cc, "product_vs_service_cost_breakdown")
-"""
-print("Pruned successfully.")
-}
+
+except Exception as e:
+    st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
