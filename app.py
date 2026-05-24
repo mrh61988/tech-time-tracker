@@ -1,4 +1,4 @@
-import streamlit st
+import streamlit as st
 import pandas as pd
 import numpy as np
 import io
@@ -28,7 +28,7 @@ st.markdown("""
     h1, .hide-on-print, .stAlert, iframe, button { display: none !important; }
     div[class*="stExpander"] { display: none !important; }
     
-    /* CRITICAL FIX: Retain column blocks side-by-side natively on wide horizontal landscape layouts */
+    /* Force column blocks side-by-side natively on wide horizontal landscape layouts */
     [data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
@@ -693,7 +693,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 if clocked > 0 and jobs == 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🕵️ Paid But Idle (Clocked In, 0 Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": 0})
                 elif clocked == 0 and jobs > 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🚨 Unpaid Field Work (0 Hours Clocked, Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": int(jobs)})
         if ghost_alerts: st.table(pd.DataFrame(ghost_alerts))
-        else: st.success("Perfect alignment! No payroll discrepancy errors detected on current sheets.")
+        else: st.success("Perfect alignment! No payroll discrepancy errors detected.")
 
     if "¼ The Lowe's Store Staging Efficiency Scorecard" in test_choices:
         st.markdown("### **¼ The Lowe's Store Staging Efficiency Scorecard**")
