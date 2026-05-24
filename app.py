@@ -822,7 +822,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
     # Sortable Filterable revenue profit margins table panel layer block
     if "🛢️ Water Heater True Net Profitability Margin Auditor" in test_choices:
         st.markdown("### **💵 Division True Net Profitability Margin Auditor**")
-        st.markdown("*(Evaluates net profitability metrics across selected sectors. Overview totals include contractors, itemized register excludes them)*")
+        st.markdown("*(Evaluates net profitability metrics across selected sectors factoring applied contract structures and cost back-outs)*")
         if not unexploded_ops.empty and 'Total Product Cost [tax inc]' in unexploded_ops.columns:
             df_prof = unexploded_ops.copy()
             df_prof['Product_Cost'] = pd.to_numeric(df_prof['Total Product Cost [tax inc]'], errors='coerce').fillna(0.0)
@@ -987,17 +987,22 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             unworked_days = [d for d in all_weekdays if d not in worked_days]
             sean_penalty = len(unworked_days) * 269.0
             
+            # Filter pure contractor rows out of the overview table aggregates as requested
+            df_cc = df_cc[~df_cc['Is_Contractor']]
+            
             cc_matrix = df_cc.groupby('Business Unit').agg(
                 Jobs=('#ID', 'count'),
                 Gross_Invoiced_Raw=('Total Invoice Amount', 'sum'),
                 Combined_Cost_Total_Raw=('Combined_Cost', 'sum'),
+                Assumed_Labor_Payload_Raw=('Assumed_Labor_Payload', 'sum'),
                 Net_Profit_Total_Raw=('Net_Profit_Raw', 'sum')
             ).reset_index()
             
             # Direct addition shift to direct profit mapping row metrics rules
             for idx, r in cc_matrix.iterrows():
                 if r['Business Unit'] == 'Lowes - Simple Installs':
-                    cc_matrix.loc[idx, 'Net_Profit_Total_Raw'] += sean_penalty
+                    cc_matrix.loc[idx, 'Assumed_Labor_Payload_Raw'] = max(0.0, cc_matrix.loc[idx, 'Assumed_Labor_Payload_Raw'] - sean_penalty)
+                    cc_matrix.loc[idx, 'Net_Profit_Total_Raw'] = cc_matrix.loc[idx, 'Gross_Invoiced_Raw'] - cc_matrix.loc[idx, 'Combined_Cost_Total_Raw'] - cc_matrix.loc[idx, 'Assumed_Labor_Payload_Raw']
             
             cc_matrix['Cost Ratio % vs Rev'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Combined_Cost_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
             cc_matrix['Net Profit (%)'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Net_Profit_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
@@ -1007,9 +1012,10 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             cc_matrix['Net Profit (%)'] = cc_matrix['Net Profit (%)'].apply(lambda x: f"{x:.1f}%")
             cc_matrix['Gross Invoiced Revenue'] = cc_matrix['Gross_Invoiced_Raw'].apply(lambda x: f"${x:,.2f}")
             cc_matrix['Total Combined Cost'] = cc_matrix['Combined_Cost_Total_Raw'].apply(lambda x: f"${x:,.2f}")
+            cc_matrix['Tech Wage Burden'] = cc_matrix['Assumed_Labor_Payload_Raw'].apply(lambda x: f"${x:,.2f}")
             cc_matrix['Net Profit ($)'] = cc_matrix['Net_Profit_Total_Raw'].apply(lambda x: f"${x:,.2f}")
             
-            show_cc = cc_matrix[['Business Unit', 'Jobs', 'Gross Invoiced Revenue', 'Total Combined Cost', 'Cost Ratio % vs Rev', 'Net Profit ($)', 'Net Profit (%)']].rename(columns={'Jobs': 'Jobs Assigned'})
+            show_cc = cc_matrix[['Business Unit', 'Jobs', 'Gross Invoiced Revenue', 'Total Combined Cost', 'Cost Ratio % vs Rev', 'Tech Wage Burden', 'Net Profit ($)', 'Net Profit (%)']].rename(columns={'Jobs': 'Jobs Assigned'})
             st.table(show_cc)
             create_copy_button(show_cc, "product_vs_service_cost_breakdown")
         else: st.info("Product/Service financial costs metrics columns missing from current source sheets.")
@@ -1164,7 +1170,7 @@ if time_file and ops_file:
         else:
             ops_df = pd.DataFrame(columns=ops_df.columns)
 
-        # Mirror variable properties mapping strings safely inside row items columns
+        # Force variable mirroring properties mapping strings safely inside row items columns
         ops_df['Name'] = ops_df['Assigned Team Members']
 
         ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
@@ -1304,7 +1310,7 @@ if time_file and ops_file:
             # === MACRO DASHBOARD PANEL ===
             st.markdown("<br><hr><h3>📊 Macro Financial Performance Dashboard</h3>", unsafe_allow_html=True)
             
-            # Macro calculations loop initialization values setup 
+            # Macro calculations sequence loop execution
             rev_per_hour_df_calc = final_df.copy()
             rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(get_assumed_pay, axis=1)
             total_assumed_pay = rev_per_hour_df_calc['Assumed Pay Amount'].sum()
@@ -1318,7 +1324,7 @@ if time_file and ops_file:
             with dash_metric_col3:
                 st.metric(label="Division Labor Pay Ratio", value=f"{pay_ratio_pct:.1f}%")
                 
-            # Build macro bu matrix structures before view loading occurs
+            # Macro matrix calculation sequence mapping parameters
             ops_df['Computed_Row_Pay'] = ops_df['Name'].map(rev_per_hour_df_calc.set_index('Name')['Assumed Pay Amount'].to_dict()).fillna(0.0)
             tech_total_field_hrs = ops_df.groupby('Name')['Total_Job_Time_Hours'].sum().reset_index().rename(columns={'Total_Job_Time_Hours': 'Tech_Total_Work_Hrs'})
             if 'Tech_Total_Work_Hrs' in ops_df.columns: ops_df = ops_df.drop(columns=['Tech_Total_Work_Hrs'])
@@ -1406,7 +1412,7 @@ if time_file and ops_file:
                 report_data = []
                 for full_day, short_day in {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}.items():
                     report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(final_df[final_df['Name'] == selected_tech].iloc[0][short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])})
-                report_data.append({"Day": "TOTAL WEEKLY", "Jobs": int(tech_data['Total_Weekly_Job_Count']), "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']), "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']), "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])})
+                report_data.append({"Day": "TOTAL WEEKLY", "Jobs": int(tech_data['Total_Weekly_Job_Count']), "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']), "Job Time": format_hm(final_df[final_df['Name'] == selected_tech].iloc[0][short_day + '_Job_Hrs']), "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])})
                 indiv_day_df = pd.DataFrame(report_data)
                 st.table(indiv_day_df)
                 create_copy_button(indiv_day_df, f"printable_indiv_{selected_tech}")
