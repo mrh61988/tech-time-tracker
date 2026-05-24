@@ -189,7 +189,7 @@ def highlight_pay_pct_row(row):
     return styles
 
 # --- MAIN BLOCK REPORT ENGINE ---
-def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
+def show_advanced_reporting(ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
     # === BOSS TOOLS SECTION ===
@@ -450,7 +450,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         if ghost_alerts: st.dataframe(pd.DataFrame(ghost_alerts), use_container_width=True)
         else: st.success("Perfect alignment! No payroll discrepancy errors detected.")
 
-    if "¼ The Lowe's Store Staging Efficiency Scorecard" in test_choices:
+    if "🏬 The Lowe's Store Staging Efficiency Scorecard" in test_choices:
         st.markdown("### **¼ The Lowe's Store Staging Efficiency Scorecard**")
         store_cols = [c for c in ops_df.columns if 'store' in c.lower() and 'time' not in c.lower() and 'timestamp' not in c.lower()]
         if store_cols:
@@ -484,10 +484,43 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         st.markdown("### **📊 Business Unit Revenue Velocity**")
         bu_rev = unexploded_ops['Total Invoice Amount'].sum()
         bu_rev_df = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].sum().reset_index()
-        bu_rev_df['Revenue Share %'] = (bu_rev_df['Total Invoice Amount'] / unexploded_ops['Total Invoice Amount'].sum()) * 100
+        bu_rev_df['Revenue Share %'] = (bu_rev_df['Total Invoice Amount'] / bu_rev) * 100
         bu_rev_df['Total Revenue'] = bu_rev_df['Total Invoice Amount'].apply(lambda x: f"${x:,.2f}")
         bu_rev_df['Revenue Share %'] = bu_rev_df['Revenue Share %'].apply(lambda x: f"{x:.1f}%")
         st.dataframe(bu_rev_df[['Business Unit', 'Total Revenue', 'Revenue Share %']].reset_index(drop=True), use_container_width=True)
+
+    # ADDED MODULE 3: GEO-ROUTING REVENUE EFFICIENCY LINE MATRIX
+    if "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)" in test_choices:
+        st.markdown("### **🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)**")
+        st.markdown("*(Analyzes travel productivity per technician. Higher values indicate tight localized route clustering vs high cross-divisional travel waste)*")
+        route_eff = ops_df.groupby('Assigned Team Members').agg(
+            Total_Revenue=('Total Invoice Amount', 'sum'),
+            Total_Drive_Hrs=('Drive_Time_Hrs', 'sum')
+        ).reset_index().rename(columns={'Assigned Team Members': 'Name'})
+        route_eff['Rev per Drive Hour Raw'] = np.where(route_eff['Total_Drive_Hrs'] > 0, route_eff['Total_Revenue'] / route_eff['Total_Drive_Hrs'], 0.0)
+        route_eff = route_eff.sort_values(by='Rev per Drive Hour Raw', ascending=False)
+        route_eff['Total Assigned Revenue'] = route_eff['Total_Revenue'].apply(lambda x: f"${x:,.2f}")
+        route_eff['Total Drive Hours'] = route_eff['Total_Drive_Hrs'].apply(lambda x: f"{x:.1f} hrs")
+        route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"${x:,.2f}/hr")
+        st.dataframe(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True), use_container_width=True)
+
+    # ADDED MODULE 4: TRUE GROSS MARGIN MATRIX PER HOUR ON THE CLOCK
+    if "📉 True Gross Margin per Clocked Hour" in test_choices:
+        st.markdown("### **📉 True Gross Margin per Clocked Hour**")
+        st.markdown("*(Uncovers absolute net profitability per tech relative to total hours on the clock, stripping away high volume illusions)*")
+        rev_per_hour_df_calc = final_df.copy()
+        rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(get_assumed_pay, axis=1)
+        margin_df = final_df.copy()
+        margin_df['Assumed Pay Amount'] = margin_df.apply(get_assumed_pay, axis=1)
+        margin_df['Net Margin Raw'] = margin_df['Total_Assigned_Revenue'] - margin_df['Assumed Pay Amount']
+        margin_df['Margin per Clocked Hour Raw'] = np.where(margin_df['Total_Weekly_Clocked_Hrs'] > 0, margin_df['Net Margin Raw'] / margin_df['Total_Weekly_Clocked_Hrs'], 0.0)
+        margin_df = margin_df.sort_values(by='Margin per Clocked Hour Raw', ascending=False)
+        margin_df['Total Assigned Revenue'] = margin_df['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
+        margin_df['Assumed Pay'] = margin_df['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}")
+        margin_df['Total Net Margin'] = margin_df['Net Margin Raw'].apply(lambda x: f"${x:,.2f}")
+        margin_df['Total Clocked'] = margin_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
+        margin_df['Margin per Clocked Hour'] = margin_df['Margin per Clocked Hour Raw'].apply(lambda x: f"${x:,.2f}/hr")
+        st.dataframe(margin_df[['Name', 'Total Clocked', 'Total Assigned Revenue', 'Assumed Pay', 'Total Net Margin', 'Margin per Clocked Hour']].reset_index(drop=True), use_container_width=True)
 
 # --- RUN EXECUTION PIPELINE ---
 col1, col2 = st.columns(2)
@@ -728,6 +761,7 @@ if time_file and ops_file:
         bu_summary_df['WH Efficiency'] = final_df['Water Heaters Eff']
         bu_summary_df['Total Efficiency'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, (final_df['Total_Weekly_Job_Hrs'] / final_df['Total_Weekly_Clocked_Hrs']) * 100, 0.0)
         bu_summary_df['Total Efficiency'] = bu_summary_df['Total Efficiency'].apply(lambda x: f"{x:.1f}%")
+        
         bu_summary_df['Total Unallocated Hours'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
         display_dfs['Weekly'] = bu_summary_df
         
@@ -765,13 +799,11 @@ if time_file and ops_file:
             ops_df['Computed_Row_Pay'] = ops_df['Assigned Team Members'].map(rev_per_hour_df_calc.set_index('Name')['Assumed Pay Amount'].to_dict()).fillna(0.0)
             tech_total_field_hrs = ops_df.groupby('Assigned Team Members')['Total_Job_Time_Hours'].sum().reset_index().rename(columns={'Total_Job_Time_Hours': 'Tech_Total_Work_Hrs'})
             
-            # Prevent column collisions by dropping temporary columns if they already exist
             if 'Tech_Total_Work_Hrs' in ops_df.columns: ops_df = ops_df.drop(columns=['Tech_Total_Work_Hrs'])
             ops_df = pd.merge(ops_df, tech_total_field_hrs, on='Assigned Team Members', how='left')
             ops_df['Job_Time_Weight'] = np.where(ops_df['Tech_Total_Work_Hrs'] > 0, ops_df['Total_Job_Time_Hours'] / ops_df['Tech_Total_Work_Hrs'], 0.0)
             ops_df['Allocated_Job_Pay'] = ops_df['Computed_Row_Pay'] * ops_df['Job_Time_Weight']
             
-            # For Bryan and Erik, overwrite with exactly 33% of that job's revenue
             ops_df['Allocated_Job_Pay'] = np.where(
                 ops_df['Assigned Team Members'].str.lower().str.contains('bryan') | ops_df['Assigned Team Members'].str.lower().str.contains('erik'),
                 ops_df['Total Invoice Amount'] * 0.33,
@@ -786,7 +818,6 @@ if time_file and ops_file:
             bu_pay_split = ops_df.groupby('Business Unit')['Allocated_Job_Pay'].sum().reset_index().rename(columns={'Allocated_Job_Pay': 'Assumed Pay Raw'})
             bu_financial_matrix = pd.merge(bu_gross_rev, bu_pay_split, on='Business Unit', how='left').fillna(0.0)
             
-            # Formulate ratios
             bu_financial_matrix['Assumed Pay'] = bu_financial_matrix['Assumed Pay Raw'].apply(lambda x: f"${x:,.2f}")
             bu_financial_matrix['Pay % of Revenue'] = np.where(
                 bu_financial_matrix['Gross Invoiced Revenue Raw'] > 0,
@@ -851,7 +882,7 @@ if time_file and ops_file:
                 st.dataframe(display_dfs[short_day].reset_index(drop=True), use_container_width=True)
 
         with tabs[10]:
-            test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "¼ The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
+            test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "¼ The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)", "📉 True Gross Margin per Clocked Hour"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
             run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             
     except Exception as e:
