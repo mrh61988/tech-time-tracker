@@ -936,7 +936,9 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, bu_financial_
         cc_matrix['Cost Ratio % vs Rev'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Combined_Cost_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
         cc_matrix['Cost Ratio % vs Rev'] = cc_matrix['Cost Ratio % vs Rev'].apply(lambda x: f"{x:.1f}%")
         cc_matrix['Net Profit (%)'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Net_Profit_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
-        cc_matrix['Net Profit (%)'] = cc_matrix['Net_Profit (%)'].apply(lambda x: f"{x:.1f}%")
+        
+        # FIXED TYPO CRITICAL OVERHAUL: Replaced underscore string label assignment to use absolute naming standards smoothly
+        cc_matrix['Net Profit (%)'] = cc_matrix['Net Profit (%)'].apply(lambda x: f"{x:.1f}%")
         cc_matrix['Gross Invoiced Revenue'] = cc_matrix['Gross_Invoiced_Raw'].apply(lambda x: f"${x:,.2f}")
         cc_matrix['Total Combined Cost'] = cc_matrix['Combined_Cost_Total_Raw'].apply(lambda x: f"${x:,.2f}")
         cc_matrix['Tech Wage Burden'] = cc_matrix['Assumed_Labor_Payload_Raw'].apply(lambda x: f"${x:,.2f}")
@@ -1260,7 +1262,7 @@ if time_file and ops_file:
         )
         df_macro_pay['Net_Profit_Raw'] = df_macro_pay['Total Invoice Amount'] - df_macro_pay['Combined_Lowe_Costs'] - df_macro_pay['Assumed_Labor_Payload']
         
-        # Pull and parse Sean Marble attendance absence burden allocations globally
+        # Calculate Sean Marble unworked days penalty 
         sean_ops = ops_df[ops_df['Name'] == 'Sean Marble']
         worked_days = sean_ops['Day_of_Week'].unique() if not sean_ops.empty else []
         sean_penalty = len([d for d in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] if d not in worked_days]) * 269.0
@@ -1561,7 +1563,7 @@ if time_file and ops_file:
                     st.dataframe(show_staging[['Day_of_Week', 'Total_Visits', 'Total Hours Delayed', 'Avg Delay per Visit']].rename(columns={'Day_of_Week': 'Day', 'Total_Visits': 'Store Pickups'}), use_container_width=True)
                     create_copy_button(show_staging[['Day_of_Week', 'Total_Visits', 'Total Hours Delayed', 'Avg Delay per Visit']], "store_staging_by_day")
                 else:
-                    st.info("No material store staging records discovered inside logged field parameters.")
+                    st.info("No material store staging records discovered inside loaded field parameters.")
 
             if "📊 Overtime ROI Cost-Benefit Auditor" in test_choices:
                 st.markdown("### **📊 Overtime ROI Cost-Benefit Auditor**")
@@ -1596,7 +1598,7 @@ if time_file and ops_file:
                     st.dataframe(ot_audit_df, use_container_width=True)
                     create_copy_button(ot_audit_df, "overtime_roi_auditor")
                 else:
-                    st.success("✅ Zero hourly technicians incurred premium overtime thresholds during this invoice cycle.")
+                    st.success("¼ Hourly technicians worked zero premium overtime thresholds during this session cycle.")
 
             if "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard" in test_choices:
                 st.markdown("### **🏆 Single-Job \"Whale Alert\" Revenue Leaderboard**")
@@ -1714,15 +1716,9 @@ if time_file and ops_file:
                 cc_matrix['Cost Ratio % vs Rev'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Combined_Cost_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
                 cc_matrix['Cost Ratio % vs Rev'] = cc_matrix['Cost Ratio % vs Rev'].apply(lambda x: f"{x:.1f}%")
                 cc_matrix['Net Profit (%)'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Net_Profit_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
-                cc_matrix['Net Profit (%)'] = cc_matrix['Net_Profit (%)'].apply(lambda x: f"{x:.1f}%")
+                
+                # FIXED TYPO CRITICAL OVERHAUL: Standardized string variable assignment parameters safely inside text maps
+                cc_matrix['Net Profit (%)'] = cc_matrix['Net Profit (%)'].apply(lambda x: f"{x:.1f}%")
                 cc_matrix['Gross Invoiced Revenue'] = cc_matrix['Gross_Invoiced_Raw'].apply(lambda x: f"${x:,.2f}")
                 cc_matrix['Total Combined Cost'] = cc_matrix['Combined_Cost_Total_Raw'].apply(lambda x: f"${x:,.2f}")
-                cc_matrix['Tech Wage Burden'] = cc_matrix['Assumed_Labor_Payload_Raw'].apply(lambda x: f"${x:,.2f}")
-                cc_matrix['Net Profit ($)'] = cc_matrix['Net_Profit_Total_Raw'].apply(lambda x: f"${x:,.2f}")
-                
-                show_cc = cc_matrix[['Business Unit', 'Jobs', 'Gross Invoiced Revenue', 'Total Combined Cost', 'Cost Ratio % vs Rev', 'Tech Wage Burden', 'Net Profit ($)', 'Net Profit (%)']].rename(columns={'Jobs': 'Jobs Assigned'})
-                st.dataframe(show_cc, use_container_width=True)
-                create_copy_button(show_cc, "product_vs_service_cost_breakdown")
-                
-    except Exception as e:
-        st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
+                cc_matrix['Tech Wage Burden'] = cc_matrix
