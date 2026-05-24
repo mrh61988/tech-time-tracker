@@ -881,7 +881,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
 
     if "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard" in test_choices:
         st.markdown("### **🏆 Single-Job \"Whale Alert\" Revenue Leaderboard**")
-        st.markdown("*(Highlights the top 5 highest-grossing individual unexploded invoices completed this cycle across the division)*")
+        st.markdown("*(Highlights the top 5 highest-grossing unexploded individual ticket invoices completed this cycle across the division)*")
         if not unexploded_ops.empty and 'Total Invoice Amount' in unexploded_ops.columns:
             whale_df = unexploded_ops.sort_values(by='Total Invoice Amount', ascending=False).head(5).copy()
             whale_summary = []
@@ -916,8 +916,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 wh_totals_df = pd.DataFrame([{
                     "Total WH Jobs Completed": int(len(df_wh_prof)),
                     "Gross Invoiced Revenue": f"${df_wh_prof['Total Invoice Amount'].sum():,.2f}",
-                    "Total Product/Material Cost": f"${df_wh_prof['Product_Cost'].sum():,.2f}",
-                    "Total Service/Subcontract Cost": f"${df_wh_prof['Service_Cost'].sum():,.2f}",
+                    "Total Combined Cost": f"${df_wh_prof['Combined_Lowe_Costs'].sum():,.2f}",
                     "Assumed Tech Wage Payouts": f"${df_wh_prof['Assumed_Labor_Payload'].sum():,.2f}",
                     "Net Retained Division Profit": f"${df_wh_prof['Net_Profit_Raw'].sum():,.2f}",
                     "Blended True Margin %": f"{(df_wh_prof['Net_Profit_Raw'].sum() / df_wh_prof['Total Invoice Amount'].sum() * 100):.1f}%"
@@ -935,8 +934,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                         "Job ID": str(int(r['#ID'])),
                         "Crew Assigned": r['Assigned Team Members'],
                         "Gross Invoice": f"${r['Total Invoice Amount']:,.2f}",
-                        "Product Cost": f"${r['Product_Cost']:,.2f}",
-                        "Service Cost": f"${r['Service_Cost']:,.2f}",
+                        "Total Combined Cost": f"${r['Combined_Lowe_Costs']:,.2f}",
                         "Tech Wage Burden": f"${r['Assumed_Labor_Payload']:,.2f}",
                         "Net Retained Cash": f"${r['Net_Profit_Raw']:,.2f}",
                         "Margin %": f"{r['Profit Margin %']:.1f}%"
@@ -948,8 +946,8 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         else: st.info("Product/Service financial costs metrics columns missing from current source sheets.")
 
     if "📦 Product vs. Service Cost Component Breakdown Matrix" in test_choices:
-        st.markdown("### **📦 Product vs. Service Cost Component Breakdown Matrix**")
-        st.markdown("*(Isolates material purchasing overhead ratios vs. execution labor/service costs by sector)*")
+        st.markdown("### **📦 Lowe's Combined Cost Performance Matrix**")
+        st.markdown("*(Isolates combined material purchasing and service costs totals and maps relative cost share ratios by sector)*")
         if not unexploded_ops.empty and 'Total Product Cost [tax inc]' in unexploded_ops.columns:
             df_cc = unexploded_ops.copy()
             df_cc['Prod_Cost'] = pd.to_numeric(df_cc['Total Product Cost [tax inc]'], errors='coerce').fillna(0.0)
@@ -958,21 +956,17 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             
             cc_matrix = df_cc.groupby('Business Unit').agg(
                 Jobs=('#ID', 'count'),
-                Gross_Invoiced=('Total Invoice Amount', 'sum'),
-                Product_Cost_Total=('Prod_Cost', 'sum'),
-                Service_Cost_Total=('Serv_Cost', 'sum'),
-                Combined_Cost_Total=('Combined_Cost', 'sum')
+                Gross_Invoiced_Raw=('Total Invoice Amount', 'sum'),
+                Combined_Cost_Total_Raw=('Combined_Cost', 'sum')
             ).reset_index()
             
-            cc_matrix['Material Cost Ratio %'] = (cc_matrix['Product_Cost_Total'] / cc_matrix['Combined_Cost_Total'] * 100).apply(lambda x: f"{x:.1f}%")
-            cc_matrix['Service/Labor Ratio %'] = (cc_matrix['Service_Cost_Total'] / cc_matrix['Combined_Cost_Total'] * 100).apply(lambda x: f"{x:.1f}%")
+            cc_matrix['Cost Ratio % vs Rev'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Combined_Cost_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
+            cc_matrix['Cost Ratio % vs Rev'] = cc_matrix['Cost Ratio % vs Rev'].apply(lambda x: f"{x:.1f}%")
             
-            cc_matrix['Gross Invoiced'] = cc_matrix['Gross_Invoiced'].apply(lambda x: f"${x:,.2f}")
-            cc_matrix['Product Cost Total'] = cc_matrix['Product_Cost_Total'].apply(lambda x: f"${x:,.2f}")
-            cc_matrix['Service Cost Total'] = cc_matrix['Service_Cost_Total'].apply(lambda x: f"${x:,.2f}")
-            cc_matrix['Combined Cost Total'] = cc_matrix['Combined_Cost_Total'].apply(lambda x: f"${x:,.2f}")
+            cc_matrix['Gross Invoiced Revenue'] = cc_matrix['Gross_Invoiced_Raw'].apply(lambda x: f"${x:,.2f}")
+            cc_matrix['Total Combined Cost'] = cc_matrix['Combined_Cost_Total_Raw'].apply(lambda x: f"${x:,.2f}")
             
-            show_cc = cc_matrix[['Business Unit', 'Jobs', 'Gross Invoiced', 'Product Cost Total', 'Material Cost Ratio %', 'Service Cost Total', 'Service/Labor Ratio %', 'Combined Cost Total']]
+            show_cc = cc_matrix[['Business Unit', 'Jobs', 'Gross Invoiced Revenue', 'Total Combined Cost', 'Cost Ratio % vs Rev']].rename(columns={'Jobs': 'Jobs Assigned'})
             st.table(show_cc)
             create_copy_button(show_cc, "product_vs_service_cost_breakdown")
         else: st.info("Product/Service financial costs metrics columns missing from current source sheets.")
@@ -1089,7 +1083,7 @@ if time_file and ops_file:
         unexploded_ops = ops_df.copy()
         raw_unsplit_volume = unexploded_ops['Total Invoice Amount'].sum()
         
-        # CRITICAL RE-INJECTION FIX HOOK: STABILIZE DAILY BOUNDARIES GENERATION ENGINE PIPELINE
+        # CRITICAL STRUCTURAL INJECTION LAYER: CALCULATE BOUNDS_DF AND DELAYED LAUNCHES SAFELY BEFORE TEAM CLONING OCCURS
         ops_sorted = ops_df.dropna(subset=['Earliest_Start']).sort_values(['Assigned Team Members', 'Earliest_Start'])
         bounds_df = ops_sorted.groupby(['Assigned Team Members', 'Short_Date']).agg(
             First_Punch=('Earliest_Start', 'min'),
