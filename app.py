@@ -622,8 +622,8 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             golden_summary['Avg Efficiency'] = golden_summary['Avg_Efficiency'].apply(lambda x: f"{x:.1f}%")
             golden_df['Daily Efficiency'] = golden_df['Daily Efficiency'].apply(lambda x: f"{x:.1f}%")
             g_col1, g_col2 = st.columns(2)
-            with g_col1: st.dataframe(golden_summary[['Profile', 'Days', 'Avg Efficiency']], use_container_width=True)
-            with g_col2: st.dataframe(golden_df[['Day', 'LSI Mix %', 'Profile', 'Daily Efficiency']], use_container_width=True)
+            with g_col1: st.table(golden_summary[['Profile', 'Days', 'Avg Efficiency']])
+            with g_col2: st.table(golden_df[['Day', 'LSI Mix %', 'Profile', 'Daily Efficiency']])
 
     if "🔄 The Context-Switching Penalty Alert" in test_choices:
         st.markdown("### **🔄 Context-Switching Penalty Alert**")
@@ -766,7 +766,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             st.dataframe(show_staging[['Day_of_Week', 'Total_Visits', 'Total Hours Delayed', 'Avg Delay per Visit']].rename(columns={'Day_of_Week': 'Day', 'Total_Visits': 'Store Pickups'}), use_container_width=True)
             create_copy_button(show_staging[['Day_of_Week', 'Total_Visits', 'Total Hours Delayed', 'Avg Delay per Visit']], "store_staging_by_day")
         else:
-            st.info("No material store staging records discovered inside loaded field parameters.")
+            st.info("No material store staging records discovered inside logged field parameters.")
 
     if "📊 Overtime ROI Cost-Benefit Auditor" in test_choices:
         st.markdown("### **📊 Overtime ROI Cost-Benefit Auditor**")
@@ -1010,7 +1010,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             
             cc_matrix['Cost Ratio % vs Rev'] = cc_matrix['Cost Ratio % vs Rev'].apply(lambda x: f"{x:.1f}%")
             cc_matrix['Net Profit (%)'] = cc_matrix['Net_Profit_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100
-            cc_matrix['Net Profit (%)'] = cc_matrix['Net Profit (%)'].apply(lambda x: f"{x:.1f}%")
+            cc_matrix['Net Profit (%)'] = cc_matrix['Net_Profit (%)'].apply(lambda x: f"{x:.1f}%")
             cc_matrix['Gross Invoiced Revenue'] = cc_matrix['Gross_Invoiced_Raw'].apply(lambda x: f"${x:,.2f}")
             cc_matrix['Total Combined Cost'] = cc_matrix['Combined_Cost_Total_Raw'].apply(lambda x: f"${x:,.2f}")
             cc_matrix['Tech Wage Burden'] = cc_matrix['Assumed_Labor_Payload_Raw'].apply(lambda x: f"${x:,.2f}")
@@ -1133,7 +1133,7 @@ if time_file and ops_file:
         unexploded_ops = ops_df.copy()
         raw_unsplit_volume = unexploded_ops['Total Invoice Amount'].sum()
         
-        # CRITICAL RE-REALIGNMENT FIX: Map bounds metric tracking precisely to the first interno core tech listed string parameter
+        # Map bounds metric tracking precisely to the first internal core tech listed
         def get_first_core_tech(tech_str):
             raw_members = [m.strip() for m in str(tech_str).split(',') if m.strip()]
             core_members_on_job = [m for m in raw_members if m in CORE_TECHS]
@@ -1322,21 +1322,11 @@ if time_file and ops_file:
             # === MACRO DASHBOARD PANEL ===
             st.markdown("<br><hr><h3>📊 Macro Financial Performance Dashboard</h3>", unsafe_allow_html=True)
             
-            # Macro calculations sequence loop execution
+            # Pre-calculate internal employee baseline dictionaries mapping payload strings
             rev_per_hour_df_calc = final_df.copy()
             rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(get_assumed_pay, axis=1)
-            total_assumed_pay = rev_per_hour_df_calc['Assumed Pay Amount'].sum()
-            pay_ratio_pct = (total_assumed_pay / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
             
-            dash_metric_col1, dash_metric_col2, dash_metric_col3 = st.columns(3)
-            with dash_metric_col1:
-                st.metric(label="Division Gross Invoiced Volume", value=f"${raw_unsplit_volume:,.2f}")
-            with dash_metric_col2:
-                st.metric(label="Assumed Total Pay (Division)", value=f"${total_assumed_pay:,.2f}")
-            with dash_metric_col3:
-                st.metric(label="Division Labor Pay Ratio", value=f"{pay_ratio_pct:.1f}%")
-                
-            # Macro matrix calculation sequence mapping parameters
+            # Calculate distributed internal hourly wages maps weights parameters
             ops_df['Computed_Row_Pay'] = ops_df['Name'].map(rev_per_hour_df_calc.set_index('Name')['Assumed Pay Amount'].to_dict()).fillna(0.0)
             tech_total_field_hrs = ops_df.groupby('Name')['Total_Job_Time_Hours'].sum().reset_index().rename(columns={'Total_Job_Time_Hours': 'Tech_Total_Work_Hrs'})
             if 'Tech_Total_Work_Hrs' in ops_df.columns: ops_df = ops_df.drop(columns=['Tech_Total_Work_Hrs'])
@@ -1349,12 +1339,54 @@ if time_file and ops_file:
                 ops_df['Allocated_Job_Pay']
             )
             
+            # CRITICAL CALCULATION SYNCHRONIZATION HOOK: Replicate advanced sandbox data frame arithmetics per work order ID
+            df_macro_pay = unexploded_ops.copy()
+            df_macro_pay['Tech_Count'] = df_macro_pay['Assigned Team Members'].apply(lambda x: len([m.strip() for m in str(x).split(',') if m.strip()]))
+            df_macro_pay['Is_Contractor'] = df_macro_pay['Assigned Team Members'].apply(lambda x: not any(m in CORE_TECHS for m in [s.strip() for s in str(x).split(',') if s.strip()]))
+            
+            df_macro_pay['Flat_Rate_Labor'] = np.where(
+                df_macro_pay['Business Unit'] == 'Lowes - Water Heaters',
+                np.where(df_macro_pay['Tech_Count'] > 1, 175.0, 100.0),
+                0.0
+            )
+            df_macro_pay['Logged_Time_Pay'] = df_macro_pay['#ID'].map(ops_df.groupby('#ID')['Allocated_Job_Pay'].sum().to_dict()).fillna(0.0)
+            
+            df_macro_pay['Assumed_Labor_Payload'] = np.where(
+                (df_macro_pay['Business Unit'] == 'Lowes - Simple Installs') & df_macro_pay['Is_Contractor'],
+                df_macro_pay['Total Invoice Amount'],
+                np.maximum(df_macro_pay['Flat_Rate_Labor'], df_macro_pay['Logged_Time_Pay'])
+            )
+            
+            # Fetch and apply Sean Marble unworked weekday presence deductions
+            sean_ops = ops_df[ops_df['Name'] == 'Sean Marble']
+            worked_days = sean_ops['Day_of_Week'].unique() if not sean_ops.empty else []
+            all_weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+            unworked_days = [d for d in all_weekdays if d not in worked_days]
+            sean_penalty = len(unworked_days) * 269.0
+            
+            # Sync Assumed Total Pay (Division) to mirror Tab 10 total values parameters exactly
+            total_assumed_pay = max(0.0, df_macro_pay['Assumed_Labor_Payload'].sum() - sean_penalty)
+            pay_ratio_pct = (total_assumed_pay / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
+            
+            dash_metric_col1, dash_metric_col2, dash_metric_col3 = st.columns(3)
+            with dash_metric_col1:
+                st.metric(label="Division Gross Invoiced Volume", value=f"${raw_unsplit_volume:,.2f}")
+            with dash_metric_col2:
+                st.metric(label="Assumed Total Pay (Division)", value=f"${total_assumed_pay:,.2f}")
+            with dash_metric_col3:
+                st.metric(label="Division Labor Pay Ratio", value=f"{pay_ratio_pct:.1f}%")
+                
+            # Sync macro Business Unit summary table matrix row fields
             bu_gross_rev = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].sum().reset_index()
             bu_gross_rev.columns = ['Business Unit', 'Gross Invoiced Revenue Raw']
             total_macro_sum = bu_gross_rev['Gross Invoiced Revenue Raw'].sum() if bu_gross_rev['Gross Invoiced Revenue Raw'].sum() > 0 else 1.0
             bu_gross_rev['Rev Share %'] = (bu_gross_rev['Gross Invoiced Revenue Raw'] / total_macro_sum * 100).apply(lambda x: f"{x:.1f}%")
             
-            bu_pay_split = ops_df.groupby('Business Unit')['Allocated_Job_Pay'].sum().reset_index().rename(columns={'Allocated_Job_Pay': 'Assumed Pay Raw'})
+            bu_pay_split = df_macro_pay.groupby('Business Unit')['Assumed_Labor_Payload'].sum().reset_index().rename(columns={'Assumed_Labor_Payload': 'Assumed Pay Raw'})
+            for idx, r in bu_pay_split.iterrows():
+                if r['Business Unit'] == 'Lowes - Simple Installs':
+                    bu_pay_split.loc[idx, 'Assumed Pay Raw'] = max(0.0, bu_pay_split.loc[idx, 'Assumed Pay Raw'] - sean_penalty)
+                    
             bu_financial_matrix = pd.merge(bu_gross_rev, bu_pay_split, on='Business Unit', how='left').fillna(0.0)
             bu_financial_matrix['Assumed Pay'] = bu_financial_matrix['Assumed Pay Raw'].apply(lambda x: f"${x:,.2f}")
             bu_financial_matrix['Pay % of Revenue'] = np.where(
