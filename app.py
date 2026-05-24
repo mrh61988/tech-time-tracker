@@ -10,13 +10,13 @@ st.set_page_config(page_title="Tech Time Tracker", layout="wide")
 st.markdown("""
 <style>
 @media print {
-    /* Enforce landscape page format and configure balanced sheet padding margins */
+    /* Enforce landscape orientation to maximize wide printable space layout margins */
     @page {
         size: landscape;
         margin: 0.4in !important;
     }
 
-    /* Hide structural utility blocks, upload buttons, tabs navigation bars, and panels from saved PDFs */
+    /* Hide the entire sidebar, file uploaders, navigation tabs, system menus, and utility buttons */
     header { display: none !important; }
     [data-testid="stHeader"] { display: none !important; }
     [data-testid="stSidebar"] { display: none !important; }
@@ -28,34 +28,31 @@ st.markdown("""
     h1, .hide-on-print, .stAlert, iframe, button { display: none !important; }
     div[class*="stExpander"] { display: none !important; }
     
-    /* CRITICAL OBLITERATION OF BLANK SPACE: Un-clamp all vertical structural boxes to flow continuously */
-    div[class*="stVerticalBlock"], 
-    div[data-testid="element-container"],
-    div[data-testid="stHorizontalBlock"],
-    div[data-testid="column"] {
-        display: block !important;
-        position: static !important;
-        float: none !important;
+    /* Force column blocks side-by-side natively on wide horizontal landscape layouts */
+    [data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
         width: 100% !important;
-        max-width: 100% !important;
-        min-width: 100% !important;
+        gap: 20px !important;
+    }
+    [data-testid="column"] {
+        flex: 1 1 0% !important;
+        min-width: 0 !important;
         height: auto !important;
-        max-height: none !important;
         overflow: visible !important;
-        margin: 0 0 15px 0 !important;
-        padding: 0 !important;
-        box-shadow: none !important;
-        page-break-inside: auto !important; /* Kills blank padding gap generation blocks */
+        margin-bottom: 0px !important;
+        page-break-inside: avoid !important;
     }
     
     h2, h3, h4 {
         page-break-inside: avoid !important;
         page-break-after: avoid !important;
-        margin-top: 20px !important;
-        margin-bottom: 8px !important;
+        margin-top: 25px !important;
+        margin-bottom: 12px !important;
     }
 
-    /* Un-clamp core block layout canvas gutters to run margin-to-margin smoothly */
+    /* Unclamp outer container gutters to allow data to bleed cleanly to the printable edges */
     div[data-testid="stAppViewBlockContainer"],
     .main .block-container,
     div[class*="block-container"] {
@@ -64,55 +61,31 @@ st.markdown("""
         padding: 0 !important;
         margin: 0 !important;
     }
-
-    /* CRITICAL METRIC FIX: Forces dashboard metric layout objects to look clean side-by-side */
-    div[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: wrap !important;
-        width: 100% !important;
-        gap: 12px !important;
-    }
-    div[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) div[data-testid="column"] {
-        display: inline-block !important;
-        flex: 1 1 0% !important;
-        min-width: 100px !important;
-        width: auto !important;
-        max-width: none !important;
-        margin: 0 !important;
-    }
     
-    /* CRITICAL FIXED COMPACTION MATRIX: Grants wide tables maximum layout canvas real estate */
-    div[data-testid="stTable"], 
-    div[data-testid="stTable"] > div, 
-    table {
-        width: 100% !important;
+    /* Enforce full-width text wrapping table styles safely inside right borders */
+    table { 
+        width: 100% !important; 
         max-width: 100% !important;
-        min-width: 100% !important;
-        display: table !important;
-        table-layout: auto !important; /* Fluid auto sizing distributions prevents right column truncation */
-    }
-    
-    table {
         border-collapse: collapse !important;
-        page-break-inside: auto !important; /* Lets tables divide naturally over multiple pages without blank space */
-        margin: 0 0 15px 0 !important;
+        table-layout: auto !important;
+        page-break-inside: auto !important;
+        margin: 0 0 20px 0 !important;
     }
     tr {
-        page-break-inside: avoid !important; /* Rows stay intact and split clean between line entries */
+        page-break-inside: avoid !important;
         page-break-after: auto !important;
     }
     th, td {
-        white-space: normal !important; /* Wraps long cell strings over inside column block walls */
+        white-space: normal !important;
         word-break: break-word !important;
         overflow-wrap: break-word !important;
-        padding: 4px 5px !important; /* Tight spacing layout matrix reclaims horizontal sheet room */
-        font-size: 9.5px !important; /* Optimized font sizing for maximum clear data distribution scales */
+        padding: 5px 6px !important;
+        font-size: 10px !important;
         text-align: left !important;
-        line-height: 1.25 !important;
+        line-height: 1.3 !important;
     }
     thead {
-        display: table-header-group !important; /* Replicates column tags across multi-page section breaks */
+        display: table-header-group !important;
     }
 }
 </style>
@@ -666,6 +639,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 except Exception: st.table(show_launches)
                 create_copy_button(show_launches, f"late_alert_{tab_key}")
 
+# --- CONSOLIDATED SANDBOX TAB VIEWS ENGINE ---
 def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices):
     if "🏆 The Golden Ratio Margin Predictor" in test_choices:
         st.markdown("### **🏆 The Golden Ratio Margin Predictor**")
@@ -720,7 +694,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 if clocked > 0 and jobs == 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🕵️ Paid But Idle (Clocked In, 0 Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": 0})
                 elif clocked == 0 and jobs > 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🚨 Unpaid Field Work (0 Hours Clocked, Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": int(jobs)})
         if ghost_alerts: st.table(pd.DataFrame(ghost_alerts))
-        else: st.success("Perfect alignment! No payroll discrepancy errors detected.")
+        else: st.success("Perfect alignment! No payroll discrepancy errors detected on current sheets.")
 
     if "¼ The Lowe's Store Staging Efficiency Scorecard" in test_choices:
         st.markdown("### **¼ The Lowe's Store Staging Efficiency Scorecard**")
@@ -769,22 +743,69 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         route_eff = route_eff.sort_values(by='Rev per Drive Hour Raw', ascending=False)
         route_eff['Total Assigned Revenue'] = route_eff['Total_Revenue'].apply(lambda x: f"${x:,.2f}")
         route_eff['Total Drive Hours'] = route_eff['Total_Drive_Hrs'].apply(lambda x: f"{x:.1f} hrs")
-        route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"{x:.1f}/hr")
+        route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"${x:.1f}/hr")
         st.table(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True))
 
-    if "📉 True Gross Margin per Clocked Hour" in test_choices:
-        st.markdown("### **📉 True Gross Margin per Clocked Hour**")
-        margin_df = final_df.copy()
-        margin_df['Assumed Pay Amount'] = margin_df.apply(get_assumed_pay, axis=1)
-        margin_df['Net Margin Raw'] = margin_df['Total_Assigned_Revenue'] - margin_df['Assumed Pay Amount']
-        margin_df['Margin per Clocked Hour Raw'] = np.where(margin_df['Total_Weekly_Clocked_Hrs'] > 0, margin_df['Net Margin Raw'] / margin_df['Total_Weekly_Clocked_Hrs'], 0.0)
-        margin_df = margin_df.sort_values(by='Margin per Clocked Hour Raw', ascending=False)
-        margin_df['Total Assigned Revenue'] = margin_df['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
-        margin_df['Assumed Pay'] = margin_df['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}")
-        margin_df['Total Net Margin'] = margin_df['Net Margin Raw'].apply(lambda x: f"${x:,.2f}")
-        margin_df['Total Clocked'] = margin_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
-        margin_df['Margin per Clocked Hour'] = margin_df['Margin per Clocked Hour Raw'].apply(lambda x: f"${x:,.2f}/hr")
-        st.table(margin_df[['Name', 'Total Clocked', 'Total Assigned Revenue', 'Assumed Pay', 'Total Net Margin', 'Margin per Clocked Hour']].reset_index(drop=True))
+    # NEW SANDBOX OPTION 1: MULTI-TECH LABOR YIELD OVERRIDE ENGINE
+    if "🦺 Multi-Tech Labor Yield vs. Solo Runs" in test_choices:
+        st.markdown("### **🦺 Multi-Tech Labor Yield vs. Solo Runs (Co-Efficiency Analysis)**")
+        st.markdown("*(Assesses crew execution values factoring an applied $22.00/hr secondary helper cost burden override)*")
+        df_m = unexploded_ops.copy()
+        df_m['Tech_Count'] = df_m['Assigned Team Members'].apply(lambda x: len([m.strip() for m in str(x).split(',') if m.strip()]))
+        df_m['Type'] = np.where(df_m['Tech_Count'] > 1, 'Multi-Tech Team Crew', 'Solo Dispatch Run')
+        df_m['Total_Man_Hours'] = df_m['Tech_Count'] * df_m['Total_Job_Time_Hours']
+        df_m['Helper_Labor_Cost'] = (df_m['Tech_Count'] - 1) * df_m['Total_Job_Time_Hours'] * 22.0
+        
+        summary_yield = df_m.groupby('Type').agg(
+            Job_Count=('#ID', 'count'),
+            Total_Revenue=('Total Invoice Amount', 'sum'),
+            Total_Field_Hours=('Total_Job_Time_Hours', 'sum'),
+            Total_Man_Hours=('Total_Man_Hours', 'sum'),
+            Total_Helper_Cost=('Helper_Labor_Cost', 'sum')
+        ).reset_index()
+        summary_yield['Avg Revenue per Job'] = summary_yield['Total_Revenue'] / summary_yield['Job_Count']
+        summary_yield['Revenue per Man-Hour'] = summary_yield['Total_Revenue'] / summary_yield['Total_Man_Hours']
+        
+        show_yield = summary_yield.copy()
+        show_yield['Total Revenue'] = show_yield['Total_Revenue'].apply(lambda x: f"${x:,.2f}")
+        show_yield['Total Field Hours'] = show_yield['Total_Field_Hours'].apply(format_hm)
+        show_yield['Total Man-Hours'] = show_yield['Total_Man_Hours'].apply(format_hm)
+        show_yield['Added Helper Cost'] = show_yield['Total_Helper_Cost'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
+        show_yield['Avg Revenue per Job'] = show_yield['Avg Revenue per Job'].apply(lambda x: f"${x:,.2f}")
+        show_yield['Revenue per Man-Hour'] = show_yield['Revenue per Man-Hour'].apply(lambda x: f"${x:,.2f}/hr")
+        st.table(show_yield[['Type', 'Job_Count', 'Total Revenue', 'Total Field Hours', 'Total Man-Hours', 'Added Helper Cost', 'Avg Revenue per Job', 'Revenue per Man-Hour']].rename(columns={'Job_Count': 'Jobs Assigned'}))
+        create_copy_button(summary_yield, "multi_tech_yield")
+        
+        st.markdown("#### 🦺 Granular Team Dispatch Review Log")
+        team_jobs = df_m[df_m['Tech_Count'] > 1].copy()
+        if not team_jobs.empty:
+            team_jobs['Total Revenue'] = team_jobs['Total Invoice Amount'].apply(lambda x: f"${x:,.2f}")
+            team_jobs['Job Duration'] = team_jobs['Total_Job_Time_Hours'].apply(format_hm)
+            team_jobs['Helper Cost'] = team_jobs['Helper_Labor_Cost'].apply(lambda x: f"${x:,.2f}")
+            team_jobs['Man-Hours'] = team_jobs['Total_Man_Hours'].apply(format_hm)
+            show_team_jobs = team_jobs[['#ID', 'Assigned Team Members', 'Business Unit', 'Total Revenue', 'Job Duration', 'Man-Hours', 'Helper Cost']].rename(columns={'#ID': 'Job ID'})
+            st.table(show_team_jobs)
+            create_copy_button(team_jobs[['#ID', 'Assigned Team Members', 'Business Unit', 'Total Invoice Amount', 'Total_Job_Time_Hours', 'Total_Man_Hours', 'Helper_Labor_Cost']], "granular_team_log")
+        else: st.info("No paired team dispatches detected in current operational datasets.")
+
+    # NEW SANDBOX OPTION 2: LOWES STORE DELAY CALENDAR MATRIX ENGINE
+    if "📅 Lowe's Store Staging Delays by Day of the Week" in test_choices:
+        st.markdown("### **📅 Lowe's Store Staging Delays by Day of the Week**")
+        st.markdown("*(Tracks supply chain delay velocities day-by-day to optimize loading schedules)*")
+        store_delay_df = unexploded_ops[unexploded_ops['Store_Time_Hrs'] > 0].copy()
+        if not store_delay_df.empty:
+            day_order_map = {'Mon': 0, 'Tue': 1, 'Wed': 2, 'Thu': 3, 'Fri': 4, 'Sat': 5, 'Sun': 6}
+            staging_agg = store_delay_df.groupby('Day_of_Week').agg(Total_Visits=('Store_Time_Hrs', 'count'), Total_Hours=('Store_Time_Hrs', 'sum')).reset_index()
+            staging_agg['Avg Delay per Visit Raw'] = staging_agg['Total_Hours'] / staging_agg['Total_Visits']
+            staging_agg['sort_day'] = staging_agg['Day_of_Week'].map(day_order_map)
+            staging_agg = staging_agg.sort_values(by='sort_day').drop(columns=['sort_day'])
+            
+            show_staging = staging_agg.copy()
+            show_staging['Total Hours Delayed'] = show_staging['Total_Hours'].apply(format_hm)
+            show_staging['Avg Delay per Visit'] = show_staging['Avg Delay per Visit Raw'].apply(format_hm)
+            st.table(show_staging[['Day_of_Week', 'Total_Visits', 'Total Hours Delayed', 'Avg Delay per Visit']].rename(columns={'Day_of_Week': 'Day', 'Total_Visits': 'Store Pickups'}))
+            create_copy_button(staging_agg[['Day_of_Week', 'Total_Visits', 'Total_Hours', 'Avg Delay per Visit Raw']], "store_staging_by_day")
+        else: st.info("No material store staging records discovered inside loaded field parameters.")
 
 # --- RUN EXECUTION Pipeline BLOCK FOR FILE MOUNTING ---
 st.sidebar.header("📂 Data Loading Pipeline")
@@ -1190,7 +1211,7 @@ if time_file and ops_file:
                 create_copy_button(display_dfs[short_day].reset_index(drop=True), f"day_tab_{short_day}")
 
         with tabs[10]:
-            test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "¼ The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)", "🗺️ Route Optimization Flags"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
+            test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "¼ The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)", "🗺️ Route Optimization Flags", "🦺 Multi-Tech Labor Yield vs. Solo Runs", "📅 Lowe's Store Staging Delays by Day of the Week"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
             run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             
     except Exception as e:
