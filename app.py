@@ -596,6 +596,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
     st.markdown("<br>", unsafe_allow_html=True)
 
     # === CONSOLIDATED MAIN VIEW BLOCKS ===
+    st.header("📊 Ops Manager Tools (Benchmarking & Performance)")
     col_left, col_right = st.columns(2)
     
     with col_left:
@@ -609,7 +610,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             gold_star_df['Daily Avg Diff'] = gold_star_df['Daily_Avg_Diff_Hrs'].apply(format_hm)
             gold_star_df['Total Diff'] = gold_star_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
             show_gold = gold_star_df[['Name', 'Total Clocked', 'Total Job Time', 'Daily Avg Diff', 'Total Diff']].copy()
-            try: st.table(show_gold.reset_index(drop=True).style.set_properties(**{'background-color': '#e6f4ea', 'color': '#137333'}))
+            try: st.table(show_gold.reset_index(drop=True).style.set_properties(**gradient := {'background-color': '#e6f4ea', 'color': '#137333'}))
             except Exception: st.table(show_gold.reset_index(drop=True))
             create_copy_button(show_gold.reset_index(drop=True), f"gold_star_{tab_key}")
 
@@ -629,7 +630,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 return "ℹ️ No BU Jobs Assigned"
             skill_df['Action Required'] = skill_df.apply(assign_skill_flag, axis=1)
             
-            # CRITICAL WARNING SORT ENGINE IMPLEMENTATION
+            # WARNING SORT ENGINE
             skill_df['sort_action'] = skill_df['Action Required'].apply(lambda x: 0 if '⚠️' in str(x) else (1 if 'ℹ️' in str(x) else 2))
             skill_df = skill_df.sort_values(by='sort_action', ascending=True)
             
@@ -881,7 +882,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
 
     if "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard" in test_choices:
         st.markdown("### **🏆 Single-Job \"Whale Alert\" Revenue Leaderboard**")
-        st.markdown("*(Highlights the top 5 highest-grossing unexploded individual ticket invoices completed this cycle across the division)*")
+        st.markdown("*(Highlights the top 5 highest-grossing individual unexploded invoices completed this cycle across the division)*")
         if not unexploded_ops.empty and 'Total Invoice Amount' in unexploded_ops.columns:
             whale_df = unexploded_ops.sort_values(by='Total Invoice Amount', ascending=False).head(5).copy()
             whale_summary = []
@@ -899,79 +900,115 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         else:
             st.info("No invoice details located inside loaded operations datasets.")
 
+    # INTERACTIVE SORTABLE COMPREHENSIVE REVENUE NET PROFITABILITY MATRIX PANEL
     if "🛢️ Water Heater True Net Profitability Margin Auditor" in test_choices:
-        st.markdown("### **🛢️ Water Heater True Net Profitability Margin Auditor**")
-        st.markdown("*(Deductions capture combined product/service costs alongside $100 solo or $175 multi-tech internal labor payloads)*")
+        st.markdown("### **💵 Division True Net Profitability Margin Auditor**")
+        st.markdown("*(Evaluates net profitability fields factoring applied $100 solo/$175 team WH flat rates and LSI allocated hourly payouts)*")
         if not unexploded_ops.empty and 'Total Product Cost [tax inc]' in unexploded_ops.columns:
-            df_wh_prof = unexploded_ops[unexploded_ops['Business Unit'] == 'Lowes - Water Heaters'].copy()
-            if not df_wh_prof.empty:
-                df_wh_prof['Product_Cost'] = pd.to_numeric(df_wh_prof['Total Product Cost [tax inc]'], errors='coerce').fillna(0.0)
-                df_wh_prof['Service_Cost'] = pd.to_numeric(df_wh_prof['Invoice - Total Service Cost'], errors='coerce').fillna(0.0)
-                df_wh_prof['Tech_Count'] = df_wh_prof['Assigned Team Members'].apply(lambda x: len([m.strip() for m in str(x).split(',') if m.strip()]))
-                df_wh_prof['Assumed_Labor_Payload'] = np.where(df_wh_prof['Tech_Count'] > 1, 175.0, 100.0)
+            df_prof = unexploded_ops.copy()
+            df_prof['Product_Cost'] = pd.to_numeric(df_prof['Total Product Cost [tax inc]'], errors='coerce').fillna(0.0)
+            df_prof['Service_Cost'] = pd.to_numeric(df_prof['Invoice - Total Service Cost'], errors='coerce').fillna(0.0)
+            df_prof['Combined_Lowe_Costs'] = df_prof['Product_Cost'] + df_prof['Service_Cost']
+            df_prof['Tech_Count'] = df_prof['Assigned Team Members'].apply(lambda x: len([m.strip() for m in str(x).split(',') if m.strip()]))
+            
+            # Map pay calculations across both lines of business dynamically
+            df_prof['Assumed_Labor_Payload'] = np.where(
+                df_prof['Business Unit'] == 'Lowes - Water Heaters',
+                np.where(df_prof['Tech_Count'] > 1, 175.0, 100.0),
+                df_prof['#ID'].map(ops_df.groupby('#ID')['Allocated_Job_Pay'].sum().to_dict()).fillna(0.0)
+            )
+            df_prof['Net_Profit_Raw'] = df_prof['Total Invoice Amount'] - df_prof['Combined_Lowe_Costs'] - df_prof['Assumed_Labor_Payload']
+            
+            # Interactive filtering controls loop layout block
+            sort_pane_col, filter_pane_col = st.columns(2)
+            with filter_pane_col:
+                selected_bu_filter = st.selectbox("Filter Performance Register By Line of Business:", ["All Sectors", "Lowes - Water Heaters", "Lowes - Simple Installs"], key="bu_perf_filter_matrix")
+            with sort_pane_col:
+                selected_sort_choice = st.selectbox("Sort Itemized Register Results By:", ["Highest Net Profit", "Lowest Net Profit", "Highest Gross Invoice", "Highest Margin %", "Job ID"], key="sorting_perf_matrix")
                 
-                df_wh_prof['Combined_Lowe_Costs'] = df_wh_prof['Product_Cost'] + df_wh_prof['Service_Cost']
-                df_wh_prof['Net_Profit_Raw'] = df_wh_prof['Total Invoice Amount'] - df_wh_prof['Combined_Lowe_Costs'] - df_wh_prof['Assumed_Labor_Payload']
+            df_prof_filtered = df_prof.copy()
+            if selected_bu_filter != "All Sectors":
+                df_prof_filtered = df_prof_filtered[df_prof_filtered['Business Unit'] == selected_bu_filter]
                 
-                wh_totals_df = pd.DataFrame([{
-                    "Total WH Jobs Completed": int(len(df_wh_prof)),
-                    "Gross Invoiced Revenue": f"${df_wh_prof['Total Invoice Amount'].sum():,.2f}",
-                    "Total Combined Cost": f"${df_wh_prof['Combined_Lowe_Costs'].sum():,.2f}",
-                    "Assumed Tech Wage Payouts": f"${df_wh_prof['Assumed_Labor_Payload'].sum():,.2f}",
-                    "Net Retained Division Profit": f"${df_wh_prof['Net_Profit_Raw'].sum():,.2f}",
-                    "Blended True Margin %": f"{(df_wh_prof['Net_Profit_Raw'].sum() / df_wh_prof['Total Invoice Amount'].sum() * 100):.1f}%"
+            if not df_prof_filtered.empty:
+                totals_summary_df = pd.DataFrame([{
+                    "Total Dispatches Closed": int(len(df_prof_filtered)),
+                    "Gross Invoiced Revenue": f"${df_prof_filtered['Total Invoice Amount'].sum():,.2f}",
+                    "Total Combined Cost": f"${df_prof_filtered['Combined_Lowe_Costs'].sum():,.2f}",
+                    "Assumed Labor Payroll Burden": f"${df_prof_filtered['Assumed_Labor_Payload'].sum():,.2f}",
+                    "Net Profit": f"${df_prof_filtered['Net_Profit_Raw'].sum():,.2f}",
+                    "Blended Margin %": f"{(df_prof_filtered['Net_Profit_Raw'].sum() / df_prof_filtered['Total Invoice Amount'].sum() * 100):.1f}%" if df_prof_filtered['Total Invoice Amount'].sum() > 0 else "0.0%"
                 }])
-                st.table(wh_totals_df)
-                create_copy_button(wh_totals_df, "wh_net_profitability_totals")
+                st.table(totals_summary_df)
+                create_copy_button(totals_summary_df, "profitability_summary_totals")
                 
-                st.markdown("#### 🛢️ Itemized Job-by-Job Margin Performance Register")
-                df_wh_prof['Profit Margin %'] = np.where(df_wh_prof['Total Invoice Amount'] > 0, (df_wh_prof['Net_Profit_Raw'] / df_wh_prof['Total Invoice Amount'] * 100), 0.0)
-                df_wh_prof_sorted = df_wh_prof.sort_values(by='Net_Profit_Raw', ascending=False)
+                st.markdown("#### 🗢 Itemized Job-by-Job Margin Performance Register")
+                df_prof_filtered['Profit Margin %'] = np.where(df_prof_filtered['Total Invoice Amount'] > 0, (df_prof_filtered['Net_Profit_Raw'] / df_prof_filtered['Total Invoice Amount'] * 100), 0.0)
                 
-                prof_job_rows = []
-                for _, r in df_wh_prof_sorted.iterrows():
-                    prof_job_rows.append({
+                # Apply dynamic interactive sorting layout metrics
+                if selected_sort_choice == "Highest Net Profit": df_prof_filtered = df_prof_filtered.sort_values(by='Net_Profit_Raw', ascending=False)
+                elif selected_sort_choice == "Lowest Net Profit": df_prof_filtered = df_prof_filtered.sort_values(by='Net_Profit_Raw', ascending=True)
+                elif selected_sort_choice == "Highest Gross Invoice": df_prof_filtered = df_prof_filtered.sort_values(by='Total Invoice Amount', ascending=False)
+                elif selected_sort_choice == "Highest Margin %": df_prof_filtered = df_prof_filtered.sort_values(by='Profit Margin %', ascending=False)
+                else: df_prof_filtered = df_prof_filtered.sort_values(by='#ID', ascending=True)
+                
+                prof_register_rows = []
+                for _, r in df_prof_filtered.iterrows():
+                    prof_register_rows.append({
                         "Job ID": str(int(r['#ID'])),
+                        "Line of Business": r['Business Unit'],
                         "Crew Assigned": r['Assigned Team Members'],
                         "Gross Invoice": f"${r['Total Invoice Amount']:,.2f}",
                         "Total Combined Cost": f"${r['Combined_Lowe_Costs']:,.2f}",
                         "Tech Wage Burden": f"${r['Assumed_Labor_Payload']:,.2f}",
-                        "Net Retained Cash": f"${r['Net_Profit_Raw']:,.2f}",
+                        "Net Profit": f"${r['Net_Profit_Raw']:,.2f}",
                         "Margin %": f"{r['Profit Margin %']:.1f}%"
                     })
-                prof_job_df = pd.DataFrame(prof_job_rows)
-                st.table(prof_job_df)
-                create_copy_button(prof_job_df, "wh_job_by_job_margins")
-            else: st.info("No active Water Heaters profiles located in current data sets.")
+                prof_register_df = pd.DataFrame(prof_register_rows)
+                st.table(prof_register_df)
+                create_copy_button(prof_register_df, "sortable_job_margins_register")
+            else: st.info("No operations elements matching selected line of business filters found.")
         else: st.info("Product/Service financial costs metrics columns missing from current source sheets.")
 
     if "📦 Product vs. Service Cost Component Breakdown Matrix" in test_choices:
         st.markdown("### **📦 Lowe's Combined Cost Performance Matrix**")
-        st.markdown("*(Isolates combined material purchasing and service costs totals and maps relative cost share ratios by sector)*")
+        st.markdown("*(Isolates combined material purchasing and service costs totals and maps relative cost share and net profit metrics by sector)*")
         if not unexploded_ops.empty and 'Total Product Cost [tax inc]' in unexploded_ops.columns:
             df_cc = unexploded_ops.copy()
             df_cc['Prod_Cost'] = pd.to_numeric(df_cc['Total Product Cost [tax inc]'], errors='coerce').fillna(0.0)
             df_cc['Serv_Cost'] = pd.to_numeric(df_cc['Invoice - Total Service Cost'], errors='coerce').fillna(0.0)
             df_cc['Combined_Cost'] = df_cc['Prod_Cost'] + df_cc['Serv_Cost']
+            df_cc['Tech_Count'] = df_cc['Assigned Team Members'].apply(lambda x: len([m.strip() for m in str(x).split(',') if m.strip()]))
+            
+            df_cc['Assumed_Labor_Payload'] = np.where(
+                df_cc['Business Unit'] == 'Lowes - Water Heaters',
+                np.where(df_cc['Tech_Count'] > 1, 175.0, 100.0),
+                df_cc['#ID'].map(ops_df.groupby('#ID')['Allocated_Job_Pay'].sum().to_dict()).fillna(0.0)
+            )
+            df_cc['Net_Profit_Raw'] = df_cc['Total Invoice Amount'] - df_cc['Combined_Cost'] - df_cc['Assumed_Labor_Payload']
             
             cc_matrix = df_cc.groupby('Business Unit').agg(
                 Jobs=('#ID', 'count'),
                 Gross_Invoiced_Raw=('Total Invoice Amount', 'sum'),
-                Combined_Cost_Total_Raw=('Combined_Cost', 'sum')
+                Combined_Cost_Total_Raw=('Combined_Cost', 'sum'),
+                Net_Profit_Total_Raw=('Net_Profit_Raw', 'sum')
             ).reset_index()
             
             cc_matrix['Cost Ratio % vs Rev'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Combined_Cost_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
-            cc_matrix['Cost Ratio % vs Rev'] = cc_matrix['Cost Ratio % vs Rev'].apply(lambda x: f"{x:.1f}%")
+            cc_matrix['Net Profit (%)'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Net_Profit_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
             
+            cc_matrix['Cost Ratio % vs Rev'] = cc_matrix['Cost Ratio % vs Rev'].apply(lambda x: f"{x:.1f}%")
+            cc_matrix['Net Profit (%)'] = cc_matrix['Net Profit (%)'].apply(lambda x: f"{x:.1f}%")
             cc_matrix['Gross Invoiced Revenue'] = cc_matrix['Gross_Invoiced_Raw'].apply(lambda x: f"${x:,.2f}")
             cc_matrix['Total Combined Cost'] = cc_matrix['Combined_Cost_Total_Raw'].apply(lambda x: f"${x:,.2f}")
+            cc_matrix['Net Profit ($)'] = cc_matrix['Net_Profit_Total_Raw'].apply(lambda x: f"${x:,.2f}")
             
-            show_cc = cc_matrix[['Business Unit', 'Jobs', 'Gross Invoiced Revenue', 'Total Combined Cost', 'Cost Ratio % vs Rev']].rename(columns={'Jobs': 'Jobs Assigned'})
+            show_cc = cc_matrix[['Business Unit', 'Jobs', 'Gross Invoiced Revenue', 'Total Combined Cost', 'Cost Ratio % vs Rev', 'Net Profit ($)', 'Net Profit (%)']].rename(columns={'Jobs': 'Jobs Assigned'})
             st.table(show_cc)
             create_copy_button(show_cc, "product_vs_service_cost_breakdown")
         else: st.info("Product/Service financial costs metrics columns missing from current source sheets.")
 
-# --- RUN EXECUTION Pipeline BLOCK FOR FILE MOUNTING ---
+# --- THE MAIN TOP-LEVEL BASE EXECUTION PIPELINE LAYER BLOCK ---
 st.sidebar.header("📂 Data Loading Pipeline")
 time_file = st.sidebar.file_uploader("Upload Time Sheet (CSV)", type=['csv'])
 ops_file = st.sidebar.file_uploader("Upload Lowes Ops Export (CSV)", type=['csv'])
