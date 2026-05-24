@@ -113,9 +113,7 @@ st.markdown("""
         text-align: left !important;
         line-height: 1.25 !important;
     }
-    thead {
-        display: table-header-group !important;
-    }
+    box-shadow: none !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -273,48 +271,139 @@ def highlight_pay_pct_row(row):
                 pass
     return styles
 
-# NATIVE SYSTEM CLIPBOARD DATA EXPORTER (DEFINED AT GLOBAL SCOPE LEVEL)
-def create_copy_button(df, raw_key):
-    safe_key = "".join([c if c.isalnum() else "_" for c in raw_key])
-    tsv_str = df.to_csv(sep='\t', index=False)
-    safe_tsv = tsv_str.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+def highlight_low_margins(row):
+    styles = [''] * len(row)
+    if 'Line of Business' in row and 'Margin %' in row:
+        try:
+            bu = row['Line of Business']
+            m_val = float(str(row['Margin %']).replace('%', '').strip())
+            if 'Water Heaters' in bu and m_val < 35.0:
+                return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row)
+            elif 'Simple Installs' in bu and m_val < 45.0:
+                return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row)
+        except:
+            pass
+    return styles
+
+# --- CORE ADVINAL BASELINE GENERATOR ROW ENGINE ---
+def run_baselines_matrix(ops_df):
+    st.markdown("<h4>Advanced Team Processing Baselines Matrix</h4>", unsafe_allow_html=True)
+    st.markdown("*(Technician tracking averages sorted by highest un-blended weekly duration totals. Store times ignore direct-to-site jobs)*")
     
-    button_html = f"""
-    <div class="hide-on-print" style="text-align: left; margin-top: 5px; margin-bottom: 8px;">
-        <textarea id="tsv_{safe_key}" style="position: absolute; left: -9999px;">{safe_tsv}</textarea>
-        <button id="btn_{safe_key}" onclick="copyTSV_{safe_key}()" style="background-color: #ffffff; color: #3c4043; padding: 6px 14px; border: 1px solid #dadce0; border-radius: 4px; cursor: pointer; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: background-color 0.2s;">
-            📋 Copy Table Data (For Email/Sheets/Docs)
-        </button>
-    </div>
-    <script>
-    function copyTSV_{safe_key}() {{
-        var copyText = document.getElementById("tsv_{safe_key}");
-        copyText.select();
-        copyText.setSelectionRange(0, 999999);
-        try {{
-            var successful = document.execCommand('copy');
-            var btn = document.getElementById("btn_{safe_key}");
-            if (successful) {{
-                btn.innerHTML = "✅ Copied table to clipboard!";
-                btn.style.backgroundColor = "#e6f4ea";
-                btn.style.color = "#137333";
-                btn.style.borderColor = "#137333";
-                setTimeout(function() {{
-                    btn.innerHTML = "📋 Copy Table Data (For Email/Sheets/Docs)";
-                    btn.style.backgroundColor = "#ffffff";
-                    btn.style.color = "#3c4043";
-                    btn.style.borderColor = "#dadce0";
-                }}, 2000);
-                }} else {{
-                btn.innerHTML = "❌ Copy failed";
-            }}
-        }} catch (err) {{
-            console.error('Execution fallback error:', err);
-        }}
-    }}
-    </script>
-    """
-    st.components.v1.html(button_html, height=38)
+    wh_jobs = ops_df[ops_df['Business Unit'] == 'Lowes - Water Heaters']
+    lsi_jobs = ops_df[ops_df['Business Unit'] == 'Lowes - Simple Installs']
+    
+    div_avg_total = ops_df['Total_Job_Time_Hours'].mean() if not ops_df.empty else 0.0
+    div_wh_baseline = wh_jobs['Total_Job_Time_Hours'].mean() if not wh_jobs.empty else 3.5
+    div_lsi_baseline = lsi_jobs['Total_Job_Time_Hours'].mean() if not lsi_jobs.empty else 2.0
+    
+    wh_jobs_with_store = wh_jobs[wh_jobs['Store_Time_Hrs'] > 0]
+    lsi_jobs_with_store = lsi_jobs[lsi_jobs['Store_Time_Hrs'] > 0]
+    div_wh_store_baseline = wh_jobs_with_store['Store_Time_Hrs'].mean() if not wh_jobs_with_store.empty else 0.5
+    div_lsi_store_baseline = lsi_jobs_with_store['Store_Time_Hrs'].mean() if not lsi_jobs_with_store.empty else 0.3
+    
+    st.markdown(f"""
+    📊 **Current Division Baseline Averages (Store Averages Ignore Direct-To-Site Jobs):** &nbsp;&nbsp;•&nbsp;&nbsp;**Blended Total Avg:** `{format_hm(div_avg_total)}` &nbsp;&nbsp;|&nbsp;&nbsp; **WH Job Length:** `{format_hm(div_wh_baseline)}` &nbsp;&nbsp;|&nbsp;&nbsp; **LSI Job Length:** `{format_hm(div_lsi_baseline)}` 
+    &nbsp;&nbsp;•&nbsp;&nbsp;**WH Store Delay:** `{format_hm(div_wh_store_baseline)}` &nbsp;&nbsp;|&nbsp;&nbsp; **LSI Store Delay:** `{format_hm(div_lsi_store_baseline)}`
+    """)
+    
+    matrix_rows = []
+    wh_over_baseline_rows = []
+    lsi_over_baseline_rows = []
+    
+    for tech_name in sorted(ops_df['Assigned Team Members'].unique()):
+        tech_jobs = ops_df[ops_df['Assigned Team Members'] == tech_name]
+        
+        t_wh = tech_jobs[tech_jobs['Business Unit'] == 'Lowes - Water Heaters']
+        t_lsi = tech_jobs[tech_jobs['Business Unit'] == 'Lowes - Simple Installs']
+        
+        avg_total_val = tech_jobs['Total_Job_Time_Hours'].mean() if not tech_jobs.empty else np.nan
+        avg_wh_val = t_wh['Total_Job_Time_Hours'].mean() if not t_wh.empty else np.nan
+        avg_lsi_val = t_lsi['Total_Job_Time_Hours'].mean() if not t_lsi.empty else np.nan
+        
+        t_wh_store = t_wh[t_wh['Store_Time_Hrs'] > 0]
+        t_lsi_store = t_lsi[t_lsi['Store_Time_Hrs'] > 0]
+        avg_wh_store_val = t_wh_store['Store_Time_Hrs'].mean() if not t_wh_store.empty else np.nan
+        avg_lsi_store_val = t_lsi_store['Store_Time_Hrs'].mean() if not t_lsi_store.empty else np.nan
+        
+        if not tech_jobs.empty:
+            max_idx = tech_jobs['Total_Job_Time_Hours'].idxmax()
+            max_job_val = tech_jobs['Total_Job_Time_Hours'].max()
+            max_job_id = tech_jobs.loc[max_idx, '#ID'] if '#ID' in tech_jobs.columns else 'Unknown'
+            if isinstance(max_job_id, float) and max_job_id.is_integer():
+                max_job_id = int(max_job_id)
+            max_job_str = f"{format_hm(max_job_val)} (ID: {max_job_id})"
+        else:
+            max_job_str = "-"
+            
+        if pd.notna(div_wh_baseline):
+            for _, j in t_wh[t_wh['Total_Job_Time_Hours'] > div_wh_baseline].iterrows():
+                jid = int(j['#ID']) if ('#ID' in j and isinstance(j['#ID'], float) and j['#ID'].is_integer()) else (j['#ID'] if '#ID' in j else 'Unknown')
+                diff_val = j['Total_Job_Time_Hours'] - div_wh_baseline
+                wh_over_baseline_rows.append({
+                    "Technician": tech_name,
+                    "Job ID": str(jid),
+                    "Job Duration": format_hm(j['Total_Job_Time_Hours']),
+                    "Over Division Average By": f"+{format_hm(diff_val)}",
+                    "sort_key": diff_val
+                })
+        
+        if pd.notna(div_lsi_baseline):
+            for _, j in t_lsi[t_lsi['Total_Job_Time_Hours'] > div_lsi_baseline].iterrows():
+                jid = int(j['#ID']) if ('#ID' in j and isinstance(j['#ID'], float) and j['#ID'].is_integer()) else (j['#ID'] if '#ID' in j else 'Unknown')
+                diff_val = j['Total_Job_Time_Hours'] - div_lsi_baseline
+                lsi_over_baseline_rows.append({
+                    "Technician": tech_name,
+                    "Job ID": str(jid),
+                    "Job Duration": format_hm(j['Total_Job_Time_Hours']),
+                    "Over Division Average By": f"+{format_hm(diff_val)}",
+                    "sort_key": diff_val
+                })
+        
+        matrix_rows.append({
+            "Name": tech_name,
+            "Total Avg Job Time": f"{format_hm(avg_total_val)} (Div: {format_hm(div_avg_total)})" if pd.notna(avg_total_val) else "-",
+            "Avg WH Time": f"{format_hm(avg_wh_val)} (Div: {format_hm(div_wh_baseline)})" if pd.notna(avg_wh_val) else "-",
+            "Avg LSI Time": f"{format_hm(avg_lsi_val)} (Div: {format_hm(div_lsi_baseline)})" if pd.notna(avg_lsi_val) else "-",
+            "Avg WH Store Time": f"{format_hm(avg_wh_store_val)} (Div: {format_hm(div_wh_store_baseline)})" if pd.notna(avg_wh_store_val) else "-",
+            "Avg LSI Store Time": f"{format_hm(avg_lsi_store_val)} (Div: {format_hm(div_lsi_store_baseline)})" if pd.notna(avg_lsi_store_val) else "-",
+            "Max Single Job Length": max_job_str,
+            "sort_key": avg_total_val if pd.notna(avg_total_val) else -1.0
+        })
+        
+    matrix_df = pd.DataFrame(matrix_rows)
+    if not matrix_df.empty:
+        matrix_df = matrix_df.sort_values(by='sort_key', ascending=False).drop(columns=['sort_key'])
+        
+    try:
+        styled_matrix = matrix_df.reset_index(drop=True).style.apply(highlight_matrix_overhead, subset=['Total Avg Job Time', 'Avg WH Time', 'Avg LSI Time', 'Avg WH Store Time', 'Avg LSI Store Time'])
+        st.dataframe(styled_matrix, use_container_width=True) 
+    except Exception:
+        st.dataframe(matrix_df.reset_index(drop=True), use_container_width=True)
+        
+    create_copy_button(matrix_df, "baselines_matrix")
+        
+    st.markdown("<br><h4>🚨 Individual Over-Baseline Job Reference Breakdown</h4>", unsafe_allow_html=True)
+    st.markdown("*(Granular tracking sheets isolating individual work orders exceeding the division run baselines, sorted largest variation to lowest. Rows >1 hour over are highlighted)*")
+    
+    split_col1, split_col2 = st.columns(2)
+    with split_col1:
+        st.markdown("##### 🛢️ Water Heaters Over-Baseline Jobs")
+        if wh_over_baseline_rows:
+            wh_matrix_df = pd.DataFrame(wh_over_baseline_rows).sort_values(by='sort_key', ascending=False).drop(columns=['sort_key']).reset_index(drop=True)
+            try: st.dataframe(wh_matrix_df.style.apply(highlight_over_hour_row, axis=1), use_container_width=True)
+            except Exception: st.dataframe(wh_matrix_df, use_container_width=True)
+            create_copy_button(wh_matrix_df, "wh_over_baseline")
+        else: st.success("✅ Zero individual Water Heater jobs exceeded the division baseline average.")
+            
+    with split_col2:
+        st.markdown("##### 🔧 Simple Installs Over-Baseline Jobs")
+        if lsi_over_baseline_rows:
+            lsi_matrix_df = pd.DataFrame(lsi_over_baseline_rows).sort_values(by='sort_key', ascending=False).drop(columns=['sort_key']).reset_index(drop=True)
+            try: st.dataframe(lsi_matrix_df.style.apply(highlight_over_hour_row, axis=1), use_container_width=True)
+            except Exception: st.dataframe(lsi_matrix_df, use_container_width=True)
+            create_copy_button(lsi_matrix_df, "lsi_over_baseline")
+        else: st.success("✅ Zero individual Simple Install jobs exceeded the division baseline average.")
 
 # --- MAIN BLOCK REPORT ENGINE ---
 def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
@@ -585,14 +674,10 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, bu_financial_
             for d in ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]:
                 clocked = row[f'{d}_Clocked_Hrs']
                 jobs = row[f'{d}_Job_Count']
-                if clocked > 0 and jobs == 0: 
-                    ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🕵️ Paid But Idle (Clocked In, 0 Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": 0})
-                elif clocked == 0 and jobs > 0: 
-                    ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🚨 Unpaid Field Work (0 Hours Clocked, Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": int(jobs)})
-        if ghost_alerts: 
-            st.dataframe(pd.DataFrame(ghost_alerts), use_container_width=True)
-        else: 
-            st.success("Perfect alignment! No payroll discrepancy errors detected on current sheets.")
+                if clocked > 0 and jobs == 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🕵️ Paid But Idle (Clocked In, 0 Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": 0})
+                elif clocked == 0 and jobs > 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🚨 Unpaid Field Work (0 Hours Clocked, Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": int(jobs)})
+        if ghost_alerts: st.dataframe(pd.DataFrame(ghost_alerts), use_container_width=True)
+        else: st.success("Perfect alignment! No payroll discrepancy errors detected on current sheets.")
 
     if "¼ The Lowe's Store Staging Efficiency Scorecard" in test_choices:
         st.markdown("### **¼ The Lowe's Store Staging Efficiency Scorecard**")
@@ -741,24 +826,24 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, bu_financial_
             st.success("✅ Zero hourly technicians incurred premium overtime thresholds during this invoice cycle.")
 
     if "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard" in test_choices:
-                st.markdown("### **🏆 Single-Job \"Whale Alert\" Revenue Leaderboard**")
-                st.markdown("*(Highlights the top 5 highest-grossing individual unexploded invoices completed this cycle across the division)*")
-                if not unexploded_ops.empty and 'Total Invoice Amount' in unexploded_ops.columns:
-                    whale_df = unexploded_ops.sort_values(by='Total Invoice Amount', ascending=False).head(5).copy()
-                    whale_summary = []
-                    for _, r in whale_df.iterrows():
-                        jid = int(r['#ID']) if ('#ID' in r and pd.notna(r['#ID'])) else "Unknown"
-                        whale_summary.append({
-                            "Job ID": str(jid),
-                            "Assigned Crew Members": r['Assigned Team Members'],
-                            "Business Unit Sector": r['Business Unit'] if 'Business Unit' in r else "Unknown",
-                            "Ticket Invoiced Revenue": f"${r['Total Invoice Amount']:,.2f}"
-                        })
-                    whale_summary_df = pd.DataFrame(whale_summary)
-                    st.dataframe(whale_summary_df, use_container_width=True)
-                    create_copy_button(whale_summary_df, "whale_alert_leaderboard")
-                else:
-                    st.info("No invoice details located inside loaded operations datasets.")
+        st.markdown("### **🏆 Single-Job \"Whale Alert\" Revenue Leaderboard**")
+        st.markdown("*(Highlights the top 5 highest-grossing individual unexploded invoices completed this cycle across the division)*")
+        if not unexploded_ops.empty and 'Total Invoice Amount' in unexploded_ops.columns:
+            whale_df = unexploded_ops.sort_values(by='Total Invoice Amount', ascending=False).head(5).copy()
+            whale_summary = []
+            for _, r in whale_df.iterrows():
+                jid = int(r['#ID']) if ('#ID' in r and pd.notna(r['#ID'])) else "Unknown"
+                whale_summary.append({
+                    "Job ID": str(jid),
+                    "Assigned Crew Members": r['Assigned Team Members'],
+                    "Business Unit Sector": r['Business Unit'] if 'Business Unit' in r else "Unknown",
+                    "Ticket Invoiced Revenue": f"${r['Total Invoice Amount']:,.2f}"
+                })
+            whale_summary_df = pd.DataFrame(whale_summary)
+            st.dataframe(whale_summary_df, use_container_width=True)
+            create_copy_button(whale_summary_df, "whale_alert_leaderboard")
+        else:
+            st.info("No invoice details located inside loaded operations datasets.")
 
     if "💵 Division True Net Profitability Margin Auditor" in test_choices:
         st.markdown("### **💵 Division True Net Profitability Margin Auditor**")
@@ -1169,6 +1254,7 @@ if time_file and ops_file:
         
         df_macro_pay['Prod_Cost'] = pd.to_numeric(df_macro_pay.get('Total Product Cost [tax inc]', pd.Series([0]*len(df_macro_pay))), errors='coerce').fillna(0.0)
         df_macro_pay['Serv_Cost'] = pd.to_numeric(df_macro_pay.get('Invoice - Total Service Cost', pd.Series([0]*len(df_macro_pay))), errors='coerce').fillna(0.0)
+        df_macro_pay['Combined_Lowe_Costs'] = np.maximum(0.0, (df_macro_pay['Prod_Cost'] + df_macro_pay['Serv_Cost']) - df_macro_Burden_Sub) # Fixed local optimization trace
         df_macro_pay['Combined_Lowe_Costs'] = np.maximum(0.0, (df_macro_pay['Prod_Cost'] + df_macro_pay['Serv_Cost']) - df_macro_pay['Cost_Burden_Sub'])
         
         df_macro_pay['Flat_Rate_Labor'] = np.where(
@@ -1527,7 +1613,7 @@ if time_file and ops_file:
                     st.dataframe(ot_audit_df, use_container_width=True)
                     create_copy_button(ot_audit_df, "overtime_roi_auditor")
                 else:
-                    st.success("¼ Hourly technicians worked zero premium overtime thresholds during this session cycle.")
+                    st.success("✅ Zero hourly technicians incurred premium overtime thresholds during this invoice cycle.")
 
             if "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard" in test_choices:
                 st.markdown("### **🏆 Single-Job \"Whale Alert\" Revenue Leaderboard**")
@@ -1625,7 +1711,7 @@ if time_file and ops_file:
                         except Exception:
                             st.dataframe(prof_register_df, use_container_width=True, height=(len(prof_register_df) + 1) * 35 + 45)
                         create_copy_button(prof_register_df, "sortable_job_margins_register")
-                else: st.info("No core internal crew members jobs found for selected parameters layout block.")
+                    else: st.info("No core internal crew members jobs found for selected parameters layout block.")
 
             if "📦 Lowe's Combined Cost Performance Matrix" in test_choices:
                 st.markdown("### **📦 Lowe's Combined Cost Performance Matrix**")
