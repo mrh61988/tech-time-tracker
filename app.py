@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import io
 
 # Set up the page layout
 st.set_page_config(page_title="Tech Time Tracker", layout="wide")
@@ -458,10 +459,8 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # === OPS MANAGER TOOLS (CLEAN REALIGNED DURATION VIEWS) ===
-    st.header("📊 Ops Manager Tools (Benchmarking & Performance)")
+    # === CONSOLIDATED SANDBOX TAB VIEWS ===
     col_left, col_right = st.columns(2)
-    
     with col_left:
         st.subheader("⭐ The Gold Star High-Performer List")
         gold_star_df = final_df[(final_df['Daily_Avg_Diff_Hrs'] < 1.5) & (final_df['Days_Worked'] > 0)].copy()
@@ -519,9 +518,9 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             selected_late_tech = st.selectbox("Select Tech to view launch times:", tech_late_list, key=f"late_launch_{tab_key}")
             if selected_late_tech:
                 tech_launches_df = delayed_launches_df[delayed_launches_df['Assigned Team Members'] == selected_late_tech].copy()
-                tech_launches_df['First Launch'] = tech_launches_df['First_Punch'].dt.strftime('%I:%M %p') + " (" + tech_launches_df['First_Status'] + ")"
-                try: st.dataframe(tech_launches_df.sort_values(by='First_Punch', ascending=False)[['Short_Date', 'First Launch']].rename(columns={'Short_Date': 'Date'}).reset_index(drop=True).style.hide(axis="index").set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'}), use_container_width=True)
-                except Exception: st.dataframe(tech_launches_df.sort_values(by='First_Punch', ascending=False)[['Short_Date', 'First Launch']].rename(columns={'Short_Date': 'Date'}).reset_index(drop=True).style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'}), use_container_width=True)
+                tech_launches_df['First Punch log'] = tech_launches_df['First_Punch'].dt.strftime('%I:%M %p') + " (" + tech_launches_df['First_Status'] + ")"
+                try: st.dataframe(tech_launches_df.sort_values(by='First_Punch', ascending=False)[['Short_Date', 'First Punch log']].rename(columns={'Short_Date': 'Date'}).reset_index(drop=True).style.hide(axis="index").set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'}), use_container_width=True)
+                except Exception: st.dataframe(tech_launches_df.sort_values(by='First_Punch', ascending=False)[['Short_Date', 'First Punch log']].rename(columns={'Short_Date': 'Date'}).reset_index(drop=True).style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'}), use_container_width=True)
 
 def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices):
     if "🏆 The Golden Ratio Margin Predictor" in test_choices:
@@ -626,7 +625,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         route_eff = route_eff.sort_values(by='Rev per Drive Hour Raw', ascending=False)
         route_eff['Total Assigned Revenue'] = route_eff['Total_Revenue'].apply(lambda x: f"${x:,.2f}")
         route_eff['Total Drive Hours'] = route_eff['Total_Drive_Hrs'].apply(lambda x: f"{x:.1f} hrs")
-        route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"${x:,.1f}/hr")
+        route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"${x:,.2f}/hr")
         st.dataframe(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True), use_container_width=True)
 
     if "📉 True Gross Margin per Clocked Hour" in test_choices:
@@ -644,7 +643,6 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         st.dataframe(margin_df[['Name', 'Total Clocked', 'Total Assigned Revenue', 'Assumed Pay', 'Total Net Margin', 'Margin per Clocked Hour']].reset_index(drop=True), use_container_width=True)
 
 # --- GLOBAL APP TERMINATION INTERFACES PIPELINE ---
-# ALL UPLOADER BLOCKS POSITIONED SAFELY OUT AT FLATTENED ROOT (0 SPACES)
 time_file = st.sidebar.file_uploader("Upload Time Sheet (CSV)", type=['csv'])
 ops_file = st.sidebar.file_uploader("Upload Lowes Ops Export (CSV)", type=['csv'])
 
@@ -652,28 +650,55 @@ if time_file and ops_file:
     try:
         EXCLUDE_NAMES = ['Luis Ortiz', 'Roman Twardoz', 'Dave Barber Show Low (Contactor)', 'Oak Wrench AZ Jarrod Scully (Contractor)', 'Presidio Plumbing Eric (Contractor)', 'AtoZ Remodel LLC Ken (Contractor)', 'Steve Walpole']
         
-        # --- 1. Parse Time Sheet ---
-        time_content = time_file.getvalue().decode("utf-8").splitlines()
-        time_lines = time_content[1:] 
-        data = []
-        for i in range(0, len(time_lines), 9):
-            if i + 8 < len(time_lines):
-                name = time_lines[i].strip().rstrip(',').strip('"')
-                sun = time_lines[i+1].strip()
-                mon = time_lines[i+2].strip()
-                tue = time_lines[i+3].strip()
-                wed = time_lines[i+4].strip()
-                thu = time_lines[i+5].strip()
-                fri = time_lines[i+6].strip()
-                sat = time_lines[i+7].strip()
-                total = time_lines[i+8].strip()
-                data.append([name, sun, mon, tue, wed, thu, fri, sat, total])
+        # --- 1. Intelligent Dual-Engine Parser for Time Sheets ---
+        time_bytes = time_file.getvalue()
+        try:
+            # Attempt to read as detailed system shift punch log first
+            sample_df = pd.read_csv(io.BytesIO(time_bytes))
+            if 'User' in sample_df.columns:
+                sample_df['Clock_In_dt'] = pd.to_datetime(sample_df['Clock In Date/Time'], errors='coerce')
+                sample_df['Clock_Out_dt'] = pd.to_datetime(sample_df['Clock Out Date/Time'], errors='coerce')
+                sample_df['Duration_Hrs'] = (sample_df['Clock_Out_dt'] - sample_df['Clock_In_dt']).dt.total_seconds() / 3600.0
+                sample_df['Day_of_Week'] = sample_df['Clock_In_dt'].dt.day_name().str[:3]
+                
+                pivot_df = sample_df.groupby(['User', 'Day_of_Week'])['Duration_Hrs'].sum().unstack(fill_value=0.0).reset_index()
+                days_order = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+                for d in days_order:
+                    if d not in pivot_df.columns:
+                        pivot_df[d] = 0.0
+                pivot_df = pivot_df[['User'] + days_order]
+                pivot_df.columns = ['Name'] + [d + '_Clocked_Hrs' for d in days_order]
+                pivot_df['Total_Weekly_Clocked_Hrs'] = pivot_df[[d + '_Clocked_Hrs' for d in days_order]].sum(axis=1)
+                pivot_df['Days_Worked'] = (pivot_df[[f'{d}_Clocked_Hrs' for d in days_order]] > 0).sum(axis=1)
+                time_df = pivot_df
+            else:
+                raise ValueError("fallback")
+        except:
+            # Fallback Engine: Parse using legacy copypaste daily text grid format
+            time_content = time_bytes.decode("utf-8").splitlines()
+            time_lines = time_content[1:] 
+            data = []
+            for i in range(0, len(time_lines), 9):
+                if i + 8 < len(time_lines):
+                    name = time_lines[i].strip().rstrip(',').strip('"')
+                    sun = time_lines[i+1].strip()
+                    mon = time_lines[i+2].strip()
+                    tue = time_lines[i+3].strip()
+                    wed = time_lines[i+4].strip()
+                    thu = time_lines[i+5].strip()
+                    fri = time_lines[i+6].strip()
+                    sat = time_lines[i+7].strip()
+                    total = time_lines[i+8].strip()
+                    data.append([name, sun, mon, tue, wed, thu, fri, sat, total])
+            
+            time_df = pd.DataFrame(data, columns=['Name', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Total_Weekly'])
+            days_order = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+            for col in days_order + ['Total_Weekly']: time_df[col + '_Clocked_Hrs'] = time_df[col].apply(parse_hm)
+            time_df['Days_Worked'] = (time_df[[f'{d}_Clocked_Hrs' for d in days_order]] > 0).sum(axis=1)
         
-        time_df = pd.DataFrame(data, columns=['Name', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Total_Weekly'])
+        # Enforce name exclusions globally
         time_df = time_df[~time_df['Name'].isin(EXCLUDE_NAMES)]
         days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-        for col in days + ['Total_Weekly']: time_df[col + '_Clocked_Hrs'] = time_df[col].apply(parse_hm)
-        time_df['Days_Worked'] = (time_df[[f'{d}_Clocked_Hrs' for d in days]] > 0).sum(axis=1)
         
         # --- 2. Parse Ops Sheet ---
         ops_df = pd.read_csv(ops_file, header=1)
@@ -971,7 +996,6 @@ if time_file and ops_file:
                 show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue', 'Total Net Margin', 'Margin per Clocked Hour']]
                 st.dataframe(show_rev_per_hour.reset_index(drop=True).style.apply(highlight_pay_pct_row, axis=1), use_container_width=True)
             
-            # THE ADVANCED BASELINES MATRIX PERMANENTLY DEPLOYED DIRECTLY INSIDE CORE WORKSPACE SUMMARIES
             st.markdown("<br><hr>", unsafe_allow_html=True)
             run_baselines_matrix(ops_df)
             
@@ -1006,7 +1030,6 @@ if time_file and ops_file:
                 short_day = day_mapping[full_day]
                 st.dataframe(display_dfs[short_day].reset_index(drop=True), use_container_width=True)
 
-        # FIXED EXPLICIT INDENT BODY CONSOLE WINDOW
         with tabs[10]:
             test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "¼ The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)", "📉 True Gross Margin per Clocked Hour"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
             run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
