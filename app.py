@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit st
 import pandas as pd
 import numpy as np
 import io
@@ -10,7 +10,7 @@ st.set_page_config(page_title="Tech Time Tracker", layout="wide")
 st.markdown("""
 <style>
 @media print {
-    /* Enforce landscape orientation to provide full width space for wide tables */
+    /* Enforce landscape orientation to maximize wide printable space layout margins */
     @page {
         size: landscape;
         margin: 0.4in !important;
@@ -28,26 +28,20 @@ st.markdown("""
     h1, .hide-on-print, .stAlert, iframe, button { display: none !important; }
     div[class*="stExpander"] { display: none !important; }
     
-    /* Flatten flex and grid containers to standard sequential blocks to block overlapping */
-    div[class*="stVerticalBlock"], 
-    div[data-testid="element-container"],
-    [data-testid="stHorizontalBlock"],
-    [data-testid="column"] {
-        display: block !important;
-        position: static !important;
-        float: none !important;
+    /* CRITICAL FIX: Retain column blocks side-by-side natively on wide horizontal landscape layouts */
+    [data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important; /* Force side-by-side execution mapping across landscape viewport margins */
         width: 100% !important;
-        max-width: 100% !important;
-        min-width: 100% !important;
-        height: auto !important;
-        max-height: none !important;
-        overflow: visible !important;
-        margin: 0 0 25px 0 !important;
-        padding: 0 !important;
-        box-shadow: none !important;
+        gap: 20px !important;
     }
-    
     [data-testid="column"] {
+        flex: 1 1 0% !important;
+        min-width: 0 !important;
+        height: auto !important;
+        overflow: visible !important;
+        margin-bottom: 0px !important;
         page-break-inside: avoid !important;
     }
     
@@ -58,7 +52,7 @@ st.markdown("""
         margin-bottom: 12px !important;
     }
 
-    /* Unclamp outer container gutters to allow data to bleed to the printable edges */
+    /* Unclamp outer container gutters to allow data to bleed cleanly to the printable edges */
     div[data-testid="stAppViewBlockContainer"],
     .main .block-container,
     div[class*="block-container"] {
@@ -68,12 +62,12 @@ st.markdown("""
         margin: 0 !important;
     }
     
-    /* Enforce responsive auto-scaling tables matching full page canvas properties */
+    /* Enforce full-width text wrapping table styles safely inside right borders */
     table { 
         width: 100% !important; 
         max-width: 100% !important;
         border-collapse: collapse !important;
-        table-layout: auto !important; /* Dynamically resizes columns to sit inside page bounds */
+        table-layout: auto !important;
         page-break-inside: auto !important;
         margin: 0 0 20px 0 !important;
     }
@@ -82,16 +76,16 @@ st.markdown("""
         page-break-after: auto !important;
     }
     th, td {
-        white-space: normal !important; /* Enables automatic line wrapping within text cells */
-        word-break: break-word !important; /* Protects metrics labels from running past borders */
+        white-space: normal !important; /* Keeps labels text wrapping safely onto clean nested lines */
+        word-break: break-word !important;
         overflow-wrap: break-word !important;
-        padding: 5px 6px !important; /* Compact balanced cell padding rules */
-        font-size: 10px !important; /* Scaled to remain highly crisp and readable under landscape mode */
+        padding: 5px 6px !important;
+        font-size: 10px !important; /* Highly crisp font sizing for maximum sheet width density allocation */
         text-align: left !important;
         line-height: 1.3 !important;
     }
     thead {
-        display: table-header-group !important; /* Re-renders table header columns title rows on split sheets */
+        display: table-header-group !important;
     }
 }
 </style>
