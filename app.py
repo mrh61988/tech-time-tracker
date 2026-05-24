@@ -306,7 +306,7 @@ def highlight_over_hour_row(row):
             pass
     return [''] * len(row)
 
-# NEW PROFIT MARGIN OVERHEAD WARNING HIGHLIGHT ENGINE
+# AUDITOR ROW MARGIN HIGHLIGHTER ENGINE
 def highlight_low_margins(row):
     styles = [''] * len(row)
     if 'Line of Business' in row and 'Margin %' in row:
@@ -320,6 +320,49 @@ def highlight_low_margins(row):
         except:
             pass
     return styles
+
+# NATIVE SYSTEM CLIPBOARD DATA EXPORTER (DEFINED AT GLOBAL SCOPE LEVEL)
+def create_copy_button(df, raw_key):
+    safe_key = "".join([c if c.isalnum() else "_" for c in raw_key])
+    tsv_str = df.to_csv(sep='\t', index=False)
+    safe_tsv = tsv_str.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+    
+    button_html = f"""
+    <div class="hide-on-print" style="text-align: left; margin-top: 5px; margin-bottom: 8px;">
+        <textarea id="tsv_{safe_key}" style="position: absolute; left: -9999px;">{safe_tsv}</textarea>
+        <button id="btn_{safe_key}" onclick="copyTSV_{safe_key}()" style="background-color: #ffffff; color: #3c4043; padding: 6px 14px; border: 1px solid #dadce0; border-radius: 4px; cursor: pointer; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: background-color 0.2s;">
+            📋 Copy Table Data (For Email/Sheets/Docs)
+        </button>
+    </div>
+    <script>
+    function copyTSV_{safe_key}() {{
+        var copyText = document.getElementById("tsv_{safe_key}");
+        copyText.select();
+        copyText.setSelectionRange(0, 999999);
+        try {{
+            var successful = document.execCommand('copy');
+            var btn = document.getElementById("btn_{safe_key}");
+            if (successful) {{
+                btn.innerHTML = "✅ Copied table to clipboard!";
+                btn.style.backgroundColor = "#e6f4ea";
+                btn.style.color = "#137333";
+                btn.style.borderColor = "#137333";
+                setTimeout(function() {{
+                    btn.innerHTML = "📋 Copy Table Data (For Email/Sheets/Docs)";
+                    btn.style.backgroundColor = "#ffffff";
+                    btn.style.color = "#3c4043";
+                    btn.style.borderColor = "#dadce0";
+                }}, 2000);
+                }} else {{
+                btn.innerHTML = "❌ Copy failed";
+            }}
+        }} catch (err) {{
+            console.error('Execution fallback error:', err);
+        }}
+    }}
+    </script>
+    """
+    st.components.v1.html(button_html, height=38)
 
 # --- CORE ADVANCED BASELINE REPORT GENERATOR PANEL ---
 def run_baselines_matrix(ops_df):
@@ -430,7 +473,7 @@ def run_baselines_matrix(ops_df):
             try: st.table(wh_matrix_df.style.apply(highlight_over_hour_row, axis=1))
             except Exception: st.table(wh_matrix_df)
             create_copy_button(wh_matrix_df, "wh_over_baseline")
-        else: st.success("✅ Zero individual Water Heater jobs exceeded the division baseline average.")
+        else: st.success("Zero individual Water Heater jobs exceeded the division baseline average.")
             
     with split_col2:
         st.markdown("##### 🔧 Simple Installs Over-Baseline Jobs")
@@ -439,7 +482,7 @@ def run_baselines_matrix(ops_df):
             try: st.table(lsi_matrix_df.style.apply(highlight_over_hour_row, axis=1))
             except Exception: st.table(lsi_matrix_df)
             create_copy_button(lsi_matrix_df, "lsi_over_baseline")
-        else: st.success("✅ Zero individual Simple Install jobs exceeded the division baseline average.")
+        else: st.success("Zero individual Simple Install jobs exceeded the division baseline average.")
 
 # --- MAIN BLOCK REPORT ENGINE ---
 def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
@@ -992,7 +1035,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             create_copy_button(show_cc, "product_vs_service_cost_breakdown")
         else: st.info("Product/Service financial costs metrics columns missing from current source sheets.")
 
-# --- THE MAIN TOP-LEVEL BASE EXECUTION PIPELINE LAYER BLOCK ---
+# --- RUN EXECUTION Pipeline BLOCK FOR FILE MOUNTING ---
 st.sidebar.header("📂 Data Loading Pipeline")
 time_file = st.sidebar.file_uploader("Upload Time Sheet (CSV)", type=['csv'])
 ops_file = st.sidebar.file_uploader("Upload Lowes Ops Export (CSV)", type=['csv'])
@@ -1072,7 +1115,7 @@ if time_file and ops_file:
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
 
-        # TIMESTAMPS DEFINED ON LAUNCH BASE FOR BOTH PIPELINES
+        # TIMESTAMPS CRITICAL LIFECYCLE DISPATCH HOOK DEFINED ON LAUNCH BASE FOR BOTH PIPELINES
         ts_cols = ['Lowes Store - Start Timestamp', 'On The Way - Start Timestamp', 'In Progress - Start Timestamp', 'On The Way - Start Timestamp.1', 'In Progress - Start Timestamp.1']
         available_ts_cols = [c for c in ts_cols if c in ops_df.columns]
         ops_df['Job_Date'] = ops_df[available_ts_cols].bfill(axis=1).iloc[:, 0]
@@ -1334,7 +1377,7 @@ if time_file and ops_file:
                 bu_avg_ticket.columns = ['Business Unit', 'Average Ticket Size Raw']
                 bu_avg_ticket['Average Ticket Size'] = bu_avg_ticket['Average Ticket Size Raw'].apply(lambda x: f"${x:,.2f}")
                 st.table(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True))
-                create_copy_button(bu_avg_ticket[['Business Unit', 'Average Ticket Size']], "bu_avg_ticket")
+                create_copy_button(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True), "bu_avg_ticket")
             with m_col2:
                 st.markdown("**📈 Pay Ratio per Clocked Hour**", unsafe_allow_html=True)
                 rev_per_hour_df = final_df.copy()
