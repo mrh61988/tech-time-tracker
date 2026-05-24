@@ -189,7 +189,7 @@ def highlight_pay_pct_row(row):
     return styles
 
 # --- MAIN BLOCK REPORT ENGINE ---
-def show_advanced_reporting(ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
+def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
     # === BOSS TOOLS SECTION ===
@@ -448,7 +448,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 if clocked > 0 and jobs == 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🕵️ Paid But Idle (Clocked In, 0 Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": 0})
                 elif clocked == 0 and jobs > 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🚨 Unpaid Field Work (0 Hours Clocked, Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": int(jobs)})
         if ghost_alerts: st.dataframe(pd.DataFrame(ghost_alerts), use_container_width=True)
-        else: st.success("Perfect alignment! No payroll discrepancy errors detected.")
+        else: st.success("Perfect alignment! No payroll discrepancy errors detected on current sheets.")
 
     if "¼ The Lowe's Store Staging Efficiency Scorecard" in test_choices:
         st.markdown("### **¼ The Lowe's Store Staging Efficiency Scorecard**")
@@ -477,7 +477,14 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             rev_per_hour_df['Assumed Pay'] = rev_per_hour_df['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
             rev_per_hour_df['Pay Pct'] = np.where(rev_per_hour_df['Total_Assigned_Revenue'] > 0, (rev_per_hour_df['Assumed Pay Amount'] / rev_per_hour_df['Total_Assigned_Revenue']) * 100, 0.0)
             rev_per_hour_df['Pay % vs Assigned Revenue'] = rev_per_hour_df['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
-            show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[['Name', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue']]
+            
+            # Injected matrix selectors into sandbox panel mirror view
+            rev_per_hour_df['Net Margin Raw'] = rev_per_hour_df['Total_Assigned_Revenue'] - rev_per_hour_df['Assumed Pay Amount']
+            rev_per_hour_df['Total Net Margin'] = rev_per_hour_df['Net Margin Raw'].apply(lambda x: f"${x:,.2f}")
+            rev_per_hour_df['Margin per Clocked Hour Raw'] = np.where(rev_per_hour_df['Total_Weekly_Clocked_Hrs'] > 0, rev_per_hour_df['Net Margin Raw'] / rev_per_hour_df['Total_Weekly_Clocked_Hrs'], 0.0)
+            rev_per_hour_df['Margin per Clocked Hour'] = rev_per_hour_df['Margin per Clocked Hour Raw'].apply(lambda x: f"${x:,.2f}/hr")
+            
+            show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue', 'Total Net Margin', 'Margin per Clocked Hour']]
             st.dataframe(show_rev_per_hour.reset_index(drop=True).style.apply(highlight_pay_pct_row, axis=1), use_container_width=True)
 
     if "📊 Business Unit Revenue Velocity" in test_choices:
@@ -511,7 +518,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         margin_df['Total Net Margin'] = margin_df['Net Margin Raw'].apply(lambda x: f"${x:,.2f}")
         margin_df['Total Clocked'] = margin_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
         margin_df['Margin per Clocked Hour'] = margin_df['Margin per Clocked Hour Raw'].apply(lambda x: f"${x:,.2f}/hr")
-        st.dataframe(margin_df[['Name', 'Total Clocked', 'Total Assigned Revenue', 'Assumed Pay', 'Total Net Margin', 'Margin per Clocked Hour']].reset_index(drop=True), use_container_width=True)
+        st.dataframe(margin_df[['Name', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Total Net Margin', 'Margin per Clocked Hour']].reset_index(drop=True), use_container_width=True)
 
 # --- RUN EXECUTION PIPELINE ---
 col1, col2 = st.columns(2)
@@ -687,12 +694,11 @@ if time_file and ops_file:
         final_df['Rev_Per_Clocked_Hr'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, final_df['Total_Assigned_Revenue'] / final_df['Total_Weekly_Clocked_Hrs'], 0.0)
             
         st.sidebar.header("🔧 Job Status Time Adjustments")
-        # FIXED: Upgraded global control layout to number entry with native step controls
+        # Global selection numbers step frequency controls
         global_adj_mins = st.sidebar.number_input("🌍 Global Adj (Minutes)", value=0, step=15, key="global_adj")
         global_adj_hrs = global_adj_mins / 60.0
         adjustments = {}
         for tech in sorted(final_df['Name'].unique()):
-            # FIXED: Upgraded team adjustments entries to interactive plus/minus stepped fields
             tech_adj_mins = st.sidebar.number_input(f"{tech} Adj (Minutes)", value=0, step=15, key=f"adj_{tech}")
             adjustments[tech] = (tech_adj_mins / 60.0) + global_adj_hrs
             
@@ -754,6 +760,7 @@ if time_file and ops_file:
         bu_summary_df['WH Efficiency'] = final_df['Water Heaters Eff']
         bu_summary_df['Total Efficiency'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, (final_df['Total_Weekly_Job_Hrs'] / final_df['Total_Weekly_Clocked_Hrs']) * 100, 0.0)
         bu_summary_df['Total Efficiency'] = bu_summary_df['Total Efficiency'].apply(lambda x: f"{x:.1f}%")
+        
         bu_summary_df['Total Unallocated Hours'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
         display_dfs['Weekly'] = bu_summary_df
         
@@ -778,7 +785,7 @@ if time_file and ops_file:
             total_assumed_pay = rev_per_hour_df_calc['Assumed Pay Amount'].sum()
             pay_ratio_pct = (total_assumed_pay / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
             
-            # Positioned summary KPI cards side-by-side symmetrically on the same level
+            # KPI Cards row metrics alignment layout
             dash_metric_col1, dash_metric_col2, dash_metric_col3 = st.columns(3)
             with dash_metric_col1:
                 st.metric(label="Division Gross Invoiced Volume", value=f"${raw_unsplit_volume:,.2f}")
@@ -787,7 +794,6 @@ if time_file and ops_file:
             with dash_metric_col3:
                 st.metric(label="Division Labor Pay Ratio", value=f"{pay_ratio_pct:.1f}%")
                 
-            # Pre-compute the exact pay proportions distributed across Business Units using 'Assigned Team Members'
             ops_df['Computed_Row_Pay'] = ops_df['Assigned Team Members'].map(rev_per_hour_df_calc.set_index('Name')['Assumed Pay Amount'].to_dict()).fillna(0.0)
             tech_total_field_hrs = ops_df.groupby('Assigned Team Members')['Total_Job_Time_Hours'].sum().reset_index().rename(columns={'Total_Job_Time_Hours': 'Tech_Total_Work_Hrs'})
             
@@ -840,7 +846,7 @@ if time_file and ops_file:
                 rev_per_hour_df['Pay Pct'] = np.where(rev_per_hour_df['Total_Assigned_Revenue'] > 0, (rev_per_hour_df['Assumed Pay Amount'] / rev_per_hour_df['Total_Assigned_Revenue']) * 100, 0.0)
                 rev_per_hour_df['Pay % vs Assigned Revenue'] = rev_per_hour_df['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
                 
-                # FIXED: Added Total Net Margin and Margin per Clocked Hour straight into your primary production table loop view mapping arrays
+                # Injected Net Margin and Margin per Clocked Hour into view table grid columns arrays
                 rev_per_hour_df['Net Margin Raw'] = rev_per_hour_df['Total_Assigned_Revenue'] - rev_per_hour_df['Assumed Pay Amount']
                 rev_per_hour_df['Total Net Margin'] = rev_per_hour_df['Net Margin Raw'].apply(lambda x: f"${x:,.2f}")
                 rev_per_hour_df['Margin per Clocked Hour Raw'] = np.where(rev_per_hour_df['Total_Weekly_Clocked_Hrs'] > 0, rev_per_hour_df['Net Margin Raw'] / rev_per_hour_df['Total_Weekly_Clocked_Hrs'], 0.0)
@@ -849,6 +855,7 @@ if time_file and ops_file:
                 show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue', 'Total Net Margin', 'Margin per Clocked Hour']]
                 st.dataframe(show_rev_per_hour.reset_index(drop=True).style.apply(highlight_pay_pct_row, axis=1), use_container_width=True)
             
+            # FIXED: Synchronized keyword parameters definitions mapping context inside the tab loops
             show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key="summary_tab")
             
         with tabs[1]:
@@ -861,6 +868,7 @@ if time_file and ops_file:
                     report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(tech_data[short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])})
                 report_data.append({"Day": "TOTAL WEEKLY", "Jobs": int(tech_data['Total_Weekly_Job_Count']), "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']), "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']), "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])})
                 st.dataframe(pd.DataFrame(report_data), use_container_width=True)
+            # FIXED: Synchronized keyword parameters definitions mapping context inside the tab loops
             show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key="manager_tab")
             
         with tabs[2]:
@@ -870,7 +878,7 @@ if time_file and ops_file:
                 tech_data = final_df[final_df['Name'] == selected_tech].iloc[0]
                 report_data = []
                 for full_day, short_day in {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}.items():
-                    report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(tech_data[short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])})
+                    report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(final_df[final_df['Name'] == selected_tech].iloc[0][short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])})
                 report_data.append({"Day": "TOTAL WEEKLY", "Jobs": int(tech_data['Total_Weekly_Job_Count']), "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']), "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']), "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])})
                 st.dataframe(pd.DataFrame(report_data), use_container_width=True)
 
