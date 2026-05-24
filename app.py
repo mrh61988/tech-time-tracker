@@ -220,7 +220,7 @@ def highlight_over_hour_row(row):
             pass
     return [''] * len(row)
 
-# --- ADVANCED BASELINES MATRIX RECOGNITION PANEL ---
+# --- CORE ADVANCED BASELINE REPORT GENERATOR PANEL ---
 def run_baselines_matrix(ops_df):
     st.markdown("<h4>Advanced Team Processing Baselines Matrix</h4>", unsafe_allow_html=True)
     st.markdown("*(Technician tracking averages sorted by highest un-blended weekly duration totals. Store times ignore direct-to-site jobs)*")
@@ -459,7 +459,8 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # === CONSOLIDATED SANDBOX TAB VIEWS ===
+    # === OPS MANAGER TOOLS ===
+    st.header("📊 Ops Manager Tools (Benchmarking & Performance)")
     col_left, col_right = st.columns(2)
     
     with col_left:
@@ -524,7 +525,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 except Exception: st.dataframe(tech_launches_df.sort_values(by='First_Punch', ascending=False)[['Short_Date', 'First Punch log']].rename(columns={'Short_Date': 'Date'}).reset_index(drop=True).style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'}), use_container_width=True)
 
 def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices):
-    if "🏆 The \"Golden Ratio\" Margin Predictor" in test_choices:
+    if "🏆 The Golden Ratio Margin Predictor" in test_choices:
         st.markdown("### **🏆 The Golden Ratio Margin Predictor**")
         golden_data = []
         for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
@@ -577,7 +578,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 if clocked > 0 and jobs == 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🕵️ Paid But Idle (Clocked In, 0 Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": 0})
                 elif clocked == 0 and jobs > 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🚨 Unpaid Field Work (0 Hours Clocked, Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": int(jobs)})
         if ghost_alerts: st.dataframe(pd.DataFrame(ghost_alerts), use_container_width=True)
-        else: st.success("Perfect alignment! No payroll discrepancy errors detected.")
+        else: st.success("Perfect alignment! No payroll discrepancy errors detected on current sheets.")
 
     if "¼ The Lowe's Store Staging Efficiency Scorecard" in test_choices:
         st.markdown("### **¼ The Lowe's Store Staging Efficiency Scorecard**")
@@ -626,7 +627,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         route_eff = route_eff.sort_values(by='Rev per Drive Hour Raw', ascending=False)
         route_eff['Total Assigned Revenue'] = route_eff['Total_Revenue'].apply(lambda x: f"${x:,.2f}")
         route_eff['Total Drive Hours'] = route_eff['Total_Drive_Hrs'].apply(lambda x: f"{x:.1f} hrs")
-        route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"{x:.1f}/hr")
+        route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"${x:,.2f}/hr")
         st.dataframe(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True), use_container_width=True)
 
     if "📉 True Gross Margin per Clocked Hour" in test_choices:
@@ -658,10 +659,10 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         div_wh_store_baseline = wh_jobs_with_store['Store_Time_Hrs'].mean() if not wh_jobs_with_store.empty else 0.5
         div_lsi_store_baseline = lsi_jobs_with_store['Store_Time_Hrs'].mean() if not lsi_jobs_with_store.empty else 0.3
         
-        st.markdown(f\"\"\"
-         Elsie Baseline Averages (Store Averages Ignore Direct-To-Site Jobs): &nbsp;&nbsp;•&nbsp;&nbsp;Blended Total Avg: `{format_hm(div_avg_total)}` &nbsp;&nbsp;|&nbsp;&nbsp; WH Job Length: `{format_hm(div_wh_baseline)}` &nbsp;&nbsp;|&nbsp;&nbsp; LSI Job Length: `{format_hm(div_lsi_baseline)}` 
-        &nbsp;&nbsp;•&nbsp;&nbsp;WH Store Delay: `{format_hm(div_wh_store_baseline)}` &nbsp;&nbsp;|&nbsp;&nbsp; LSI Store Delay: `{format_hm(div_lsi_store_baseline)}`
-        \"\"\")
+        st.markdown(f"""
+        📊 **Current Division Baseline Averages (Store Averages Ignore Direct-To-Site Jobs):** &nbsp;&nbsp;•&nbsp;&nbsp;**Blended Total Avg:** `{format_hm(div_avg_total)}` &nbsp;&nbsp;|&nbsp;&nbsp; **WH Job Length:** `{format_hm(div_wh_baseline)}` &nbsp;&nbsp;|&nbsp;&nbsp; **LSI Job Length:** `{format_hm(div_lsi_baseline)}` 
+        &nbsp;&nbsp;•&nbsp;&nbsp;**WH Store Delay:** `{format_hm(div_wh_store_baseline)}` &nbsp;&nbsp;|&nbsp;&nbsp; **LSI Store Delay:** `{format_hm(div_lsi_store_baseline)}`
+        """)
         
         matrix_rows = []
         wh_over_baseline_rows = []
