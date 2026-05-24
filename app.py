@@ -899,6 +899,84 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         else:
             st.info("No invoice details located inside loaded operations datasets.")
 
+    if "🛢️ Water Heater True Net Profitability Margin Auditor" in test_choices:
+        st.markdown("### **🛢️ Water Heater True Net Profitability Margin Auditor**")
+        st.markdown("*(Deductions capture combined product/service costs alongside $100 solo or $175 multi-tech internal labor payloads)*")
+        if not unexploded_ops.empty and 'Total Product Cost [tax inc]' in unexploded_ops.columns:
+            df_wh_prof = unexploded_ops[unexploded_ops['Business Unit'] == 'Lowes - Water Heaters'].copy()
+            if not df_wh_prof.empty:
+                df_wh_prof['Product_Cost'] = pd.to_numeric(df_wh_prof['Total Product Cost [tax inc]'], errors='coerce').fillna(0.0)
+                df_wh_prof['Service_Cost'] = pd.to_numeric(df_wh_prof['Invoice - Total Service Cost'], errors='coerce').fillna(0.0)
+                df_wh_prof['Tech_Count'] = df_wh_prof['Assigned Team Members'].apply(lambda x: len([m.strip() for m in str(x).split(',') if m.strip()]))
+                df_wh_prof['Assumed_Labor_Payload'] = np.where(df_wh_prof['Tech_Count'] > 1, 175.0, 100.0)
+                
+                df_wh_prof['Combined_Lowe_Costs'] = df_wh_prof['Product_Cost'] + df_wh_prof['Service_Cost']
+                df_wh_prof['Net_Profit_Raw'] = df_wh_prof['Total Invoice Amount'] - df_wh_prof['Combined_Lowe_Costs'] - df_wh_prof['Assumed_Labor_Payload']
+                
+                wh_totals_df = pd.DataFrame([{
+                    "Total WH Jobs Completed": int(len(df_wh_prof)),
+                    "Gross Invoiced Revenue": f"${df_wh_prof['Total Invoice Amount'].sum():,.2f}",
+                    "Total Product/Material Cost": f"${df_wh_prof['Product_Cost'].sum():,.2f}",
+                    "Total Service/Subcontract Cost": f"${df_wh_prof['Service_Cost'].sum():,.2f}",
+                    "Assumed Tech Wage Payouts": f"${df_wh_prof['Assumed_Labor_Payload'].sum():,.2f}",
+                    "Net Retained Division Profit": f"${df_wh_prof['Net_Profit_Raw'].sum():,.2f}",
+                    "Blended True Margin %": f"{(df_wh_prof['Net_Profit_Raw'].sum() / df_wh_prof['Total Invoice Amount'].sum() * 100):.1f}%"
+                }])
+                st.table(wh_totals_df)
+                create_copy_button(wh_totals_df, "wh_net_profitability_totals")
+                
+                st.markdown("#### 🛢️ Itemized Job-by-Job Margin Performance Register")
+                df_wh_prof['Profit Margin %'] = np.where(df_wh_prof['Total Invoice Amount'] > 0, (df_wh_prof['Net_Profit_Raw'] / df_wh_prof['Total Invoice Amount'] * 100), 0.0)
+                df_wh_prof_sorted = df_wh_prof.sort_values(by='Net_Profit_Raw', ascending=False)
+                
+                prof_job_rows = []
+                for _, r in df_wh_prof_sorted.iterrows():
+                    prof_job_rows.append({
+                        "Job ID": str(int(r['#ID'])),
+                        "Crew Assigned": r['Assigned Team Members'],
+                        "Gross Invoice": f"${r['Total Invoice Amount']:,.2f}",
+                        "Product Cost": f"${r['Product_Cost']:,.2f}",
+                        "Service Cost": f"${r['Service_Cost']:,.2f}",
+                        "Tech Wage Burden": f"${r['Assumed_Labor_Payload']:,.2f}",
+                        "Net Retained Cash": f"${r['Net_Profit_Raw']:,.2f}",
+                        "Margin %": f"{r['Profit Margin %']:.1f}%"
+                    })
+                prof_job_df = pd.DataFrame(prof_job_rows)
+                st.table(prof_job_df)
+                create_copy_button(prof_job_df, "wh_job_by_job_margins")
+            else: st.info("No active Water Heaters profiles located in current data sets.")
+        else: st.info("Product/Service financial costs metrics columns missing from current source sheets.")
+
+    if "📦 Product vs. Service Cost Component Breakdown Matrix" in test_choices:
+        st.markdown("### **📦 Product vs. Service Cost Component Breakdown Matrix**")
+        st.markdown("*(Isolates material purchasing overhead ratios vs. execution labor/service costs by sector)*")
+        if not unexploded_ops.empty and 'Total Product Cost [tax inc]' in unexploded_ops.columns:
+            df_cc = unexploded_ops.copy()
+            df_cc['Prod_Cost'] = pd.to_numeric(df_cc['Total Product Cost [tax inc]'], errors='coerce').fillna(0.0)
+            df_cc['Serv_Cost'] = pd.to_numeric(df_cc['Invoice - Total Service Cost'], errors='coerce').fillna(0.0)
+            df_cc['Combined_Cost'] = df_cc['Prod_Cost'] + df_cc['Serv_Cost']
+            
+            cc_matrix = df_cc.groupby('Business Unit').agg(
+                Jobs=('#ID', 'count'),
+                Gross_Invoiced=('Total Invoice Amount', 'sum'),
+                Product_Cost_Total=('Prod_Cost', 'sum'),
+                Service_Cost_Total=('Serv_Cost', 'sum'),
+                Combined_Cost_Total=('Combined_Cost', 'sum')
+            ).reset_index()
+            
+            cc_matrix['Material Cost Ratio %'] = (cc_matrix['Product_Cost_Total'] / cc_matrix['Combined_Cost_Total'] * 100).apply(lambda x: f"{x:.1f}%")
+            cc_matrix['Service/Labor Ratio %'] = (cc_matrix['Service_Cost_Total'] / cc_matrix['Combined_Cost_Total'] * 100).apply(lambda x: f"{x:.1f}%")
+            
+            cc_matrix['Gross Invoiced'] = cc_matrix['Gross_Invoiced'].apply(lambda x: f"${x:,.2f}")
+            cc_matrix['Product Cost Total'] = cc_matrix['Product_Cost_Total'].apply(lambda x: f"${x:,.2f}")
+            cc_matrix['Service Cost Total'] = cc_matrix['Service_Cost_Total'].apply(lambda x: f"${x:,.2f}")
+            cc_matrix['Combined Cost Total'] = cc_matrix['Combined_Cost_Total'].apply(lambda x: f"${x:,.2f}")
+            
+            show_cc = cc_matrix[['Business Unit', 'Jobs', 'Gross Invoiced', 'Product Cost Total', 'Material Cost Ratio %', 'Service Cost Total', 'Service/Labor Ratio %', 'Combined Cost Total']]
+            st.table(show_cc)
+            create_copy_button(show_cc, "product_vs_service_cost_breakdown")
+        else: st.info("Product/Service financial costs metrics columns missing from current source sheets.")
+
 # --- RUN EXECUTION Pipeline BLOCK FOR FILE MOUNTING ---
 st.sidebar.header("📂 Data Loading Pipeline")
 time_file = st.sidebar.file_uploader("Upload Time Sheet (CSV)", type=['csv'])
@@ -979,7 +1057,7 @@ if time_file and ops_file:
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
 
-        # TIMESTAMPS LIFECYCLE DISPATCH HOOK DEFINED ON LAUNCH BASE FOR BOTH PIPELINES
+        # TIMESTAMPS CRITICAL LIFECYCLE DISPATCH HOOK DEFINED ON LAUNCH BASE FOR BOTH PIPELINES
         ts_cols = ['Lowes Store - Start Timestamp', 'On The Way - Start Timestamp', 'In Progress - Start Timestamp', 'On The Way - Start Timestamp.1', 'In Progress - Start Timestamp.1']
         available_ts_cols = [c for c in ts_cols if c in ops_df.columns]
         ops_df['Job_Date'] = ops_df[available_ts_cols].bfill(axis=1).iloc[:, 0]
@@ -1040,20 +1118,7 @@ if time_file and ops_file:
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
 
-        ops_sorted = ops_df.dropna(subset=['Earliest_Start']).sort_values(['Assigned Team Members', 'Earliest_Start'])
-        bounds_df = ops_sorted.groupby(['Assigned Team Members', 'Short_Date']).agg(
-            First_Punch=('Earliest_Start', 'min'),
-            Last_Punch=('Estimated_End', 'max'),
-            First_Status=('Earliest_Status', 'first')
-        ).reset_index()
-        bounds_df['First Status Update'] = bounds_df['First_Punch'].dt.strftime('%I:%M %p')
-        bounds_df['Last Status Update'] = bounds_df['Last_Punch'].dt.strftime('%I:%M %p')
-        bounds_df['Total_Span_Hrs'] = (bounds_df['Last_Punch'] - bounds_df['First_Punch']).dt.total_seconds() / 3600.0
-        bounds_df['Total Time'] = bounds_df['Total_Span_Hrs'].apply(format_hm)
-        
-        delayed_launches_df = bounds_df[bounds_df.apply(check_late, axis=1)].copy()
-        
-        # CRITICAL RE-INJECTION ELEMENT: AGGREGATE BUSINESS UNITS METRICS PROPERLY
+        # CRITICAL STRUCTURAL INJECTION LAYER: STABILIZE BU_PIVOT GENERATION PIPELINE BEFORE MERGES
         if 'Business Unit' in ops_df.columns:
             bu_agg = ops_df.groupby(['Assigned Team Members', 'Business Unit']).agg(Total_Job_Time_Hours=('Total_Job_Time_Hours', 'sum'), BU_Job_Count=('Total_Job_Time_Hours', 'size')).reset_index()
             bu_pivot_hrs = bu_agg.pivot(index='Assigned Team Members', columns='Business Unit', values='Total_Job_Time_Hours').reset_index().fillna(0)
@@ -1302,7 +1367,7 @@ if time_file and ops_file:
                 create_copy_button(display_dfs[short_day].reset_index(drop=True), f"day_tab_{short_day}")
 
         with tabs[10]:
-            test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "¼ The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)", "🗺️ Route Optimization Flags", "🦺 Multi-Tech Labor Yield vs. Solo Runs", "📅 Lowe's Store Staging Delays by Day of the Week", "📊 Overtime ROI Cost-Benefit Auditor", "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
+            test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "¼ The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)", "🗺️ Route Optimization Flags", "🦺 Multi-Tech Labor Yield vs. Solo Runs", "📅 Lowe's Store Staging Delays by Day of the Week", "📊 Overtime ROI Cost-Benefit Auditor", "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard", "🛢️ Water Heater True Net Profitability Margin Auditor", "📦 Product vs. Service Cost Component Breakdown Matrix"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
             run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             
     except Exception as e:
