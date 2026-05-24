@@ -473,7 +473,7 @@ def run_baselines_matrix(ops_df):
             try: st.table(wh_matrix_df.style.apply(highlight_over_hour_row, axis=1))
             except Exception: st.table(wh_matrix_df)
             create_copy_button(wh_matrix_df, "wh_over_baseline")
-        else: st.success("Zero individual Water Heater jobs exceeded the division baseline average.")
+        else: st.success("✅ Zero individual Water Heater jobs exceeded the division baseline average.")
             
     with split_col2:
         st.markdown("##### 🔧 Simple Installs Over-Baseline Jobs")
@@ -482,7 +482,7 @@ def run_baselines_matrix(ops_df):
             try: st.table(lsi_matrix_df.style.apply(highlight_over_hour_row, axis=1))
             except Exception: st.table(lsi_matrix_df)
             create_copy_button(lsi_matrix_df, "lsi_over_baseline")
-        else: st.success("Zero individual Simple Install jobs exceeded the division baseline average.")
+        else: st.success("✅ Zero individual Simple Install jobs exceeded the division baseline average.")
 
 # --- MAIN BLOCK REPORT ENGINE ---
 def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
@@ -916,7 +916,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         else:
             st.info("No invoice details located inside loaded operations datasets.")
 
-    # INTERACTIVE FILTERABLE REVENUE NET PROFITABILITY MATRIX PANEL
+    # INTERACTIVE SORTABLE COMPREHENSIVE REVENUE NET PROFITABILITY MATRIX PANEL
     if "🛢️ Water Heater True Net Profitability Margin Auditor" in test_choices:
         st.markdown("### **💵 Division True Net Profitability Margin Auditor**")
         st.markdown("*(Evaluates net profitability metrics across selected sectors factoring applied contract payout structures)*")
@@ -927,14 +927,26 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             df_prof['Combined_Lowe_Costs'] = df_prof['Product_Cost'] + df_prof['Service_Cost']
             df_prof['Tech_Count'] = df_prof['Assigned Team Members'].apply(lambda x: len([m.strip() for m in str(x).split(',') if m.strip()]))
             
-            # CRITICAL EVALUATION UPDATED: Compare flat wage floors vs logged time payroll payouts and choose maximum payload
+            # Helper logic to filter contractor scopes
+            CORE_TECHS = ['Bryan Pickett', 'Edward Lopez', 'Erik Tange', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
+            def check_contractor(tech_str):
+                raw_members = [m.strip() for m in str(tech_str).split(',') if m.strip()]
+                return not any(m in CORE_TECHS for m in raw_members)
+            df_prof['Is_Contractor'] = df_prof['Assigned Team Members'].apply(check_contractor)
+            
             df_prof['Flat_Rate_Labor'] = np.where(
                 df_prof['Business Unit'] == 'Lowes - Water Heaters',
                 np.where(df_prof['Tech_Count'] > 1, 175.0, 100.0),
                 0.0
             )
             df_prof['Logged_Time_Pay'] = df_prof['#ID'].map(ops_df.groupby('#ID')['Allocated_Job_Pay'].sum().to_dict()).fillna(0.0)
-            df_prof['Assumed_Labor_Payload'] = np.maximum(df_prof['Flat_Rate_Labor'], df_prof['Logged_Time_Pay'])
+            
+            # CRITICAL WAGE REQUIREMENT: For contractor LSI dispatches match pay cargo 100% to invoice total values
+            df_prof['Assumed_Labor_Payload'] = np.where(
+                (df_prof['Business Unit'] == 'Lowes - Simple Installs') & df_prof['Is_Contractor'],
+                df_prof['Total Invoice Amount'],
+                np.maximum(df_prof['Flat_Rate_Labor'], df_prof['Logged_Time_Pay'])
+            )
             df_prof['Net_Profit_Raw'] = df_prof['Total Invoice Amount'] - df_prof['Combined_Lowe_Costs'] - df_prof['Assumed_Labor_Payload']
             
             # Interactive filtering controls loop layout block
@@ -947,6 +959,9 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             df_prof_filtered = df_prof.copy()
             if selected_bu_filter != "All Sectors":
                 df_prof_filtered = df_prof_filtered[df_prof_filtered['Business Unit'] == selected_bu_filter]
+                
+            # CRITICAL DEPLOYMENT FILTER: Completely eliminate pure contractor jobs from the onscreen tracking table grid list
+            df_prof_filtered = df_prof_filtered[~df_prof_filtered['Is_Contractor']]
                 
             if not df_prof_filtered.empty:
                 totals_summary_df = pd.DataFrame([{
@@ -984,14 +999,13 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                     })
                 prof_register_df = pd.DataFrame(prof_register_rows)
                 
-                # NEW IMPLEMENTATION: Inject margin highlighters on data frames row arrays strictly matching target benchmarks
                 try:
                     styled_reg = prof_register_df.style.apply(highlight_low_margins, axis=1)
                     st.table(styled_reg)
                 except Exception:
                     st.table(prof_register_df)
                 create_copy_button(prof_register_df, "sortable_job_margins_register")
-            else: st.info("No operations elements matching selected line of business filters found.")
+            else: st.info("No core team elements matching selected parameters found.")
         else: st.info("Product/Service financial costs metrics columns missing from current source sheets.")
 
     if "📦 Product vs. Service Cost Component Breakdown Matrix" in test_choices:
@@ -1004,14 +1018,25 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             df_cc['Combined_Cost'] = df_cc['Prod_Cost'] + df_cc['Serv_Cost']
             df_cc['Tech_Count'] = df_cc['Assigned Team Members'].apply(lambda x: len([m.strip() for m in str(x).split(',') if m.strip()]))
             
-            # Match comparative selection algorithm inside summary performance blocks
+            CORE_TECHS = ['Bryan Pickett', 'Edward Lopez', 'Erik Tange', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
+            def check_contractor_cc(tech_str):
+                raw_members = [m.strip() for m in str(tech_str).split(',') if m.strip()]
+                return not any(m in CORE_TECHS for m in raw_members)
+            df_cc['Is_Contractor'] = df_cc['Assigned Team Members'].apply(check_contractor_cc)
+            
             df_cc['Flat_Rate_Labor'] = np.where(
                 df_cc['Business Unit'] == 'Lowes - Water Heaters',
                 np.where(df_cc['Tech_Count'] > 1, 175.0, 100.0),
                 0.0
             )
             df_cc['Logged_Time_Pay'] = df_cc['#ID'].map(ops_df.groupby('#ID')['Allocated_Job_Pay'].sum().to_dict()).fillna(0.0)
-            df_cc['Assumed_Labor_Payload'] = np.maximum(df_cc['Flat_Rate_Labor'], df_cc['Logged_Time_Pay'])
+            
+            # Apply matching contractor dispatch calculation safeguards to macro matrix summary structures
+            df_cc['Assumed_Labor_Payload'] = np.where(
+                (df_cc['Business Unit'] == 'Lowes - Simple Installs') & df_cc['Is_Contractor'],
+                df_cc['Total Invoice Amount'],
+                np.maximum(df_cc['Flat_Rate_Labor'], df_cc['Logged_Time_Pay'])
+            )
             df_cc['Net_Profit_Raw'] = df_cc['Total Invoice Amount'] - df_cc['Combined_Cost'] - df_cc['Assumed_Labor_Payload']
             
             cc_matrix = df_cc.groupby('Business Unit').agg(
@@ -1035,7 +1060,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             create_copy_button(show_cc, "product_vs_service_cost_breakdown")
         else: st.info("Product/Service financial costs metrics columns missing from current source sheets.")
 
-# --- RUN EXECUTION Pipeline BLOCK FOR FILE MOUNTING ---
+# --- THE MAIN TOP-LEVEL BASE EXECUTION PIPELINE LAYER BLOCK ---
 st.sidebar.header("📂 Data Loading Pipeline")
 time_file = st.sidebar.file_uploader("Upload Time Sheet (CSV)", type=['csv'])
 ops_file = st.sidebar.file_uploader("Upload Lowes Ops Export (CSV)", type=['csv'])
@@ -1115,7 +1140,7 @@ if time_file and ops_file:
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
 
-        # TIMESTAMPS CRITICAL LIFECYCLE DISPATCH HOOK DEFINED ON LAUNCH BASE FOR BOTH PIPELINES
+        # TIMESTAMPS DEFINED ON LAUNCH BASE FOR BOTH PIPELINES
         ts_cols = ['Lowes Store - Start Timestamp', 'On The Way - Start Timestamp', 'In Progress - Start Timestamp', 'On The Way - Start Timestamp.1', 'In Progress - Start Timestamp.1']
         available_ts_cols = [c for c in ts_cols if c in ops_df.columns]
         ops_df['Job_Date'] = ops_df[available_ts_cols].bfill(axis=1).iloc[:, 0]
