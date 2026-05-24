@@ -819,10 +819,10 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         else:
             st.info("No invoice details located inside loaded operations datasets.")
 
-    # INTERACTIVE SORTABLE COMPREHENSIVE REVENUE NET PROFITABILITY MATRIX PANEL
+    # Sortable Filterable revenue profit margins table panel layer block
     if "🛢️ Water Heater True Net Profitability Margin Auditor" in test_choices:
         st.markdown("### **💵 Division True Net Profitability Margin Auditor**")
-        st.markdown("*(Evaluates net profitability metrics across selected sectors factoring applied contract structures and cost back-outs)*")
+        st.markdown("*(Evaluates net profitability metrics across selected sectors. Overview totals include contractors, itemized register excludes them)*")
         if not unexploded_ops.empty and 'Total Product Cost [tax inc]' in unexploded_ops.columns:
             df_prof = unexploded_ops.copy()
             df_prof['Product_Cost'] = pd.to_numeric(df_prof['Total Product Cost [tax inc]'], errors='coerce').fillna(0.0)
@@ -860,6 +860,13 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             )
             df_prof['Net_Profit_Raw'] = df_prof['Total Invoice Amount'] - df_prof['Combined_Lowe_Costs'] - df_prof['Assumed_Labor_Payload']
             
+            # Calculate Sean Marble unworked days penalty
+            sean_ops = ops_df[ops_df['Name'] == 'Sean Marble']
+            worked_days = sean_ops['Day_of_Week'].unique() if not sean_ops.empty else []
+            all_weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+            unworked_days = [d for d in all_weekdays if d not in worked_days]
+            sean_penalty = len(unworked_days) * 269.0
+
             # Interactive filtering controls loop layout block
             sort_pane_col, filter_pane_col = st.columns(2)
             with filter_pane_col:
@@ -873,13 +880,23 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 df_prof_totals = df_prof_totals[df_prof_totals['Business Unit'] == selected_bu_filter]
                 
             if not df_prof_totals.empty:
+                gross_revenue_sum = df_prof_totals['Total Invoice Amount'].sum()
+                combined_cost_sum = df_prof_totals['Combined_Lowe_Costs'].sum()
+                labor_payload_sum = df_prof_totals['Assumed_Labor_Payload'].sum()
+                
+                # Direct adjustment for Sean Marble unworked day penalty reduction
+                if selected_bu_filter in ["All Sectors", "Lowes - Simple Installs"]:
+                    labor_payload_sum = max(0.0, labor_payload_sum - sean_penalty)
+                
+                net_profit_sum = gross_revenue_sum - combined_cost_sum - labor_payload_sum
+                
                 totals_summary_df = pd.DataFrame([{
                     "Total Dispatches Closed": int(len(df_prof_totals)),
-                    "Gross Invoiced Revenue": f"${df_prof_totals['Total Invoice Amount'].sum():,.2f}",
-                    "Total Combined Cost": f"${df_prof_totals['Combined_Lowe_Costs'].sum():,.2f}",
-                    "Assumed Labor Payroll Burden": f"${df_prof_totals['Assumed_Labor_Payload'].sum():,.2f}",
-                    "Net Profit": f"${df_prof_totals['Net_Profit_Raw'].sum():,.2f}",
-                    "Blended Margin %": f"{(df_prof_totals['Net_Profit_Raw'].sum() / df_prof_totals['Total Invoice Amount'].sum() * 100):.1f}%" if df_prof_totals['Total Invoice Amount'].sum() > 0 else "0.0%"
+                    "Gross Invoiced Revenue": f"${gross_revenue_sum:,.2f}",
+                    "Total Combined Cost": f"${combined_cost_sum:,.2f}",
+                    "Assumed Labor Payroll Burden": f"${labor_payload_sum:,.2f}",
+                    "Net Profit": f"${net_profit_sum:,.2f}",
+                    "Blended Margin %": f"{(net_profit_sum / gross_revenue_sum * 100):.1f}%" if gross_revenue_sum > 0 else "0.0%"
                 }])
                 st.table(totals_summary_df)
                 create_copy_button(totals_summary_df, "profitability_summary_totals")
@@ -963,6 +980,13 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             )
             df_cc['Net_Profit_Raw'] = df_cc['Total Invoice Amount'] - df_cc['Combined_Cost'] - df_cc['Assumed_Labor_Payload']
             
+            # Calculate Sean Marble unworked days penalty
+            sean_ops = ops_df[ops_df['Name'] == 'Sean Marble']
+            worked_days = sean_ops['Day_of_Week'].unique() if not sean_ops.empty else []
+            all_weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+            unworked_days = [d for d in all_weekdays if d not in worked_days]
+            sean_penalty = len(unworked_days) * 269.0
+            
             cc_matrix = df_cc.groupby('Business Unit').agg(
                 Jobs=('#ID', 'count'),
                 Gross_Invoiced_Raw=('Total Invoice Amount', 'sum'),
@@ -970,11 +994,15 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 Net_Profit_Total_Raw=('Net_Profit_Raw', 'sum')
             ).reset_index()
             
+            # Direct addition shift to direct profit mapping row metrics rules
+            for idx, r in cc_matrix.iterrows():
+                if r['Business Unit'] == 'Lowes - Simple Installs':
+                    cc_matrix.loc[idx, 'Net_Profit_Total_Raw'] += sean_penalty
+            
             cc_matrix['Cost Ratio % vs Rev'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Combined_Cost_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
             cc_matrix['Net Profit (%)'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Net_Profit_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
             
             cc_matrix['Cost Ratio % vs Rev'] = cc_matrix['Cost Ratio % vs Rev'].apply(lambda x: f"{x:.1f}%")
-            cc_matrix['Net Profit (%)'] = cc_matrix['Net_Profit_Total_Raw'].sum() / cc_matrix['Gross_Invoiced_Raw'].sum() * 100 if cc_matrix['Gross_Invoiced_Raw'].sum() > 0 else 0.0
             cc_matrix['Net Profit (%)'] = cc_matrix['Net_Profit_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100
             cc_matrix['Net Profit (%)'] = cc_matrix['Net Profit (%)'].apply(lambda x: f"{x:.1f}%")
             cc_matrix['Gross Invoiced Revenue'] = cc_matrix['Gross_Invoiced_Raw'].apply(lambda x: f"${x:,.2f}")
@@ -1136,7 +1164,7 @@ if time_file and ops_file:
         else:
             ops_df = pd.DataFrame(columns=ops_df.columns)
 
-        # CRITICAL HOOK FIX: Force variable mirroring properties mapping strings safely inside row items columns
+        # Mirror variable properties mapping strings safely inside row items columns
         ops_df['Name'] = ops_df['Assigned Team Members']
 
         ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
@@ -1172,7 +1200,7 @@ if time_file and ops_file:
         daily_route = daily_route[daily_route['Total_Job_Time_Hours'] > 0].copy()
         daily_route['Drive %'] = (daily_route['Drive_Time_Hrs'] / daily_route['Total_Job_Time_Hours']) * 100
         
-        # Linear assembly maps matching matrix parameters pipelines
+        # Unified assembly pipeline mapping for final_df records matrix
         final_df = pd.merge(time_df, job_time_pivot, on='Name', how='left').fillna(0)
         final_df = pd.merge(final_df, job_count_pivot, on='Name', how='left').fillna(0)
         if not bu_pivot.empty: final_df = pd.merge(final_df, bu_pivot[['Name', 'Simple_Installs_Hrs', 'Water_Heaters_Hrs', 'Simple_Installs_Count', 'Water_Heaters_Count']], on='Name', how='left').fillna(0)
@@ -1276,7 +1304,7 @@ if time_file and ops_file:
             # === MACRO DASHBOARD PANEL ===
             st.markdown("<br><hr><h3>📊 Macro Financial Performance Dashboard</h3>", unsafe_allow_html=True)
             
-            # Macro calculations sequence loop execution
+            # Macro calculations loop initialization values setup 
             rev_per_hour_df_calc = final_df.copy()
             rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(get_assumed_pay, axis=1)
             total_assumed_pay = rev_per_hour_df_calc['Assumed Pay Amount'].sum()
@@ -1290,7 +1318,7 @@ if time_file and ops_file:
             with dash_metric_col3:
                 st.metric(label="Division Labor Pay Ratio", value=f"{pay_ratio_pct:.1f}%")
                 
-            # Macro matrix calculation sequence mapping parameters
+            # Build macro bu matrix structures before view loading occurs
             ops_df['Computed_Row_Pay'] = ops_df['Name'].map(rev_per_hour_df_calc.set_index('Name')['Assumed Pay Amount'].to_dict()).fillna(0.0)
             tech_total_field_hrs = ops_df.groupby('Name')['Total_Job_Time_Hours'].sum().reset_index().rename(columns={'Total_Job_Time_Hours': 'Tech_Total_Work_Hrs'})
             if 'Tech_Total_Work_Hrs' in ops_df.columns: ops_df = ops_df.drop(columns=['Tech_Total_Work_Hrs'])
