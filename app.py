@@ -10,13 +10,13 @@ st.set_page_config(page_title="Tech Time Tracker", layout="wide")
 st.markdown("""
 <style>
 @media print {
-    /* Enforce landscape orientation to maximize wide printable space layout margins */
+    /* Enforce landscape page format and configure balanced sheet padding margins */
     @page {
         size: landscape;
-        margin: 0.5in !important;
+        margin: 0.4in !important;
     }
 
-    /* Hide the entire sidebar, file uploaders, navigation tabs, system menus, and utility buttons */
+    /* Hide structural utility blocks, upload buttons, tabs navigation bars, and panels from saved PDFs */
     header { display: none !important; }
     [data-testid="stHeader"] { display: none !important; }
     [data-testid="stSidebar"] { display: none !important; }
@@ -27,18 +27,8 @@ st.markdown("""
     div[data-baseweb="tab-list"] { display: none !important; }
     h1, .hide-on-print, .stAlert, iframe, button { display: none !important; }
     div[class*="stExpander"] { display: none !important; }
-
-    /* Unclamp outer container gutters to allow data to bleed cleanly to the printable edges */
-    div[data-testid="stAppViewBlockContainer"],
-    .main .block-container,
-    div[class*="block-container"] {
-        max-width: 100% !important;
-        width: 100% !important;
-        padding: 0 !important;
-        margin: 0 !important;
-    }
     
-    /* Default: Flatten layout properties to blocks to allow tables full width access without clipping */
+    /* CRITICAL OBLITERATION OF BLANK SPACE: Un-clamp all vertical structural boxes to flow continuously */
     div[class*="stVerticalBlock"], 
     div[data-testid="element-container"],
     div[data-testid="stHorizontalBlock"],
@@ -52,63 +42,77 @@ st.markdown("""
         height: auto !important;
         max-height: none !important;
         overflow: visible !important;
-        margin: 0 0 25px 0 !important;
+        margin: 0 0 15px 0 !important;
         padding: 0 !important;
         box-shadow: none !important;
-    }
-    
-    div[data-testid="column"] {
-        page-break-inside: avoid !important;
+        page-break-inside: auto !important; /* Kills blank padding gap generation blocks */
     }
     
     h2, h3, h4 {
         page-break-inside: avoid !important;
         page-break-after: avoid !important;
-        margin-top: 25px !important;
-        margin-bottom: 12px !important;
+        margin-top: 20px !important;
+        margin-bottom: 8px !important;
     }
 
-    /* CRITICAL FIX: Only target horizontal blocks containing Metric summary cards to align side-by-side */
+    /* Un-clamp core block layout canvas gutters to run margin-to-margin smoothly */
+    div[data-testid="stAppViewBlockContainer"],
+    .main .block-container,
+    div[class*="block-container"] {
+        max-width: 100% !important;
+        width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    /* CRITICAL METRIC FIX: Forces dashboard metric layout objects to look clean side-by-side */
     div[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: wrap !important;
         width: 100% !important;
-        gap: 15px !important;
+        gap: 12px !important;
     }
     div[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) div[data-testid="column"] {
         display: inline-block !important;
         flex: 1 1 0% !important;
-        min-width: 120px !important;
+        min-width: 100px !important;
         width: auto !important;
         max-width: none !important;
         margin: 0 !important;
     }
     
-    /* Enforce responsive auto-scaling tables matching full page landscape properties */
-    table { 
-        width: 100% !important; 
+    /* CRITICAL FIXED COMPACTION MATRIX: Grants wide tables maximum layout canvas real estate */
+    div[data-testid="stTable"], 
+    div[data-testid="stTable"] > div, 
+    table {
+        width: 100% !important;
         max-width: 100% !important;
+        min-width: 100% !important;
+        display: table !important;
+        table-layout: auto !important; /* Fluid auto sizing distributions prevents right column truncation */
+    }
+    
+    table {
         border-collapse: collapse !important;
-        table-layout: auto !important; /* Dynamically resizes columns to sit inside landscape right margins */
-        page-break-inside: auto !important;
-        margin: 0 0 20px 0 !important;
+        page-break-inside: auto !important; /* Lets tables divide naturally over multiple pages without blank space */
+        margin: 0 0 15px 0 !important;
     }
     tr {
-        page-break-inside: avoid !important;
+        page-break-inside: avoid !important; /* Rows stay intact and split clean between line entries */
         page-break-after: auto !important;
     }
     th, td {
-        white-space: normal !important; /* Keeps labels text wrapping safely onto clean wrapped lines */
+        white-space: normal !important; /* Wraps long cell strings over inside column block walls */
         word-break: break-word !important;
         overflow-wrap: break-word !important;
-        padding: 5px 6px !important;
-        font-size: 10px !important; /* Crisp font sizing for landscape margin density allocation */
+        padding: 4px 5px !important; /* Tight spacing layout matrix reclaims horizontal sheet room */
+        font-size: 9.5px !important; /* Optimized font sizing for maximum clear data distribution scales */
         text-align: left !important;
-        line-height: 1.3 !important;
+        line-height: 1.25 !important;
     }
     thead {
-        display: table-header-group !important;
+        display: table-header-group !important; /* Replicates column tags across multi-page section breaks */
     }
 }
 </style>
