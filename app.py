@@ -306,48 +306,20 @@ def highlight_over_hour_row(row):
             pass
     return [''] * len(row)
 
-# NATIVE SYSTEM CLIPBOARD DATA EXPORTER 
-def create_copy_button(df, raw_key):
-    safe_key = "".join([c if c.isalnum() else "_" for c in raw_key])
-    tsv_str = df.to_csv(sep='\t', index=False)
-    safe_tsv = tsv_str.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
-    
-    button_html = f"""
-    <div class="hide-on-print" style="text-align: left; margin-top: 5px; margin-bottom: 8px;">
-        <textarea id="tsv_{safe_key}" style="position: absolute; left: -9999px;">{safe_tsv}</textarea>
-        <button id="btn_{safe_key}" onclick="copyTSV_{safe_key}()" style="background-color: #ffffff; color: #3c4043; padding: 6px 14px; border: 1px solid #dadce0; border-radius: 4px; cursor: pointer; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: background-color 0.2s;">
-            📋 Copy Table Data (For Email/Sheets/Docs)
-        </button>
-    </div>
-    <script>
-    function copyTSV_{safe_key}() {{
-        var copyText = document.getElementById("tsv_{safe_key}");
-        copyText.select();
-        copyText.setSelectionRange(0, 999999);
-        try {{
-            var successful = document.execCommand('copy');
-            var btn = document.getElementById("btn_{safe_key}");
-            if (successful) {{
-                btn.innerHTML = "✅ Copied table to clipboard!";
-                btn.style.backgroundColor = "#e6f4ea";
-                btn.style.color = "#137333";
-                btn.style.borderColor = "#137333";
-                setTimeout(function() {{
-                    btn.innerHTML = "📋 Copy Table Data (For Email/Sheets/Docs)";
-                    btn.style.backgroundColor = "#ffffff";
-                    btn.style.color = "#3c4043";
-                    btn.style.borderColor = "#dadce0";
-                }}, 2000);
-                }} else {{
-                btn.innerHTML = "❌ Copy failed";
-            }}
-        }} catch (err) {{
-            console.error('Execution fallback error:', err);
-        }}
-    }}
-    </script>
-    """
-    st.components.v1.html(button_html, height=38)
+# NEW PROFIT MARGIN OVERHEAD WARNING HIGHLIGHT ENGINE
+def highlight_low_margins(row):
+    styles = [''] * len(row)
+    if 'Line of Business' in row and 'Margin %' in row:
+        try:
+            bu = row['Line of Business']
+            m_val = float(str(row['Margin %']).replace('%', '').strip())
+            if 'Water Heaters' in bu and m_val < 35.0:
+                return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row)
+            elif 'Simple Installs' in bu and m_val < 45.0:
+                return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row)
+        except:
+            pass
+    return styles
 
 # --- CORE ADVANCED BASELINE REPORT GENERATOR PANEL ---
 def run_baselines_matrix(ops_df):
@@ -968,7 +940,13 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                         "Margin %": f"{r['Profit Margin %']:.1f}%"
                     })
                 prof_register_df = pd.DataFrame(prof_register_rows)
-                st.table(prof_register_df)
+                
+                # NEW IMPLEMENTATION: Inject margin highlighters on data frames row arrays strictly matching target benchmarks
+                try:
+                    styled_reg = prof_register_df.style.apply(highlight_low_margins, axis=1)
+                    st.table(styled_reg)
+                except Exception:
+                    st.table(prof_register_df)
                 create_copy_button(prof_register_df, "sortable_job_margins_register")
             else: st.info("No operations elements matching selected line of business filters found.")
         else: st.info("Product/Service financial costs metrics columns missing from current source sheets.")
@@ -983,7 +961,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             df_cc['Combined_Cost'] = df_cc['Prod_Cost'] + df_cc['Serv_Cost']
             df_cc['Tech_Count'] = df_cc['Assigned Team Members'].apply(lambda x: len([m.strip() for m in str(x).split(',') if m.strip()]))
             
-            # CRITICAL EVALUATION UPDATED: Match comparison engine on macro sector summary matrix sheets
+            # Match comparative selection algorithm inside summary performance blocks
             df_cc['Flat_Rate_Labor'] = np.where(
                 df_cc['Business Unit'] == 'Lowes - Water Heaters',
                 np.where(df_cc['Tech_Count'] > 1, 175.0, 100.0),
@@ -1014,7 +992,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             create_copy_button(show_cc, "product_vs_service_cost_breakdown")
         else: st.info("Product/Service financial costs metrics columns missing from current source sheets.")
 
-# --- RUN EXECUTION Pipeline BLOCK FOR FILE MOUNTING ---
+# --- THE MAIN TOP-LEVEL BASE EXECUTION PIPELINE LAYER BLOCK ---
 st.sidebar.header("📂 Data Loading Pipeline")
 time_file = st.sidebar.file_uploader("Upload Time Sheet (CSV)", type=['csv'])
 ops_file = st.sidebar.file_uploader("Upload Lowes Ops Export (CSV)", type=['csv'])
@@ -1094,7 +1072,7 @@ if time_file and ops_file:
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
 
-        # TIMESTAMPS CRITICAL LIFECYCLE DISPATCH HOOK DEFINED ON LAUNCH BASE FOR BOTH PIPELINES
+        # TIMESTAMPS DEFINED ON LAUNCH BASE FOR BOTH PIPELINES
         ts_cols = ['Lowes Store - Start Timestamp', 'On The Way - Start Timestamp', 'In Progress - Start Timestamp', 'On The Way - Start Timestamp.1', 'In Progress - Start Timestamp.1']
         available_ts_cols = [c for c in ts_cols if c in ops_df.columns]
         ops_df['Job_Date'] = ops_df[available_ts_cols].bfill(axis=1).iloc[:, 0]
