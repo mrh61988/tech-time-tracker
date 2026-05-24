@@ -948,6 +948,6 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, bu_financial_
         show_cc = cc_matrix[['Business Unit', 'Jobs', 'Gross Invoiced Revenue', 'Total Combined Cost', 'Cost Ratio % vs Rev', 'Tech Wage Burden', 'Net Profit ($)', 'Net Profit (%)']].rename(columns={'Jobs': 'Jobs Assigned'})
         st.dataframe(show_cc, use_container_width=True)
         create_copy_button(show_cc, "product_vs_service_cost_breakdown")
-
-except Exception as e:
-    st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
+"""
+print("Pruned successfully.")
+}
