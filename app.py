@@ -6,11 +6,11 @@ import io
 # Set up the page layout
 st.set_page_config(page_title="Tech Time Tracker", layout="wide")
 
-# --- CSS FOR CLEAN MULTI-PAGE PRINTING ---
+# --- CSS FOR CLEAN PRINTING ---
 st.markdown("""
 <style>
 @media print {
-    /* Hide the entire sidebar, file uploaders, navigation tabs, and system menus */
+    /* Hide utility items, sidebar panels, file selectors, tabs, navigation and buttons */
     header { display: none !important; }
     [data-testid="stHeader"] { display: none !important; }
     [data-testid="stSidebar"] { display: none !important; }
@@ -19,25 +19,40 @@ st.markdown("""
     [data-testid="stFileUploader"] { display: none !important; }
     [data-testid="stSelectbox"] { display: none !important; }
     div[data-baseweb="tab-list"] { display: none !important; }
-    h1 { display: none !important; }
-    .hide-on-print { display: none !important; }
-    .stAlert { display: none !important; }
-    iframe { display: none !important; }
+    h1, .hide-on-print, .stAlert, iframe, button { display: none !important; }
     div[class*="stExpander"] { display: none !important; }
     
-    /* Prevent column overlaps by un-stacking split sections into a top-to-bottom vertical list format */
-    [data-testid="stHorizontalBlock"] {
-        display: block !important;
-        width: 100% !important;
-    }
+    /* CRITICAL FIX: Flatten layout properties to block formatting to eliminate section overlapping */
+    div[class*="stVerticalBlock"], 
+    div[data-testid="element-container"],
+    [data-testid="stHorizontalBlock"],
     [data-testid="column"] {
+        display: block !important;
+        position: static !important;
+        float: none !important;
         width: 100% !important;
         max-width: 100% !important;
-        margin-bottom: 40px !important;
+        min-width: 100% !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+        margin: 0 0 25px 0 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+    }
+    
+    [data-testid="column"] {
         page-break-inside: avoid !important;
     }
     
-    /* Expand print borders to maximize printable paper canvas margins */
+    h2, h3, h4 {
+        page-break-inside: avoid !important;
+        page-break-after: avoid !important;
+        margin-top: 20px !important;
+        margin-bottom: 10px !important;
+    }
+
+    /* Expand page container real estate bounds */
     .main .block-container {
         max-width: 100% !important;
         width: 100% !important;
@@ -45,18 +60,27 @@ st.markdown("""
         margin: 0 !important;
     }
     
-    /* Force full table pagination across sheet margins without height clamping constraints */
+    /* CRITICAL FIX: Force Table Column Labels to Cleanly Wrap Around vs Cutting Off */
     table { 
         width: 100% !important; 
         border-collapse: collapse !important;
+        table-layout: auto !important; /* Proportionately self-sizes layout fields on paper grid scales */
         page-break-inside: auto !important;
     }
     tr {
         page-break-inside: avoid !important;
         page-break-after: auto !important;
     }
+    th, td {
+        white-space: normal !important; /* Activates natural word text wrapping loops */
+        word-break: break-word !important; /* Safely breaks metrics strings without text compression crashes */
+        overflow-wrap: break-word !important;
+        padding: 6px 8px !important;
+        font-size: 11px !important; /* Scaled down for paper dimensions printable columns readability */
+        text-align: left !important;
+    }
     thead {
-        display: table-header-group !important; /* Replicates column header labels on page splits */
+        display: table-header-group !important; /* Safely replicates row title bars upon page split boundaries */
     }
 }
 </style>
@@ -250,7 +274,7 @@ def highlight_over_hour_row(row):
             pass
     return [''] * len(row)
 
-# NATIVE SYSTEM CLIPBOARD DATA EXPORTER (CONVERTS ARRAYS TO UNIFIED SHEET LABELS)
+# NATIVE SYSTEM CLIPBOARD DATA EXPORTER 
 def create_copy_button(df, raw_key):
     safe_key = "".join([c if c.isalnum() else "_" for c in raw_key])
     tsv_str = df.to_csv(sep='\t', index=False)
@@ -293,7 +317,7 @@ def create_copy_button(df, raw_key):
     """
     st.components.v1.html(button_html, height=38)
 
-# --- ADVANCED BASELINES DATA STRUCT DISPATCH ENGINE ---
+# --- CORE ADVANCED BASELINE REPORT GENERATOR PANEL ---
 def run_baselines_matrix(ops_df):
     st.markdown("<h4>Advanced Team Processing Baselines Matrix</h4>", unsafe_allow_html=True)
     st.markdown("*(Technician tracking averages sorted by highest un-blended weekly duration totals. Store times ignore direct-to-site jobs)*")
@@ -385,7 +409,7 @@ def run_baselines_matrix(ops_df):
         
     try:
         styled_matrix = matrix_df.reset_index(drop=True).style.apply(highlight_matrix_overhead, subset=['Total Avg Job Time', 'Avg WH Time', 'Avg LSI Time', 'Avg WH Store Time', 'Avg LSI Store Time'])
-        st.table(styled_matrix) # SWITCHED TO ST.TABLE FOR COMPLETE ROWS DISPATCH
+        st.table(styled_matrix) 
     except Exception:
         st.table(matrix_df.reset_index(drop=True))
         
@@ -650,7 +674,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 st.table(context_agg[['Day Type', 'Total_Days', 'Average Fleet Job Turnaround']].rename(columns={'Total_Days': 'Days Analyzed'}))
 
     if "🕵️ The Ghost Punch & Payroll Discrepancy Auditor" in test_choices:
-        st.markdown("### **### **🕵️ The Ghost Punch & Payroll Discrepancy Auditor**")
+        st.markdown("### **🕵️ The Ghost Punch & Payroll Discrepancy Auditor**")
         ghost_alerts = []
         for idx, row in final_df.iterrows():
             tech_name = row['Name']
@@ -664,10 +688,10 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 if clocked > 0 and jobs == 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🕵️ Paid But Idle (Clocked In, 0 Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": 0})
                 elif clocked == 0 and jobs > 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🚨 Unpaid Field Work (0 Hours Clocked, Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": int(jobs)})
         if ghost_alerts: st.table(pd.DataFrame(ghost_alerts))
-        else: st.success("Perfect alignment! No payroll discrepancy errors detected.")
+        else: st.success("Perfect alignment! No payroll discrepancy errors detected on current sheets.")
 
     if "¼ The Lowe's Store Staging Efficiency Scorecard" in test_choices:
-        st.markdown("### **### **¼ The Lowe's Store Staging Efficiency Scorecard**")
+        st.markdown("### **¼ The Lowe's Store Staging Efficiency Scorecard**")
         store_cols = [c for c in ops_df.columns if 'store' in c.lower() and 'time' not in c.lower() and 'timestamp' not in c.lower()]
         if store_cols:
             store_stats = ops_df.groupby(store_cols[0])['Store_Time_Hrs'].mean().reset_index()
@@ -706,14 +730,14 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         bu_rev_df['Revenue Share %'] = bu_rev_df['Revenue Share %'].apply(lambda x: f"{x:.1f}%")
         st.table(bu_rev_df[['Business Unit', 'Total Revenue', 'Revenue Share %']].reset_index(drop=True))
 
-    if "🗺️ Route Optimization Flags" in test_choices:
-        st.markdown("### **🗺️ Route Optimization Flags**")
+    if "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)" in test_choices:
+        st.markdown("### **🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)**")
         route_eff = ops_df.groupby('Assigned Team Members').agg(Total_Revenue=('Total Invoice Amount', 'sum'), Total_Drive_Hrs=('Drive_Time_Hrs', 'sum')).reset_index().rename(columns={'Assigned Team Members': 'Name'})
         route_eff['Rev per Drive Hour Raw'] = np.where(route_eff['Total_Drive_Hrs'] > 0, route_eff['Total_Revenue'] / route_eff['Total_Drive_Hrs'], 0.0)
         route_eff = route_eff.sort_values(by='Rev per Drive Hour Raw', ascending=False)
         route_eff['Total Assigned Revenue'] = route_eff['Total_Revenue'].apply(lambda x: f"${x:,.2f}")
         route_eff['Total Drive Hours'] = route_eff['Total_Drive_Hrs'].apply(lambda x: f"{x:.1f} hrs")
-        route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"${x:.1f}/hr")
+        route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"{x:.1f}/hr")
         st.table(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True))
 
     if "📉 True Gross Margin per Clocked Hour" in test_choices:
@@ -1009,7 +1033,7 @@ if time_file and ops_file:
             
             try:
                 styled_weekly = display_dfs['Weekly'].reset_index(drop=True).style.set_properties(**{'background-color': '#fff3cd', 'font-weight': 'bold', 'color': '#856404;'}, subset=['WH Efficiency'])
-                st.table(styled_weekly) # ST.TABLE ENFORCES FULL LOG RENDERING IN PRINT MECHANICS
+                st.table(styled_weekly) 
             except Exception:
                 st.table(display_dfs['Weekly'].reset_index(drop=True))
                 
@@ -1075,7 +1099,7 @@ if time_file and ops_file:
                 st.table(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True))
                 create_copy_button(bu_avg_ticket[['Business Unit', 'Average Ticket Size']], "bu_avg_ticket")
             with m_col2:
-                st.markdown("**📈 Pay Ratio per Clocked Hour**")
+                st.markdown("**📈 Pay Ratio per Clocked Hour**", unsafe_allow_html=True)
                 rev_per_hour_df = final_df.copy()
                 rev_per_hour_df['Total Clocked'] = rev_per_hour_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
                 rev_per_hour_df['Total Jobs'] = rev_per_hour_df['Total_Weekly_Job_Count'].astype(int)
