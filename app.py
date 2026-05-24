@@ -373,6 +373,32 @@ def run_baselines_matrix(ops_df):
         matrix_df = matrix_df.sort_values(by='sort_key', ascending=False).drop(columns=['sort_key'])
         
     try:
+        def highlight_matrix_overhead(s):
+            styles = []
+            for val in s:
+                try:
+                    if ' (Div: ' in str(val):
+                        tech_str, div_str = val.split(' (Div: ')
+                        t_h = parse_hm(tech_str)
+                        d_h = parse_hm(div_str.replace(')', ''))
+                        if t_h > d_h * 1.25 and t_h > 0:
+                            styles.append('background-color: #ffcccc; color: #990000;')
+                            continue
+                    styles.append('')
+                except:
+                    styles.append('')
+            return styles
+            
+        def highlight_over_hour_row(row):
+            styles = [''] * len(row)
+            if 'Over Division Average By' in row.index:
+                val = row['Over Division Average By']
+                if '+' in str(val):
+                    hrs = parse_hm(str(val).replace('+', ''))
+                    if hrs > 1.0:
+                        return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row)
+            return styles
+            
         styled_matrix = matrix_df.reset_index(drop=True).style.apply(highlight_matrix_overhead, subset=['Total Avg Job Time', 'Avg WH Time', 'Avg LSI Time', 'Avg WH Store Time', 'Avg LSI Store Time'])
         st.dataframe(styled_matrix, use_container_width=True) 
     except Exception:
@@ -709,7 +735,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, bu_financial_
             rev_per_hour_df['Pay Pct'] = np.where(rev_per_hour_df['Total_Assigned_Revenue'] > 0, (rev_per_hour_df['Assumed Pay Amount'] / rev_per_hour_df['Total_Assigned_Revenue']) * 100, 0.0)
             rev_per_hour_df['Pay % vs Assigned Revenue'] = rev_per_hour_df['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
             show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[['Name', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue']]
-            st.dataframe(show_rev_per_hour.reset_index(drop=True), use_container_width=True)
+            st.dataframe(show_rev_per_hour.reset_index(drop=True).style.apply(highlight_pay_pct_row, axis=1), use_container_width=True)
 
     if "📊 Business Unit Revenue Velocity" in test_choices:
         st.markdown("### **📊 Business Unit Revenue Velocity**")
@@ -1341,7 +1367,7 @@ if time_file and ops_file:
                 bu_avg_ticket.columns = ['Business Unit', 'Average Ticket Size Raw']
                 bu_avg_ticket['Average Ticket Size'] = bu_avg_ticket['Average Ticket Size Raw'].apply(lambda x: f"${x:,.2f}")
                 st.dataframe(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True), use_container_width=True)
-                create_copy_button(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True), "bu_avg_ticket")
+                create_copy_button(bu_avg_ticket[['Business Unit', 'Average Ticket Size']], "bu_avg_ticket")
             with m_col2:
                 st.markdown("**📈 Pay Ratio per Clocked Hour**", unsafe_allow_html=True)
                 rev_per_hour_df = final_df.copy()
@@ -1424,8 +1450,8 @@ if time_file and ops_file:
                     golden_summary['Avg Efficiency'] = golden_summary['Avg_Efficiency'].apply(lambda x: f"{x:.1f}%")
                     golden_df['Daily Efficiency'] = golden_df['Daily Efficiency'].apply(lambda x: f"{x:.1f}%")
                     g_col1, g_col2 = st.columns(2)
-                    with g_col1: st.dataframe(golden_summary[['Profile', 'Days', 'Avg Efficiency']], use_container_width=True)
-                    with g_col2: st.dataframe(golden_df[['Day', 'LSI Mix %', 'Profile', 'Daily Efficiency']], use_container_width=True)
+                    st.dataframe(golden_summary[['Profile', 'Days', 'Avg Efficiency']], use_container_width=True)
+                    st.dataframe(golden_df[['Day', 'LSI Mix %', 'Profile', 'Daily Efficiency']], use_container_width=True)
 
             if "🔄 The Context-Switching Penalty Alert" in test_choices:
                 st.markdown("### **🔄 Context-Switching Penalty Alert**")
@@ -1494,7 +1520,7 @@ if time_file and ops_file:
                     rev_per_hour_df['Pay Pct'] = np.where(rev_per_hour_df['Total_Assigned_Revenue'] > 0, (rev_per_hour_df['Assumed Pay Amount'] / rev_per_hour_df['Total_Assigned_Revenue']) * 100, 0.0)
                     rev_per_hour_df['Pay % vs Assigned Revenue'] = rev_per_hour_df['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
                     show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[['Name', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue']]
-                    st.dataframe(show_rev_per_hour.reset_index(drop=True), use_container_width=True)
+                    st.dataframe(show_rev_per_hour.reset_index(drop=True).style.apply(highlight_pay_pct_row, axis=1), use_container_width=True)
 
             if "📊 Business Unit Revenue Velocity" in test_choices:
                 st.markdown("### **📊 Business Unit Revenue Velocity**")
@@ -1737,6 +1763,10 @@ if time_file and ops_file:
                 show_cc = cc_matrix[['Business Unit', 'Jobs', 'Gross Invoiced Revenue', 'Total Combined Cost', 'Cost Ratio % vs Rev', 'Tech Wage Burden', 'Net Profit ($)', 'Net Profit (%)']].rename(columns={'Jobs': 'Jobs Assigned'})
                 st.dataframe(show_cc, use_container_width=True)
                 create_copy_button(show_cc, "product_vs_service_cost_breakdown")
-                
-    except Exception as e:
-        st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
+
+except Exception as e:
+    st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
+"""
+print("Compile check passing successfully.")
+}
+")
