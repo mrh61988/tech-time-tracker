@@ -610,7 +610,9 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             gold_star_df['Daily Avg Diff'] = gold_star_df['Daily_Avg_Diff_Hrs'].apply(format_hm)
             gold_star_df['Total Diff'] = gold_star_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
             show_gold = gold_star_df[['Name', 'Total Clocked', 'Total Job Time', 'Daily Avg Diff', 'Total Diff']].copy()
-            try: st.table(show_gold.reset_index(drop=True).style.set_properties(**gradient := {'background-color': '#e6f4ea', 'color': '#137333'}))
+            
+            # FIXED SYNTAX BINDING: Swapped out nested dictionary keyword assignment expressions burden parameters
+            try: st.table(show_gold.reset_index(drop=True).style.set_properties(**{'background-color': '#e6f4ea', 'color': '#137333'}))
             except Exception: st.table(show_gold.reset_index(drop=True))
             create_copy_button(show_gold.reset_index(drop=True), f"gold_star_{tab_key}")
 
@@ -630,7 +632,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 return "ℹ️ No BU Jobs Assigned"
             skill_df['Action Required'] = skill_df.apply(assign_skill_flag, axis=1)
             
-            # WARNING SORT ENGINE
+            # CRITICAL WARNING SORT ENGINE IMPLEMENTATION
             skill_df['sort_action'] = skill_df['Action Required'].apply(lambda x: 0 if '⚠️' in str(x) else (1 if 'ℹ️' in str(x) else 2))
             skill_df = skill_df.sort_values(by='sort_action', ascending=True)
             
@@ -900,7 +902,6 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         else:
             st.info("No invoice details located inside loaded operations datasets.")
 
-    # INTERACTIVE SORTABLE COMPREHENSIVE REVENUE NET PROFITABILITY MATRIX PANEL
     if "🛢️ Water Heater True Net Profitability Margin Auditor" in test_choices:
         st.markdown("### **💵 Division True Net Profitability Margin Auditor**")
         st.markdown("*(Evaluates net profitability fields factoring applied $100 solo/$175 team WH flat rates and LSI allocated hourly payouts)*")
@@ -1008,7 +1009,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             create_copy_button(show_cc, "product_vs_service_cost_breakdown")
         else: st.info("Product/Service financial costs metrics columns missing from current source sheets.")
 
-# --- THE MAIN TOP-LEVEL BASE EXECUTION PIPELINE LAYER BLOCK ---
+# --- RUN EXECUTION Pipeline BLOCK FOR FILE MOUNTING ---
 st.sidebar.header("📂 Data Loading Pipeline")
 time_file = st.sidebar.file_uploader("Upload Time Sheet (CSV)", type=['csv'])
 ops_file = st.sidebar.file_uploader("Upload Lowes Ops Export (CSV)", type=['csv'])
