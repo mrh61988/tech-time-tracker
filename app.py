@@ -222,6 +222,49 @@ def highlight_over_hour_row(row):
             pass
     return [''] * len(row)
 
+# NATIVE CLIPBOARD EXPORT HOOK GENERATOR
+def create_copy_button(df, raw_key):
+    safe_key = "".join([c if c.isalnum() else "_" for c in raw_key])
+    tsv_str = df.to_csv(sep='\t', index=False)
+    safe_tsv = tsv_str.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+    
+    button_html = f"""
+    <div style="text-align: left; margin-top: 5px; margin-bottom: 8px;">
+        <textarea id="tsv_{safe_key}" style="position: absolute; left: -9999px;">{safe_tsv}</textarea>
+        <button id="btn_{safe_key}" onclick="copyTSV_{safe_key}()" style="background-color: #ffffff; color: #3c4043; padding: 6px 14px; border: 1px solid #dadce0; border-radius: 4px; cursor: pointer; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: background-color 0.2s;">
+            📋 Copy Table Data (For Email/Sheets/Docs)
+        </button>
+    </div>
+    <script>
+    function copyTSV_{safe_key}() {{
+        var copyText = document.getElementById("tsv_{safe_key}");
+        copyText.select();
+        copyText.setSelectionRange(0, 999999);
+        try {{
+            var successful = document.execCommand('copy');
+            var btn = document.getElementById("btn_{safe_key}");
+            if (successful) {{
+                btn.innerHTML = "✅ Copied table to clipboard!";
+                btn.style.backgroundColor = "#e6f4ea";
+                btn.style.color = "#137333";
+                btn.style.borderColor = "#137333";
+                setTimeout(function() {{
+                    btn.innerHTML = "📋 Copy Table Data (For Email/Sheets/Docs)";
+                    btn.style.backgroundColor = "#ffffff";
+                    btn.style.color = "#3c4043";
+                    btn.style.borderColor = "#dadce0";
+                }}, 2000);
+            }} else {{
+                btn.innerHTML = "❌ Copy failed";
+            }}
+        }} catch (err) {{
+            console.error('Execution fallback error:', err);
+        }}
+    }}
+    </script>
+    """
+    st.components.v1.html(button_html, height=38)
+
 # --- CORE ADVANCED BASELINE REPORT GENERATOR PANEL ---
 def run_baselines_matrix(ops_df):
     st.markdown("<h4>Advanced Team Processing Baselines Matrix</h4>", unsafe_allow_html=True)
@@ -318,8 +361,7 @@ def run_baselines_matrix(ops_df):
     except Exception:
         st.dataframe(matrix_df.reset_index(drop=True), use_container_width=True)
         
-    with st.expander("📋 Click to view copy-pasteable table format (For Emails, Google Docs, & Sheets)"):
-        st.table(matrix_df.reset_index(drop=True))
+    create_copy_button(matrix_df, "baselines_matrix")
         
     st.markdown("<br><h4>🚨 Individual Over-Baseline Job Reference Breakdown</h4>", unsafe_allow_html=True)
     st.markdown("*(Granular tracking sheets isolating individual work orders exceeding the division run baselines, sorted largest variation to lowest. Rows >1 hour over are highlighted)*")
@@ -331,8 +373,7 @@ def run_baselines_matrix(ops_df):
             wh_matrix_df = pd.DataFrame(wh_over_baseline_rows).sort_values(by='sort_key', ascending=False).drop(columns=['sort_key']).reset_index(drop=True)
             try: st.dataframe(wh_matrix_df.style.apply(highlight_over_hour_row, axis=1), use_container_width=True)
             except Exception: st.dataframe(wh_matrix_df, use_container_width=True)
-            with st.expander("📋 Click to view copy-pasteable table format"):
-                st.table(wh_matrix_df)
+            create_copy_button(wh_matrix_df, "wh_over_baseline")
         else: st.success("✅ Zero individual Water Heater jobs exceeded the division baseline average.")
             
     with split_col2:
@@ -341,8 +382,7 @@ def run_baselines_matrix(ops_df):
             lsi_matrix_df = pd.DataFrame(lsi_over_baseline_rows).sort_values(by='sort_key', ascending=False).drop(columns=['sort_key']).reset_index(drop=True)
             try: st.dataframe(lsi_matrix_df.style.apply(highlight_over_hour_row, axis=1), use_container_width=True)
             except Exception: st.dataframe(lsi_matrix_df, use_container_width=True)
-            with st.expander("📋 Click to view copy-pasteable table format"):
-                st.table(lsi_matrix_df)
+            create_copy_button(lsi_matrix_df, "lsi_over_baseline")
         else: st.success("✅ Zero individual Simple Install jobs exceeded the division baseline average.")
 
 # --- MAIN BLOCK REPORT ENGINE ---
@@ -404,8 +444,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             trend_data.append({"Day": d, "Total Clocked": format_hm(day_clocked), "Job Status Time": format_hm(day_job), "Efficiency Score": f"{day_eff:.1f}%"})
         trend_df = pd.DataFrame(trend_data)
         st.dataframe(trend_df, use_container_width=True)
-        with st.expander("📋 Click to view copy-pasteable table format"):
-            st.table(trend_df)
+        create_copy_button(trend_df, f"trend_{tab_key}")
 
     with leaderboard_col:
         st.subheader("🚨 Team Leaderboard")
@@ -424,8 +463,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 return ['background-color: #ffcccc; color: #990000;'] * len(row) if val > 0 else [''] * len(row)
             try: st.dataframe(show_leaderboard.reset_index(drop=True).style.apply(highlight_leaderboard, axis=1), use_container_width=True)
             except Exception: st.dataframe(show_leaderboard.reset_index(drop=True).style.apply(highlight_leaderboard, axis=1), use_container_width=True)
-            with st.expander("📋 Click to view copy-pasteable table format"):
-                st.table(show_leaderboard.reset_index(drop=True))
+            create_copy_button(show_leaderboard.reset_index(drop=True), f"leaderboard_{tab_key}")
 
     # === OVERTIME HORIZON PREDICTOR ===
     st.markdown("<br>", unsafe_allow_html=True)
@@ -469,8 +507,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             return [''] * len(row)
         try: st.dataframe(ot_predictor_df.reset_index(drop=True).style.apply(style_ot_predictor, axis=1), use_container_width=True)
         except Exception: st.dataframe(ot_predictor_df.reset_index(drop=True).style.apply(style_ot_predictor, axis=1), use_container_width=True)
-        with st.expander("📋 Click to view copy-pasteable table format"):
-            st.table(ot_predictor_df.reset_index(drop=True))
+        create_copy_button(ot_predictor_df.reset_index(drop=True), f"overtime_{tab_key}")
             
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -489,8 +526,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             show_gold = gold_star_df[['Name', 'Total Clocked', 'Total Job Time', 'Daily Avg Diff', 'Total Diff']].copy()
             try: st.dataframe(show_gold.reset_index(drop=True).style.set_properties(**{'background-color': '#e6f4ea', 'color': '#137333'}), use_container_width=True)
             except Exception: st.dataframe(show_gold.reset_index(drop=True).style.set_properties(**{'background-color': '#e6f4ea', 'color': '#137333'}), use_container_width=True)
-            with st.expander("📋 Click to view copy-pasteable table format"):
-                st.table(show_gold.reset_index(drop=True))
+            create_copy_button(show_gold.reset_index(drop=True), f"gold_star_{tab_key}")
 
     with col_right:
         st.subheader("🎯 The Technician Skill Matrix & Training Flag")
@@ -510,8 +546,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             def style_flags(row): return ['background-color: #fff3cd; color: #856404; font-weight: bold;'] * len(row) if '⚠️' in row['Action Required'] else [''] * len(row)
             try: st.dataframe(show_skill.reset_index(drop=True).style.apply(style_flags, axis=1), use_container_width=True)
             except Exception: st.dataframe(show_skill.reset_index(drop=True).style.apply(style_flags, axis=1), use_container_width=True)
-            with st.expander("📋 Click to view copy-pasteable table format"):
-                st.table(show_skill.reset_index(drop=True))
+            create_copy_button(show_skill.reset_index(drop=True), f"skills_{tab_key}")
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("🗺️ Route Optimization Flags")
@@ -520,10 +555,9 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
         poor_routes['Drive %'] = poor_routes['Drive %'].apply(lambda x: f"{x:.1f}%")
         poor_routes['Drive Time'] = poor_routes['Drive_Time_Hrs'].apply(format_hm)
         poor_routes['Work Time'] = poor_routes['In_Progress_Time_Hrs'].apply(format_hm)
-        route_export_df = poor_routes[['Assigned Team Members', 'Short_Date', 'Job_Count', 'Drive Time', 'Work Time', 'Drive %']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date', 'Job_Count': 'Jobs'}).reset_index(drop=True)
-        st.dataframe(route_export_df, use_container_width=True)
-        with st.expander("📋 Click to view copy-pasteable table format"):
-            st.table(route_export_df)
+        route_df_export = poor_routes[['Assigned Team Members', 'Short_Date', 'Job_Count', 'Drive Time', 'Work Time', 'Drive %']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date', 'Job_Count': 'Jobs'}).reset_index(drop=True)
+        st.dataframe(route_df_export, use_container_width=True)
+        create_copy_button(route_df_export, f"routes_{tab_key}")
 
     st.markdown("<br>", unsafe_allow_html=True)
     launch_col, launch_empty_col = st.columns(2)
@@ -533,8 +567,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             launch_counts = delayed_launches_df.groupby('Assigned Team Members').size().reset_index(name='Total Late Days').sort_values(by='Total Late Days', ascending=False)
             try: st.dataframe(launch_counts.reset_index(drop=True).style.set_properties(**{'background-color': '#fff3cd', 'color': '#856404;'}, subset=['Total Late Days']), use_container_width=True)
             except Exception: st.dataframe(launch_counts.reset_index(drop=True).style.set_properties(**{'background-color': '#fff3cd', 'color': '#856404;'}, subset=['Total Late Days']), use_container_width=True)
-            with st.expander("📋 Click to view copy-pasteable table format"):
-                st.table(launch_counts.reset_index(drop=True).rename(columns={'Assigned Team Members': 'Name'}))
+            create_copy_button(launch_counts.reset_index(drop=True).rename(columns={'Assigned Team Members': 'Name'}), f"late_score_{tab_key}")
 
     with launch_empty_col:
         st.subheader("🚗 Delayed Launch Alert")
@@ -547,8 +580,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 show_launches = tech_launches_df.sort_values(by='First_Punch', ascending=False)[['Short_Date', 'First Punch log']].rename(columns={'Short_Date': 'Date'}).reset_index(drop=True)
                 try: st.dataframe(show_launches.style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'}), use_container_width=True)
                 except Exception: st.dataframe(show_launches, use_container_width=True)
-                with st.expander("📋 Click to view copy-pasteable table format"):
-                    st.table(show_launches)
+                create_copy_button(show_launches, f"late_alert_{tab_key}")
 
 def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices):
     if "🏆 The Golden Ratio Margin Predictor" in test_choices:
@@ -653,7 +685,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         route_eff = route_eff.sort_values(by='Rev per Drive Hour Raw', ascending=False)
         route_eff['Total Assigned Revenue'] = route_eff['Total_Revenue'].apply(lambda x: f"${x:,.2f}")
         route_eff['Total Drive Hours'] = route_eff['Total_Drive_Hrs'].apply(lambda x: f"{x:.1f} hrs")
-        route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"${x:,.2f}/hr")
+        route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"{x:.1f}/hr")
         st.dataframe(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True), use_container_width=True)
 
     if "📉 True Gross Margin per Clocked Hour" in test_choices:
@@ -670,7 +702,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         margin_df['Margin per Clocked Hour'] = margin_df['Margin per Clocked Hour Raw'].apply(lambda x: f"${x:,.2f}/hr")
         st.dataframe(margin_df[['Name', 'Total Clocked', 'Total Assigned Revenue', 'Assumed Pay', 'Total Net Margin', 'Margin per Clocked Hour']].reset_index(drop=True), use_container_width=True)
 
-# --- RUN EXECUTION PIPELINE ---
+# --- RUN EXECUTION Pipeline BLOCK FOR FILE MOUNTING ---
 st.sidebar.header("📂 Data Loading Pipeline")
 time_file = st.sidebar.file_uploader("Upload Time Sheet (CSV)", type=['csv'])
 ops_file = st.sidebar.file_uploader("Upload Lowes Ops Export (CSV)", type=['csv'])
@@ -937,7 +969,6 @@ if time_file and ops_file:
         tabs = st.tabs(tab_names)
         
         with tabs[0]:
-            # FIXED: Embedded cross-communication iframe print hook directly to header execution block
             st.markdown('<h3>Weekly Efficiency Summary</h3>', unsafe_allow_html=True)
             st.components.v1.html("""
             <div style="text-align: right;">
@@ -954,8 +985,7 @@ if time_file and ops_file:
             except Exception:
                 st.dataframe(display_dfs['Weekly'].reset_index(drop=True), use_container_width=True)
                 
-            with st.expander("📋 Click to view copy-pasteable table format (For Emails, Google Docs, & Sheets)"):
-                st.table(display_dfs['Weekly'].reset_index(drop=True))
+            create_copy_button(display_dfs['Weekly'], "weekly_summary")
             
             # === MACRO DASHBOARD PANEL ===
             st.markdown("<br><hr><h3>📊 Macro Financial Performance Dashboard</h3>", unsafe_allow_html=True)
@@ -1008,16 +1038,14 @@ if time_file and ops_file:
             with m_col1:
                 st.markdown("<br>**📈 Gross Invoiced Revenue & Payroll by Business Unit**", unsafe_allow_html=True)
                 st.dataframe(bu_financial_matrix[['Business Unit', 'Gross Invoiced Revenue', 'Rev Share %', 'Assumed Pay', 'Pay % of Revenue']].reset_index(drop=True), use_container_width=True)
-                with st.expander("📋 Click to view copy-pasteable table format"):
-                    st.table(bu_financial_matrix[['Business Unit', 'Gross Invoiced Revenue', 'Rev Share %', 'Assumed Pay', 'Pay % of Revenue']].reset_index(drop=True))
+                create_copy_button(bu_financial_matrix[['Business Unit', 'Gross Invoiced Revenue', 'Rev Share %', 'Assumed Pay', 'Pay % of Revenue']], "bu_rev_and_pay")
                 
                 st.markdown("<br>**🎯 Average Ticket Size per BU**", unsafe_allow_html=True)
                 bu_avg_ticket = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].mean().reset_index()
                 bu_avg_ticket.columns = ['Business Unit', 'Average Ticket Size Raw']
                 bu_avg_ticket['Average Ticket Size'] = bu_avg_ticket['Average Ticket Size Raw'].apply(lambda x: f"${x:,.2f}")
                 st.dataframe(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True), use_container_width=True)
-                with st.expander("📋 Click to view copy-pasteable table format"):
-                    st.table(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True))
+                create_copy_button(bu_avg_ticket[['Business Unit', 'Average Ticket Size']], "bu_avg_ticket")
             with m_col2:
                 st.markdown("**📈 Pay Ratio per Clocked Hour**")
                 rev_per_hour_df = final_df.copy()
@@ -1036,8 +1064,7 @@ if time_file and ops_file:
                 
                 show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue', 'Total Net Margin', 'Margin per Clocked Hour']]
                 st.dataframe(show_rev_per_hour.reset_index(drop=True).style.apply(highlight_pay_pct_row, axis=1), use_container_width=True)
-                with st.expander("📋 Click to view copy-pasteable table format"):
-                    st.table(show_rev_per_hour.reset_index(drop=True))
+                create_copy_button(show_rev_per_hour, "pay_ratio_per_clocked")
             
             st.markdown("<br><hr>", unsafe_allow_html=True)
             run_baselines_matrix(ops_df)
@@ -1055,8 +1082,7 @@ if time_file and ops_file:
                 report_data.append({"Day": "TOTAL WEEKLY", "Jobs": int(tech_data['Total_Weekly_Job_Count']), "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']), "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']), "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])})
                 manager_day_df = pd.DataFrame(report_data)
                 st.dataframe(manager_day_df, use_container_width=True)
-                with st.expander(f"📋 Copy-paste format for {tech}"):
-                    st.table(manager_day_df)
+                create_copy_button(manager_day_df, f"manager_overview_{tech}")
             show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key="manager_tab")
             
         with tabs[2]:
@@ -1070,16 +1096,14 @@ if time_file and ops_file:
                 report_data.append({"Day": "TOTAL WEEKLY", "Jobs": int(tech_data['Total_Weekly_Job_Count']), "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']), "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']), "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])})
                 indiv_day_df = pd.DataFrame(report_data)
                 st.dataframe(indiv_day_df, use_container_width=True)
-                with st.expander(f"📋 Copy-paste format for {selected_tech}"):
-                    st.table(indiv_day_df)
+                create_copy_button(indiv_day_df, f"printable_indiv_{selected_tech}")
 
         day_mapping = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
         for i, full_day in enumerate(tab_names[3:10]): 
             with tabs[i+3]:
                 short_day = day_mapping[full_day]
                 st.dataframe(display_dfs[short_day].reset_index(drop=True), use_container_width=True)
-                with st.expander(f"📋 Copy-paste format for {full_day}"):
-                    st.table(display_dfs[short_day].reset_index(drop=True))
+                create_copy_button(display_dfs[short_day].reset_index(drop=True), f"day_tab_{short_day}")
 
         with tabs[10]:
             test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "¼ The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)", "📉 True Gross Margin per Clocked Hour"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
