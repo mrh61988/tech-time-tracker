@@ -28,31 +28,34 @@ st.markdown("""
     h1, .hide-on-print, .stAlert, iframe, button { display: none !important; }
     div[class*="stExpander"] { display: none !important; }
     
-    /* Force column blocks side-by-side natively on wide horizontal landscape layouts */
-    [data-testid="stHorizontalBlock"] {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
+    /* Flatten flex and grid containers to standard sequential blocks to block overlapping */
+    div[class*="stVerticalBlock"], 
+    div[data-testid="element-container"],
+    div[data-testid="stHorizontalBlock"],
+    div[data-testid="column"] {
+        display: block !important;
+        position: static !important;
+        float: none !important;
         width: 100% !important;
-        gap: 20px !important;
-    }
-    [data-testid="column"] {
-        flex: 1 1 0% !important;
-        min-width: 0 !important;
+        max-width: 100% !important;
+        min-width: 100% !important;
         height: auto !important;
+        max-height: none !important;
         overflow: visible !important;
-        margin-bottom: 0px !important;
-        page-break-inside: avoid !important;
+        margin: 0 0 15px 0 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+        page-break-inside: auto !important;
     }
     
     h2, h3, h4 {
         page-break-inside: avoid !important;
         page-break-after: avoid !important;
-        margin-top: 25px !important;
-        margin-bottom: 12px !important;
+        margin-top: 20px !important;
+        margin-bottom: 8px !important;
     }
 
-    /* Unclamp outer container gutters to allow data to bleed cleanly to the printable edges */
+    /* Unclamp core block layout canvas gutters to run margin-to-margin smoothly */
     div[data-testid="stAppViewBlockContainer"],
     .main .block-container,
     div[class*="block-container"] {
@@ -61,15 +64,39 @@ st.markdown("""
         padding: 0 !important;
         margin: 0 !important;
     }
+
+    /* Forces summary KPI card layout objects to look clean side-by-side in Landscape */
+    div[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        width: 100% !important;
+        gap: 12px !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) div[data-testid="column"] {
+        display: inline-block !important;
+        flex: 1 1 0% !important;
+        min-width: 100px !important;
+        width: auto !important;
+        max-width: none !important;
+        margin: 0 !important;
+    }
     
-    /* Enforce full-width text wrapping table styles safely inside right borders */
-    table { 
-        width: 100% !important; 
+    /* Grants wide tables maximum layout canvas real estate */
+    div[data-testid="stTable"], 
+    div[data-testid="stTable"] > div, 
+    table {
+        width: 100% !important;
         max-width: 100% !important;
-        border-collapse: collapse !important;
+        min-width: 100% !important;
+        display: table !important;
         table-layout: auto !important;
+    }
+    
+    table {
+        border-collapse: collapse !important;
         page-break-inside: auto !important;
-        margin: 0 0 20px 0 !important;
+        margin: 0 0 15px 0 !important;
     }
     tr {
         page-break-inside: avoid !important;
@@ -79,10 +106,10 @@ st.markdown("""
         white-space: normal !important;
         word-break: break-word !important;
         overflow-wrap: break-word !important;
-        padding: 5px 6px !important;
-        font-size: 10px !important;
+        padding: 4px 5px !important;
+        font-size: 9.5px !important;
         text-align: left !important;
-        line-height: 1.3 !important;
+        line-height: 1.25 !important;
     }
     thead {
         display: table-header-group !important;
@@ -639,7 +666,6 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 except Exception: st.table(show_launches)
                 create_copy_button(show_launches, f"late_alert_{tab_key}")
 
-# --- CONSOLIDATED SANDBOX TAB VIEWS ENGINE ---
 def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices):
     if "🏆 The Golden Ratio Margin Predictor" in test_choices:
         st.markdown("### **🏆 The Golden Ratio Margin Predictor**")
@@ -694,7 +720,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 if clocked > 0 and jobs == 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🕵️ Paid But Idle (Clocked In, 0 Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": 0})
                 elif clocked == 0 and jobs > 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🚨 Unpaid Field Work (0 Hours Clocked, Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": int(jobs)})
         if ghost_alerts: st.table(pd.DataFrame(ghost_alerts))
-        else: st.success("Perfect alignment! No payroll discrepancy errors detected on current sheets.")
+        else: st.success("Perfect alignment! No payroll discrepancy errors detected.")
 
     if "¼ The Lowe's Store Staging Efficiency Scorecard" in test_choices:
         st.markdown("### **¼ The Lowe's Store Staging Efficiency Scorecard**")
@@ -746,7 +772,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"${x:.1f}/hr")
         st.table(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True))
 
-    # NEW SANDBOX OPTION 1: MULTI-TECH LABOR YIELD OVERRIDE ENGINE
+    # NEW TESTING MODULE 1: MULTI-TECH TEAM CREW PERFORMANCE ANALYTICS
     if "🦺 Multi-Tech Labor Yield vs. Solo Runs" in test_choices:
         st.markdown("### **🦺 Multi-Tech Labor Yield vs. Solo Runs (Co-Efficiency Analysis)**")
         st.markdown("*(Assesses crew execution values factoring an applied $22.00/hr secondary helper cost burden override)*")
@@ -774,7 +800,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         show_yield['Avg Revenue per Job'] = show_yield['Avg Revenue per Job'].apply(lambda x: f"${x:,.2f}")
         show_yield['Revenue per Man-Hour'] = show_yield['Revenue per Man-Hour'].apply(lambda x: f"${x:,.2f}/hr")
         st.table(show_yield[['Type', 'Job_Count', 'Total Revenue', 'Total Field Hours', 'Total Man-Hours', 'Added Helper Cost', 'Avg Revenue per Job', 'Revenue per Man-Hour']].rename(columns={'Job_Count': 'Jobs Assigned'}))
-        create_copy_button(summary_yield, "multi_tech_yield")
+        create_copy_button(show_yield, "multi_tech_yield")
         
         st.markdown("#### 🦺 Granular Team Dispatch Review Log")
         team_jobs = df_m[df_m['Tech_Count'] > 1].copy()
@@ -785,10 +811,11 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             team_jobs['Man-Hours'] = team_jobs['Total_Man_Hours'].apply(format_hm)
             show_team_jobs = team_jobs[['#ID', 'Assigned Team Members', 'Business Unit', 'Total Revenue', 'Job Duration', 'Man-Hours', 'Helper Cost']].rename(columns={'#ID': 'Job ID'})
             st.table(show_team_jobs)
-            create_copy_button(team_jobs[['#ID', 'Assigned Team Members', 'Business Unit', 'Total Invoice Amount', 'Total_Job_Time_Hours', 'Total_Man_Hours', 'Helper_Labor_Cost']], "granular_team_log")
-        else: st.info("No paired team dispatches detected in current operational datasets.")
+            create_copy_button(show_team_jobs, "granular_team_log")
+        else:
+            st.info("No paired team dispatches detected in current operational datasets.")
 
-    # NEW SANDBOX OPTION 2: LOWES STORE DELAY CALENDAR MATRIX ENGINE
+    # NEW TESTING MODULE 2: WEEKDAY STAGING pickup OVERHEAD METRICS
     if "📅 Lowe's Store Staging Delays by Day of the Week" in test_choices:
         st.markdown("### **📅 Lowe's Store Staging Delays by Day of the Week**")
         st.markdown("*(Tracks supply chain delay velocities day-by-day to optimize loading schedules)*")
@@ -804,10 +831,11 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             show_staging['Total Hours Delayed'] = show_staging['Total_Hours'].apply(format_hm)
             show_staging['Avg Delay per Visit'] = show_staging['Avg Delay per Visit Raw'].apply(format_hm)
             st.table(show_staging[['Day_of_Week', 'Total_Visits', 'Total Hours Delayed', 'Avg Delay per Visit']].rename(columns={'Day_of_Week': 'Day', 'Total_Visits': 'Store Pickups'}))
-            create_copy_button(staging_agg[['Day_of_Week', 'Total_Visits', 'Total_Hours', 'Avg Delay per Visit Raw']], "store_staging_by_day")
-        else: st.info("No material store staging records discovered inside loaded field parameters.")
+            create_copy_button(show_staging[['Day_of_Week', 'Total_Visits', 'Total Hours Delayed', 'Avg Delay per Visit']], "store_staging_by_day")
+        else:
+            st.info("No material store staging records discovered inside loaded field parameters.")
 
-# --- RUN EXECUTION Pipeline BLOCK FOR FILE MOUNTING ---
+# --- THE MAIN TOP-LEVEL BASE EXECUTION PIPELINE LAYER BLOCK ---
 st.sidebar.header("📂 Data Loading Pipeline")
 time_file = st.sidebar.file_uploader("Upload Time Sheet (CSV)", type=['csv'])
 ops_file = st.sidebar.file_uploader("Upload Lowes Ops Export (CSV)", type=['csv'])
@@ -886,16 +914,18 @@ if time_file and ops_file:
         ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On The Way - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
-        unexploded_ops = ops_df.copy()
-        
-        raw_unsplit_volume = unexploded_ops['Total Invoice Amount'].sum()
-        
+
+        # PARSE TIMESTAMPS FOR BOTH ENGINES TO ACQUIRE THE DAY OF THE WEEK
         ts_cols = ['Lowes Store - Start Timestamp', 'On The Way - Start Timestamp', 'In Progress - Start Timestamp', 'On The Way - Start Timestamp.1', 'In Progress - Start Timestamp.1']
         available_ts_cols = [c for c in ts_cols if c in ops_df.columns]
         ops_df['Job_Date'] = ops_df[available_ts_cols].bfill(axis=1).iloc[:, 0]
         for c in available_ts_cols: ops_df[c + '_dt'] = pd.to_datetime(ops_df[c].astype(str).str.split(' GMT').str[0], errors='coerce')
         available_ts_dt_cols = [c + '_dt' for c in available_ts_cols]
         ops_df['Earliest_Start'] = ops_df[available_ts_dt_cols].min(axis=1)
+        ops_df['Estimated_End'] = ops_df['Earliest_Start'] + pd.to_timedelta(ops_df['Total_Job_Time_Hours'] * 3600, unit='s')
+        ops_df['Job_Date_Parsed'] = pd.to_datetime(ops_df['Job_Date'].astype(str).str.split(' GMT').str[0], errors='coerce')
+        ops_df['Day_of_Week'] = ops_df['Job_Date_Parsed'].dt.day_name().str[:3]
+        ops_df['Short_Date'] = ops_df['Job_Date_Parsed'].dt.strftime('%m-%d-%Y')
         
         def get_first_status_col(row):
             min_t = pd.NaT
@@ -913,6 +943,10 @@ if time_file and ops_file:
             if 'Way' in str(col): return 'On The Way'
             return 'In Progress'
         ops_df['Earliest_Status'] = ops_df['Earliest_Status_Col'].apply(map_status)
+
+        # UNEXPLODED MASTER DATASETS COPY CAPTURES DAY VELOCITIES SAFELY
+        unexploded_ops = ops_df.copy()
+        raw_unsplit_volume = unexploded_ops['Total Invoice Amount'].sum()
         
         exploded_rows = []
         for idx, row in ops_df.iterrows():
@@ -938,18 +972,6 @@ if time_file and ops_file:
         else:
             ops_df = pd.DataFrame(columns=ops_df.columns)
 
-        ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
-        ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On The Way - Completed Total Time in Status.1', 0)) / 3600.0
-        ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
-        ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
-        
-        def calculate_tech_count_local(val): return max(1, len(str(val).split(',')))
-        ops_df['Tech_Count_On_Job'] = ops_df['Assigned Team Members'].apply(calculate_tech_count_local)
-        ops_df['Estimated_End'] = ops_df['Earliest_Start'] + pd.to_timedelta(ops_df['Total_Job_Time_Hours'] * 3600, unit='s')
-        ops_df['Job_Date_Parsed'] = pd.to_datetime(ops_df['Job_Date'].astype(str).str.split(' GMT').str[0], errors='coerce')
-        ops_df['Day_of_Week'] = ops_df['Job_Date_Parsed'].dt.day_name().str[:3]
-        ops_df['Short_Date'] = ops_df['Job_Date_Parsed'].dt.strftime('%m-%d-%Y')
-        
         ops_sorted = ops_df.dropna(subset=['Earliest_Start']).sort_values(['Assigned Team Members', 'Earliest_Start'])
         bounds_df = ops_sorted.groupby(['Assigned Team Members', 'Short_Date']).agg(
             First_Punch=('Earliest_Start', 'min'),
