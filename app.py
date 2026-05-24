@@ -825,7 +825,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         show_yield['Total Man-Hours'] = show_yield['Total_Man_Hours'].apply(format_hm)
         show_yield['Added Helper Cost'] = show_yield['Total_Helper_Cost'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
         show_yield['Avg Revenue per Job'] = show_yield['Avg Revenue per Job'].apply(lambda x: f"${x:,.2f}")
-        show_yield['Revenue per Man-Hour'] = show_yield['Revenue per Man-Hour'].apply(lambda x: f"{x:.1f}/hr")
+        show_yield['Revenue per Man-Hour'] = show_yield['Revenue per Man-Hour'].apply(lambda x: f"${x:,.2f}/hr")
         st.table(show_yield[['Type', 'Job_Count', 'Total Revenue', 'Total Field Hours', 'Total Man-Hours', 'Added Helper Cost', 'Avg Revenue per Job', 'Revenue per Man-Hour']].rename(columns={'Job_Count': 'Jobs Assigned'}))
         create_copy_button(show_yield, "multi_tech_yield")
         
@@ -916,10 +916,10 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         else:
             st.info("No invoice details located inside loaded operations datasets.")
 
-    # Sortable Filterable revenue profit margins table panel layer block
+    # INTERACTIVE SORTABLE COMPREHENSIVE REVENUE NET PROFITABILITY MATRIX PANEL
     if "🛢️ Water Heater True Net Profitability Margin Auditor" in test_choices:
         st.markdown("### **💵 Division True Net Profitability Margin Auditor**")
-        st.markdown("*(Evaluates net profitability metrics across selected sectors. Overview totals include contractors, itemized register excludes them)*")
+        st.markdown("*(Evaluates net profitability metrics across selected sectors factoring applied contract structures and cost back-outs)*")
         if not unexploded_ops.empty and 'Total Product Cost [tax inc]' in unexploded_ops.columns:
             df_prof = unexploded_ops.copy()
             df_prof['Product_Cost'] = pd.to_numeric(df_prof['Total Product Cost [tax inc]'], errors='coerce').fillna(0.0)
@@ -964,7 +964,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             with sort_pane_col:
                 selected_sort_choice = st.selectbox("Sort Itemized Register Results By:", ["Highest Net Profit", "Lowest Net Profit", "Highest Gross Invoice", "Highest Margin %", "Job ID"], key="sorting_perf_matrix")
                 
-            # CRITICAL FIX SYNCHRONIZATION: Overview Totals df_prof_totals includes contractors cleanly matching user query
+            # Overview Totals df_prof_totals includes contractors cleanly matching overview totals values
             df_prof_totals = df_prof.copy()
             if selected_bu_filter != "All Sectors":
                 df_prof_totals = df_prof_totals[df_prof_totals['Business Unit'] == selected_bu_filter]
@@ -1038,7 +1038,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 return not any(m in CORE_TECHS for m in raw_members)
             df_cc['Is_Contractor'] = df_cc['Assigned Team Members'].apply(check_contractor_cc)
             
-            # CRITICAL CONSOLIDATION STEP: Contractor inclusion layer active for macro breakdown grids to secure matching metrics tracking values
+            # Contractor inclusion layer matches cost matrix totals for aggregate division oversight
             df_cc['Cost_Burden_Sub'] = np.where(
                 df_cc['Business Unit'] == 'Lowes - Water Heaters',
                 np.where(df_cc['Tech_Count'] > 1, 175.0, 100.0),
@@ -1265,6 +1265,7 @@ if time_file and ops_file:
         daily_route = daily_route[daily_route['Total_Job_Time_Hours'] > 0].copy()
         daily_route['Drive %'] = (daily_route['Drive_Time_Hrs'] / daily_route['Total_Job_Time_Hours']) * 100
         
+        # CRITICAL RE-ALIGNMENT FIX: Unified, non-duplicate single linear assembly pipeline mapping for final_df records matrix
         final_df = pd.merge(time_df, job_time_pivot, on='Name', how='left').fillna(0)
         final_df = pd.merge(final_df, job_count_pivot, on='Name', how='left').fillna(0)
         if not bu_pivot.empty: final_df = pd.merge(final_df, bu_pivot[['Name', 'Simple_Installs_Hrs', 'Water_Heaters_Hrs', 'Simple_Installs_Count', 'Water_Heaters_Count']], on='Name', how='left').fillna(0)
@@ -1290,6 +1291,7 @@ if time_file and ops_file:
         
         final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
         final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * 3.5
+        final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
         final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
         final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
 
@@ -1367,11 +1369,6 @@ if time_file and ops_file:
             # === MACRO DASHBOARD PANEL ===
             st.markdown("<br><hr><h3>📊 Macro Financial Performance Dashboard</h3>", unsafe_allow_html=True)
             
-            rev_per_hour_df_calc = final_df.copy()
-            rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(get_assumed_pay, axis=1)
-            total_assumed_pay = rev_per_hour_df_calc['Assumed Pay Amount'].sum()
-            pay_ratio_pct = (total_assumed_pay / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
-            
             dash_metric_col1, dash_metric_col2, dash_metric_col3 = st.columns(3)
             with dash_metric_col1:
                 st.metric(label="Division Gross Invoiced Volume", value=f"${raw_unsplit_volume:,.2f}")
@@ -1380,37 +1377,6 @@ if time_file and ops_file:
             with dash_metric_col3:
                 st.metric(label="Division Labor Pay Ratio", value=f"{pay_ratio_pct:.1f}%")
                 
-            ops_df['Computed_Row_Pay'] = ops_df['Assigned Team Members'].map(rev_per_hour_df_calc.set_index('Name')['Assumed Pay Amount'].to_dict()).fillna(0.0)
-            tech_total_field_hrs = ops_df.groupby('Assigned Team Members')['Total_Job_Time_Hours'].sum().reset_index().rename(columns={'Total_Job_Time_Hours': 'Tech_Total_Work_Hrs'})
-            
-            if 'Tech_Total_Work_Hrs' in ops_df.columns: ops_df = ops_df.drop(columns=['Tech_Total_Work_Hrs'])
-            ops_df = pd.merge(ops_df, tech_total_field_hrs, on='Assigned Team Members', how='left')
-            ops_df['Job_Time_Weight'] = np.where(ops_df['Tech_Total_Work_Hrs'] > 0, ops_df['Total_Job_Time_Hours'] / ops_df['Tech_Total_Work_Hrs'], 0.0)
-            ops_df['Allocated_Job_Pay'] = ops_df['Computed_Row_Pay'] * ops_df['Job_Time_Weight']
-            
-            ops_df['Allocated_Job_Pay'] = np.where(
-                ops_df['Assigned Team Members'].str.lower().str.contains('bryan') | ops_df['Assigned Team Members'].str.lower().str.contains('erik'),
-                ops_df['Total Invoice Amount'] * 0.33,
-                ops_df['Allocated_Job_Pay']
-            )
-            
-            bu_gross_rev = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].sum().reset_index()
-            bu_gross_rev.columns = ['Business Unit', 'Gross Invoiced Revenue Raw']
-            total_macro_sum = bu_gross_rev['Gross Invoiced Revenue Raw'].sum() if bu_gross_rev['Gross Invoiced Revenue Raw'].sum() > 0 else 1.0
-            bu_gross_rev['Rev Share %'] = (bu_gross_rev['Gross Invoiced Revenue Raw'] / total_macro_sum * 100).apply(lambda x: f"{x:.1f}%")
-            
-            bu_pay_split = ops_df.groupby('Business Unit')['Allocated_Job_Pay'].sum().reset_index().rename(columns={'Allocated_Job_Pay': 'Assumed Pay Raw'})
-            bu_financial_matrix = pd.merge(bu_gross_rev, bu_pay_split, on='Business Unit', how='left').fillna(0.0)
-            
-            bu_financial_matrix['Assumed Pay'] = bu_financial_matrix['Assumed Pay Raw'].apply(lambda x: f"${x:,.2f}")
-            bu_financial_matrix['Pay % of Revenue'] = np.where(
-                bu_financial_matrix['Gross Invoiced Revenue Raw'] > 0,
-                (bu_financial_matrix['Assumed Pay Raw'] / bu_financial_matrix['Gross Invoiced Revenue Raw']) * 100,
-                0.0
-            )
-            bu_financial_matrix['Pay % of Revenue'] = bu_financial_matrix['Pay % of Revenue'].apply(lambda x: f"{x:.1f}%")
-            bu_financial_matrix['Gross Invoiced Revenue'] = bu_financial_matrix['Gross Invoiced Revenue Raw'].apply(lambda x: f"${x:,.2f}")
-            
             m_col1, m_col2 = st.columns([1.2, 1.8])
             with m_col1:
                 st.markdown("<br>**📈 Gross Invoiced Revenue & Payroll by Business Unit**", unsafe_allow_html=True)
