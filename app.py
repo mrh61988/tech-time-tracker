@@ -15,6 +15,9 @@ st.markdown("""
     [data-testid="stSelectbox"] { display: none !important; }
     div[data-baseweb="tab-list"] { display: none !important; }
     h1 { display: none !important; }
+    .hide-on-print { display: none !important; }
+    .stAlert { display: none !important; }
+    
     .main .block-container {
         max-width: 100% !important;
         width: 100% !important;
@@ -202,6 +205,19 @@ def highlight_matrix_overhead(s):
         except:
             styles.append('')
     return styles
+
+def highlight_over_hour_row(row):
+    val = str(row['Over Division Average By']).replace('+', '').strip()
+    if ':' in val:
+        try:
+            parts = val.split(':')
+            h = int(parts[0])
+            m = int(parts[1]) if len(parts) > 1 else 0
+            if h > 1 or (h == 1 and m > 0):
+                return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row)
+        except:
+            pass
+    return [''] * len(row)
 
 # --- MAIN BLOCK REPORT ENGINE ---
 def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
@@ -448,8 +464,8 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 context_agg['Average Fleet Job Turnaround'] = context_agg['Avg_Job_Turnaround'].apply(format_hm)
                 st.dataframe(context_agg[['Day Type', 'Total_Days', 'Average Fleet Job Turnaround']].rename(columns={'Total_Days': 'Days Analyzed'}), use_container_width=True)
 
-    if "🕵️ The Ghost Punch & Payroll Discrepancy Auditor" in test_choices:
-        st.markdown("### **🕵️ The Ghost Punch & Payroll Discrepancy Auditor**")
+    if "🕵️ The \"Ghost Punch\" & Payroll Discrepancy Auditor" in test_choices:
+        st.markdown("### **🕵️ The \"Ghost Punch\" & Payroll Discrepancy Auditor**")
         ghost_alerts = []
         for idx, row in final_df.iterrows():
             tech_name = row['Name']
@@ -460,10 +476,12 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             for d in ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]:
                 clocked = row[f'{d}_Clocked_Hrs']
                 jobs = row[f'{d}_Job_Count']
-                if clocked > 0 and jobs == 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🕵️ Paid But Idle (Clocked In, 0 Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": 0})
-                elif clocked == 0 and jobs > 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🚨 Unpaid Field Work (0 Hours Clocked, Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": int(jobs)})
+                if clocked > 0 and jobs == 0:
+                    ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🕵️ Paid But Idle (Clocked In, 0 Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": 0})
+                elif clocked == 0 and jobs > 0:
+                    ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🚨 Unpaid Field Work (0 Hours Clocked, Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": int(jobs)})
         if ghost_alerts: st.dataframe(pd.DataFrame(ghost_alerts), use_container_width=True)
-        else: st.success("Perfect alignment! No payroll discrepancy errors detected.")
+        else: st.success("Perfect alignment! No payroll discrepancy errors detected on current sheets.")
 
     if "¼ The Lowe's Store Staging Efficiency Scorecard" in test_choices:
         st.markdown("### **¼ The Lowe's Store Staging Efficiency Scorecard**")
@@ -586,8 +604,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                         "Technician": tech_name,
                         "Job ID": str(jid),
                         "Job Duration": format_hm(j['Total_Job_Time_Hours']),
-                        "Over Division Average By": f"+{format_hm(diff_val)}",
-                        "sort_key": diff_val
+                        "Over Division Average By": f"+{format_hm(diff_val)}"
                     })
             
             if pd.notna(div_lsi_baseline):
@@ -598,20 +615,19 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                         "Technician": tech_name,
                         "Job ID": str(jid),
                         "Job Duration": format_hm(j['Total_Job_Time_Hours']),
-                        "Over Division Average By": f"+{format_hm(diff_val)}",
-                        "sort_key": diff_val
+                        "Over Division Average By": f"+{format_hm(diff_val)}"
                     })
             
-            matrix_rows.append({
-                "Name": tech_name,
-                "Total Avg Job Time": f"{format_hm(avg_total_val)} (Div: {format_hm(div_avg_total)})" if pd.notna(avg_total_val) else "-",
-                "Avg WH Time": f"{format_hm(avg_wh_val)} (Div: {format_hm(div_wh_baseline)})" if pd.notna(avg_wh_val) else "-",
-                "Avg LSI Time": f"{format_hm(avg_lsi_val)} (Div: {format_hm(div_lsi_baseline)})" if pd.notna(avg_lsi_val) else "-",
-                "Avg WH Store Time": f"{format_hm(avg_wh_store_val)} (Div: {format_hm(div_wh_store_baseline)})" if pd.notna(avg_wh_store_val) else "-",
-                "Avg LSI Store Time": f"{format_hm(avg_lsi_store_val)} (Div: {format_hm(div_lsi_store_baseline)})" if pd.notna(avg_lsi_store_val) else "-",
-                "Max Single Job Length": max_job_str,
-                "sort_key": avg_total_val if pd.notna(avg_total_val) else -1.0
-            })
+                    matrix_rows.append({
+                        "Name": tech_name,
+                        "Total Avg Job Time": f"{format_hm(avg_total_val)} (Div: {format_hm(div_avg_total)})" if pd.notna(avg_total_val) else "-",
+                        "Avg WH Time": f"{format_hm(avg_wh_val)} (Div: {format_hm(div_wh_baseline)})" if pd.notna(avg_wh_val) else "-",
+                        "Avg LSI Time": f"{format_hm(avg_lsi_val)} (Div: {format_hm(div_lsi_baseline)})" if pd.notna(avg_lsi_val) else "-",
+                        "Avg WH Store Time": f"{format_hm(avg_wh_store_val)} (Div: {format_hm(div_wh_store_baseline)})" if pd.notna(avg_wh_store_val) else "-",
+                        "Avg LSI Store Time": f"{format_hm(avg_lsi_store_val)} (Div: {format_hm(div_lsi_store_baseline)})" if pd.notna(avg_lsi_store_val) else "-",
+                        "Max Single Job Length": max_job_str,
+                        "sort_key": avg_total_val if pd.notna(avg_total_val) else -1.0
+                    })
             
         matrix_df = pd.DataFrame(matrix_rows)
         if not matrix_df.empty:
@@ -624,23 +640,31 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             st.dataframe(matrix_df.reset_index(drop=True), use_container_width=True)
             
         st.markdown("<br>#### 🚨 Individual Over-Baseline Job Reference Breakdown", unsafe_allow_html=True)
-        st.markdown("*(Granular tracking sheets isolating individual work orders exceeding the division run baselines, sorted largest variation to lowest)*")
+        st.markdown("*(Granular tracking sheets isolating individual work orders exceeding the division run baselines, sorted largest variation to lowest. Rows >1 hour over are flagged)*")
         
         split_col1, split_col2 = st.columns(2)
         
         with split_col1:
             st.markdown("##### 🛢️ Water Heaters Over-Baseline Jobs")
             if wh_over_baseline_rows:
-                wh_matrix_df = pd.DataFrame(wh_over_baseline_rows).sort_values(by='sort_key', ascending=False).drop(columns=['sort_key'])
-                st.dataframe(wh_matrix_df.reset_index(drop=True), use_container_width=True)
+                wh_matrix_df = pd.DataFrame(wh_over_baseline_rows).reset_index(drop=True)
+                try:
+                    styled_wh = wh_matrix_df.style.apply(highlight_over_hour_row, axis=1)
+                    st.dataframe(styled_wh, use_container_width=True)
+                except Exception:
+                    st.dataframe(wh_matrix_df, use_container_width=True)
             else:
                 st.success("✅ Zero individual Water Heater jobs exceeded the division baseline average.")
                 
         with split_col2:
             st.markdown("##### 🔧 Simple Installs Over-Baseline Jobs")
             if lsi_over_baseline_rows:
-                lsi_matrix_df = pd.DataFrame(lsi_over_baseline_rows).sort_values(by='sort_key', ascending=False).drop(columns=['sort_key'])
-                st.dataframe(lsi_matrix_df.reset_index(drop=True), use_container_width=True)
+                lsi_matrix_df = pd.DataFrame(lsi_over_baseline_rows).reset_index(drop=True)
+                try:
+                    styled_lsi = lsi_matrix_df.style.apply(highlight_over_hour_row, axis=1)
+                    st.dataframe(styled_lsi, use_container_width=True)
+                except Exception:
+                    st.dataframe(lsi_matrix_df, use_container_width=True)
             else:
                 st.success("✅ Zero individual Simple Install jobs exceeded the division baseline average.")
 
@@ -880,7 +904,6 @@ if time_file and ops_file:
         bu_summary_df['WH Efficiency'] = final_df['Water Heaters Eff']
         bu_summary_df['Total Efficiency'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, (final_df['Total_Weekly_Job_Hrs'] / final_df['Total_Weekly_Clocked_Hrs']) * 100, 0.0)
         bu_summary_df['Total Efficiency'] = bu_summary_df['Total Efficiency'].apply(lambda x: f"{x:.1f}%")
-        
         bu_summary_df['Total Unallocated Hours'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
         display_dfs['Weekly'] = bu_summary_df
         
@@ -1059,7 +1082,7 @@ if time_file and ops_file:
                         if clocked > 0 and jobs == 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🕵️ Paid But Idle (Clocked In, 0 Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": 0})
                         elif clocked == 0 and jobs > 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🚨 Unpaid Field Work (0 Hours Clocked, Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": int(jobs)})
                 if ghost_alerts: st.dataframe(pd.DataFrame(ghost_alerts), use_container_width=True)
-                else: st.success("Perfect alignment! No payroll discrepancy errors detected on current sheets.")
+                else: st.success("Perfect alignment! No payroll discrepancy errors detected.")
 
             if "¼ The Lowe's Store Staging Efficiency Scorecard" in test_choices:
                 st.markdown("### **¼ The Lowe's Store Staging Efficiency Scorecard**")
@@ -1125,19 +1148,16 @@ if time_file and ops_file:
                 margin_df['Margin per Clocked Hour'] = margin_df['Margin per Clocked Hour Raw'].apply(lambda x: f"${x:,.2f}/hr")
                 st.dataframe(margin_df[['Name', 'Total Clocked', 'Total Assigned Revenue', 'Assumed Pay', 'Total Net Margin', 'Margin per Clocked Hour']].reset_index(drop=True), use_container_width=True)
 
-            # === ADVANCED BASELINES MATRIX CONTEXT LAYOUTS ===
             if "📋 Advanced Team Processing Baselines Matrix" in test_choices:
                 st.markdown("### **📋 Advanced Team Processing Baselines Matrix**")
                 
                 wh_jobs = ops_df[ops_df['Business Unit'] == 'Lowes - Water Heaters']
                 lsi_jobs = ops_df[ops_df['Business Unit'] == 'Lowes - Simple Installs']
                 
-                # Pull global baselines for total job durations
                 div_avg_total = ops_df['Total_Job_Time_Hours'].mean() if not ops_df.empty else 0.0
                 div_wh_baseline = wh_jobs['Total_Job_Time_Hours'].mean() if not wh_jobs.empty else 3.5
                 div_lsi_baseline = lsi_jobs['Total_Job_Time_Hours'].mean() if not lsi_jobs.empty else 2.0
                 
-                # Filter division baseline store parameters to strictly ignore direct-to-site jobs
                 wh_jobs_with_store = wh_jobs[wh_jobs['Store_Time_Hrs'] > 0]
                 lsi_jobs_with_store = lsi_jobs[lsi_jobs['Store_Time_Hrs'] > 0]
                 div_wh_store_baseline = wh_jobs_with_store['Store_Time_Hrs'].mean() if not wh_jobs_with_store.empty else 0.5
@@ -1162,13 +1182,11 @@ if time_file and ops_file:
                     avg_wh_val = t_wh['Total_Job_Time_Hours'].mean() if not t_wh.empty else np.nan
                     avg_lsi_val = t_lsi['Total_Job_Time_Hours'].mean() if not t_lsi.empty else np.nan
                     
-                    # Filter individual technician metrics to strictly average positions where store time occurs (> 0)
                     t_wh_store = t_wh[t_wh['Store_Time_Hrs'] > 0]
                     t_lsi_store = t_lsi[t_lsi['Store_Time_Hrs'] > 0]
                     avg_wh_store_val = t_wh_store['Store_Time_Hrs'].mean() if not t_wh_store.empty else np.nan
                     avg_lsi_store_val = t_lsi_store['Store_Time_Hrs'].mean() if not t_lsi_store.empty else np.nan
                     
-                    # Grab the exact work order ID corresponding to the maximum duration value line item row
                     if not tech_jobs.empty:
                         max_idx = tech_jobs['Total_Job_Time_Hours'].idxmax()
                         max_job_val = tech_jobs['Total_Job_Time_Hours'].max()
@@ -1179,7 +1197,6 @@ if time_file and ops_file:
                     else:
                         max_job_str = "-"
                         
-                    # Compile Water Heaters outliers with precise float delta calculations
                     if pd.notna(div_wh_baseline):
                         for _, j in t_wh[t_wh['Total_Job_Time_Hours'] > div_wh_baseline].iterrows():
                             jid = int(j['#ID']) if isinstance(j['#ID'], float) and j['#ID'].is_integer() else j['#ID']
@@ -1192,7 +1209,6 @@ if time_file and ops_file:
                                 "sort_key": diff_val
                             })
                     
-                    # Compile Simple Installs outliers with precise float delta calculations
                     if pd.notna(div_lsi_baseline):
                         for _, j in t_lsi[t_lsi['Total_Job_Time_Hours'] > div_lsi_baseline].iterrows():
                             jid = int(j['#ID']) if isinstance(j['#ID'], float) and j['#ID'].is_integer() else j['#ID']
@@ -1226,25 +1242,32 @@ if time_file and ops_file:
                 except Exception:
                     st.dataframe(matrix_df.reset_index(drop=True), use_container_width=True)
                     
-                # Rendered individual over-baseline lookup tracking frame table space directly underneath the primary baseline dataframe grid
                 st.markdown("<br>#### 🚨 Individual Over-Baseline Job Reference Breakdown", unsafe_allow_html=True)
-                st.markdown("*(Granular tracking sheets isolating individual work orders exceeding the division run baselines, sorted largest variation to lowest)*")
+                st.markdown("*(Granular tracking sheets isolating individual work orders exceeding the division run baselines, sorted largest variation to lowest. Rows >1 hour over are highlighted)*")
                 
                 split_col1, split_col2 = st.columns(2)
                 
                 with split_col1:
                     st.markdown("##### 🛢️ Water Heaters Over-Baseline Jobs")
                     if wh_over_baseline_rows:
-                        wh_matrix_df = pd.DataFrame(wh_over_baseline_rows).sort_values(by='sort_key', ascending=False).drop(columns=['sort_key'])
-                        st.dataframe(wh_matrix_df.reset_index(drop=True), use_container_width=True)
+                        wh_matrix_df = pd.DataFrame(wh_over_baseline_rows).sort_values(by='sort_key', ascending=False).drop(columns=['sort_key']).reset_index(drop=True)
+                        try:
+                            styled_wh = wh_matrix_df.style.apply(highlight_over_hour_row, axis=1)
+                            st.dataframe(styled_wh, use_container_width=True)
+                        except Exception:
+                            st.dataframe(wh_matrix_df, use_container_width=True)
                     else:
                         st.success("✅ Zero individual Water Heater jobs exceeded the division baseline average.")
                         
                 with split_col2:
                     st.markdown("##### 🔧 Simple Installs Over-Baseline Jobs")
                     if lsi_over_baseline_rows:
-                        lsi_matrix_df = pd.DataFrame(lsi_over_baseline_rows).sort_values(by='sort_key', ascending=False).drop(columns=['sort_key'])
-                        st.dataframe(lsi_matrix_df.reset_index(drop=True), use_container_width=True)
+                        lsi_matrix_df = pd.DataFrame(lsi_over_baseline_rows).sort_values(by='sort_key', ascending=False).drop(columns=['sort_key']).reset_index(drop=True)
+                        try:
+                            styled_lsi = lsi_matrix_df.style.apply(highlight_over_hour_row, axis=1)
+                            st.dataframe(styled_lsi, use_container_width=True)
+                        except Exception:
+                            st.dataframe(lsi_matrix_df, use_container_width=True)
                     else:
                         st.success("✅ Zero individual Simple Install jobs exceeded the division baseline average.")
                         
