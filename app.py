@@ -463,7 +463,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 if clocked > 0 and jobs == 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🕵️ Paid But Idle (Clocked In, 0 Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": 0})
                 elif clocked == 0 and jobs > 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🚨 Unpaid Field Work (0 Hours Clocked, Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": int(jobs)})
         if ghost_alerts: st.dataframe(pd.DataFrame(ghost_alerts), use_container_width=True)
-        else: st.success("Perfect alignment! No payroll discrepancy errors detected on current sheets.")
+        else: st.success("Perfect alignment! No payroll discrepancy errors detected.")
 
     if "¼ The Lowe's Store Staging Efficiency Scorecard" in test_choices:
         st.markdown("### **¼ The Lowe's Store Staging Efficiency Scorecard**")
@@ -493,7 +493,13 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             rev_per_hour_df['Assumed Pay'] = rev_per_hour_df['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
             rev_per_hour_df['Pay Pct'] = np.where(rev_per_hour_df['Total_Assigned_Revenue'] > 0, (rev_per_hour_df['Assumed Pay Amount'] / rev_per_hour_df['Total_Assigned_Revenue']) * 100, 0.0)
             rev_per_hour_df['Pay % vs Assigned Revenue'] = rev_per_hour_df['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
-            show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[['Name', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue']]
+            
+            rev_per_hour_df['Net Margin Raw'] = rev_per_hour_df['Total_Assigned_Revenue'] - rev_per_hour_df['Assumed Pay Amount']
+            rev_per_hour_df['Total Net Margin'] = rev_per_hour_df['Net Margin Raw'].apply(lambda x: f"${x:,.2f}")
+            rev_per_hour_df['Margin per Clocked Hour Raw'] = np.where(rev_per_hour_df['Total_Weekly_Clocked_Hrs'] > 0, rev_per_hour_df['Net Margin Raw'] / rev_per_hour_df['Total_Weekly_Clocked_Hrs'], 0.0)
+            rev_per_hour_df['Margin per Clocked Hour'] = rev_per_hour_df['Margin per Clocked Hour Raw'].apply(lambda x: f"${x:,.2f}/hr")
+            
+            show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue', 'Total Net Margin', 'Margin per Clocked Hour']]
             st.dataframe(show_rev_per_hour.reset_index(drop=True).style.apply(highlight_pay_pct_row, axis=1), use_container_width=True)
 
     if "📊 Business Unit Revenue Velocity" in test_choices:
@@ -536,7 +542,6 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         wh_jobs = ops_df[ops_df['Business Unit'] == 'Lowes - Water Heaters']
         lsi_jobs = ops_df[ops_df['Business Unit'] == 'Lowes - Simple Installs']
         
-        # Pull global baselines for total job durations
         div_avg_total = ops_df['Total_Job_Time_Hours'].mean() if not ops_df.empty else 0.0
         div_wh_baseline = wh_jobs['Total_Job_Time_Hours'].mean() if not wh_jobs.empty else 3.5
         div_lsi_baseline = lsi_jobs['Total_Job_Time_Hours'].mean() if not lsi_jobs.empty else 2.0
@@ -553,6 +558,8 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         """)
         
         matrix_rows = []
+        over_baseline_rows = []
+        
         for tech_name in sorted(ops_df['Assigned Team Members'].unique()):
             tech_jobs = ops_df[ops_df['Assigned Team Members'] == tech_name]
             
@@ -563,13 +570,44 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             avg_wh_val = t_wh['Total_Job_Time_Hours'].mean() if not t_wh.empty else np.nan
             avg_lsi_val = t_lsi['Total_Job_Time_Hours'].mean() if not t_lsi.empty else np.nan
             
-            # Filter individual technician metrics to strictly average positions where store time occurs (> 0)
+            # Filter individual technician metrics to completely ignore direct-to-site work orders with zero hours
             t_wh_store = t_wh[t_wh['Store_Time_Hrs'] > 0]
             t_lsi_store = t_lsi[t_lsi['Store_Time_Hrs'] > 0]
             avg_wh_store_val = t_wh_store['Store_Time_Hrs'].mean() if not t_wh_store.empty else np.nan
             avg_lsi_store_val = t_lsi_store['Store_Time_Hrs'].mean() if not t_lsi_store.empty else np.nan
             
-            max_job = tech_jobs['Total_Job_Time_Hours'].max() if not tech_jobs.empty else 0.0
+            # FIXED: Grab the exact work order ID corresponding to the maximum duration value line item row
+            if not tech_jobs.empty:
+                max_idx = tech_jobs['Total_Job_Time_Hours'].idxmax()
+                max_job_val = tech_jobs.loc[max_idx, 'Total_Job_Time_Hours']
+                max_job_id = tech_jobs.loc[max_idx, '#ID']
+                if isinstance(max_job_id, float) and max_job_id.is_integer():
+                    max_job_id = int(max_job_id)
+                max_job_str = f"{format_hm(max_job_val)} (ID: {max_job_id})"
+            else:
+                max_job_str = "-"
+                
+            # FIXED: Compile individual over-average jobs for the breakdown data frame space underneath
+            if pd.notna(div_wh_baseline):
+                for _, j in t_wh[t_wh['Total_Job_Time_Hours'] > div_wh_baseline].iterrows():
+                    jid = int(j['#ID']) if isinstance(j['#ID'], float) and j['#ID'].is_integer() else j['#ID']
+                    over_baseline_rows.append({
+                        "Technician": tech_name,
+                        "Job ID": str(jid),
+                        "Business Unit": "Water Heaters",
+                        "Job Duration": format_hm(j['Total_Job_Time_Hours']),
+                        "Over Division Average By": f"+{format_hm(j['Total_Job_Time_Hours'] - div_wh_baseline)}"
+                    })
+            if pd.notna(div_lsi_baseline):
+                for _, j in t_lsi[t_lsi['Total_Job_Time_Hours'] > div_lsi_baseline].iterrows():
+                    jid = int(j['#ID']) if isinstance(j['#ID'], float) and j['#ID'].is_integer() else j['#ID']
+                    over_baseline_rows.append({
+                        "Technician": tech_name,
+                        "Job ID": str(jid),
+                        "Business Unit": "Simple Installs",
+                        "Job Duration": format_hm(j['Total_Job_Time_Hours']),
+                        "Over Division Average By": f"+{format_hm(j['Total_Job_Time_Hours'] - div_lsi_baseline)}"
+                    })
             
             matrix_rows.append({
                 "Name": tech_name,
@@ -578,14 +616,12 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 "Avg LSI Time": f"{format_hm(avg_lsi_val)} (Div: {format_hm(div_lsi_baseline)})" if pd.notna(avg_lsi_val) else "-",
                 "Avg WH Store Time": f"{format_hm(avg_wh_store_val)} (Div: {format_hm(div_wh_store_baseline)})" if pd.notna(avg_wh_store_val) else "-",
                 "Avg LSI Store Time": f"{format_hm(avg_lsi_store_val)} (Div: {format_hm(div_lsi_store_baseline)})" if pd.notna(avg_lsi_store_val) else "-",
-                "Max Single Job Length": format_hm(max_job),
-                # FIXED: Added raw sorting key value straight to data vector dictionaries
+                "Max Single Job Length": max_job_str,
                 "sort_key": avg_total_val if pd.notna(avg_total_val) else -1.0
             })
             
         matrix_df = pd.DataFrame(matrix_rows)
         if not matrix_df.empty:
-            # FIXED: Sorted the compiled results array matrix by highest total avg job time raw values descending
             matrix_df = matrix_df.sort_values(by='sort_key', ascending=False).drop(columns=['sort_key'])
             
         try:
@@ -593,6 +629,14 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             st.dataframe(styled_matrix, use_container_width=True)
         except Exception:
             st.dataframe(matrix_df.reset_index(drop=True), use_container_width=True)
+            
+        # FIXED: Rendered individual over-baseline lookup tracking frame table space directly underneath the primary baseline dataframe grid
+        st.markdown("<br>#### 🚨 Individual Over-Baseline Job Reference Breakdown", unsafe_allow_html=True)
+        st.markdown("*(Granular lookup tracking every unique service ticket that exceeded the division baseline runtime for its specific business unit)*")
+        if over_baseline_rows:
+            st.dataframe(pd.DataFrame(over_baseline_rows), use_container_width=True)
+        else:
+            st.success("Excellent! Zero individual jobs ran over the division averages this week.")
 
 # --- RUN EXECUTION PIPELINE ---
 col1, col2 = st.columns(2)
@@ -631,6 +675,7 @@ if time_file and ops_file:
         ops_df = ops_df.dropna(subset=['Assigned Team Members'])
         time_cols = ['Lowes Store - Completed Total Time in Status', 'On The Way - Completed Total Time in Status', 'In Progress - Completed Total Time in Status', 'On The Way - Completed Total Time in Status.1', 'In Progress - Completed Total Time in Status.1']
         
+        # Pre-process numeric elements
         for col in time_cols: ops_df[col] = pd.to_numeric(ops_df[col], errors='coerce').fillna(0)
         ops_df['Total Invoice Amount'] = pd.to_numeric(ops_df.get('Total Invoice Amount', pd.Series([0])), errors='coerce').fillna(0.0)
         
@@ -830,6 +875,7 @@ if time_file and ops_file:
         bu_summary_df['WH Efficiency'] = final_df['Water Heaters Eff']
         bu_summary_df['Total Efficiency'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, (final_df['Total_Weekly_Job_Hrs'] / final_df['Total_Weekly_Clocked_Hrs']) * 100, 0.0)
         bu_summary_df['Total Efficiency'] = bu_summary_df['Total Efficiency'].apply(lambda x: f"{x:.1f}%")
+        
         bu_summary_df['Total Unallocated Hours'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
         display_dfs['Weekly'] = bu_summary_df
         
@@ -1081,10 +1127,12 @@ if time_file and ops_file:
                 wh_jobs = ops_df[ops_df['Business Unit'] == 'Lowes - Water Heaters']
                 lsi_jobs = ops_df[ops_df['Business Unit'] == 'Lowes - Simple Installs']
                 
+                # Pull global baselines for total job durations
                 div_avg_total = ops_df['Total_Job_Time_Hours'].mean() if not ops_df.empty else 0.0
                 div_wh_baseline = wh_jobs['Total_Job_Time_Hours'].mean() if not wh_jobs.empty else 3.5
                 div_lsi_baseline = lsi_jobs['Total_Job_Time_Hours'].mean() if not lsi_jobs.empty else 2.0
                 
+                # Filter division baseline store parameters to strictly ignore direct-to-site jobs
                 wh_jobs_with_store = wh_jobs[wh_jobs['Store_Time_Hrs'] > 0]
                 lsi_jobs_with_store = lsi_jobs[lsi_jobs['Store_Time_Hrs'] > 0]
                 div_wh_store_baseline = wh_jobs_with_store['Store_Time_Hrs'].mean() if not wh_jobs_with_store.empty else 0.5
@@ -1096,6 +1144,8 @@ if time_file and ops_file:
                 """)
                 
                 matrix_rows = []
+                over_baseline_rows = []
+                
                 for tech_name in sorted(ops_df['Assigned Team Members'].unique()):
                     tech_jobs = ops_df[ops_df['Assigned Team Members'] == tech_name]
                     
@@ -1106,12 +1156,44 @@ if time_file and ops_file:
                     avg_wh_val = t_wh['Total_Job_Time_Hours'].mean() if not t_wh.empty else np.nan
                     avg_lsi_val = t_lsi['Total_Job_Time_Hours'].mean() if not t_lsi.empty else np.nan
                     
+                    # Filter individual technician metrics to strictly average positions where store time occurs (> 0)
                     t_wh_store = t_wh[t_wh['Store_Time_Hrs'] > 0]
                     t_lsi_store = t_lsi[t_lsi['Store_Time_Hrs'] > 0]
                     avg_wh_store_val = t_wh_store['Store_Time_Hrs'].mean() if not t_wh_store.empty else np.nan
                     avg_lsi_store_val = t_lsi_store['Store_Time_Hrs'].mean() if not t_lsi_store.empty else np.nan
                     
-                    max_job = tech_jobs['Total_Job_Time_Hours'].max() if not tech_jobs.empty else 0.0
+                    # Grab the exact work order ID corresponding to the maximum duration value line item row
+                    if not tech_jobs.empty:
+                        max_idx = tech_jobs['Total_Job_Time_Hours'].idxmax()
+                        max_job_val = tech_jobs['Total_Job_Time_Hours'].max()
+                        max_job_id = tech_jobs.loc[max_idx, '#ID']
+                        if isinstance(max_job_id, float) and max_job_id.is_integer():
+                            max_job_id = int(max_job_id)
+                        max_job_str = f"{format_hm(max_job_val)} (ID: {max_job_id})"
+                    else:
+                        max_job_str = "-"
+                        
+                    # Compile individual over-average jobs for the breakdown data frame space underneath
+                    if pd.notna(div_wh_baseline):
+                        for _, j in t_wh[t_wh['Total_Job_Time_Hours'] > div_wh_baseline].iterrows():
+                            jid = int(j['#ID']) if isinstance(j['#ID'], float) and j['#ID'].is_integer() else j['#ID']
+                            over_baseline_rows.append({
+                                "Technician": tech_name,
+                                "Job ID": str(jid),
+                                "Business Unit": "Water Heaters",
+                                "Job Duration": format_hm(j['Total_Job_Time_Hours']),
+                                "Over Division Average By": f"+{format_hm(j['Total_Job_Time_Hours'] - div_wh_baseline)}"
+                            })
+                    if pd.notna(div_lsi_baseline):
+                        for _, j in t_lsi[t_lsi['Total_Job_Time_Hours'] > div_lsi_baseline].iterrows():
+                            jid = int(j['#ID']) if isinstance(j['#ID'], float) and j['#ID'].is_integer() else j['#ID']
+                            over_baseline_rows.append({
+                                "Technician": tech_name,
+                                "Job ID": str(jid),
+                                "Business Unit": "Simple Installs",
+                                "Job Duration": format_hm(j['Total_Job_Time_Hours']),
+                                "Over Division Average By": f"+{format_hm(j['Total_Job_Time_Hours'] - div_lsi_baseline)}"
+                            })
                     
                     matrix_rows.append({
                         "Name": tech_name,
@@ -1120,7 +1202,7 @@ if time_file and ops_file:
                         "Avg LSI Time": f"{format_hm(avg_lsi_val)} (Div: {format_hm(div_lsi_baseline)})" if pd.notna(avg_lsi_val) else "-",
                         "Avg WH Store Time": f"{format_hm(avg_wh_store_val)} (Div: {format_hm(div_wh_store_baseline)})" if pd.notna(avg_wh_store_val) else "-",
                         "Avg LSI Store Time": f"{format_hm(avg_lsi_store_val)} (Div: {format_hm(div_lsi_store_baseline)})" if pd.notna(avg_lsi_store_val) else "-",
-                        "Max Single Job Length": format_hm(max_job),
+                        "Max Single Job Length": max_job_str,
                         "sort_key": avg_total_val if pd.notna(avg_total_val) else -1.0
                     })
                     
@@ -1133,6 +1215,14 @@ if time_file and ops_file:
                     st.dataframe(styled_matrix, use_container_width=True)
                 except Exception:
                     st.dataframe(matrix_df.reset_index(drop=True), use_container_width=True)
+                    
+                # Rendered individual over-baseline lookup tracking frame table space directly underneath the primary baseline dataframe grid
+                st.markdown("<br>#### 🚨 Individual Over-Baseline Job Reference Breakdown", unsafe_allow_html=True)
+                st.markdown("*(Granular lookup tracking every unique service ticket that exceeded the division baseline runtime for its specific business unit)*")
+                if over_baseline_rows:
+                    st.dataframe(pd.DataFrame(over_baseline_rows), use_container_width=True)
+                else:
+                    st.success("Excellent! Zero individual jobs ran over the division averages this week.")
             
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
