@@ -6,7 +6,7 @@ import io
 # Set up the page layout
 st.set_page_config(page_title="Tech Time Tracker", layout="wide")
 
-# --- CSS FOR CLEAN PRINTING ---
+# --- CSS FOR CLEAN PORTRAIT/LANDSCAPE PRINTING ---
 st.markdown("""
 <style>
 @media print {
@@ -22,7 +22,7 @@ st.markdown("""
     h1, .hide-on-print, .stAlert, iframe, button { display: none !important; }
     div[class*="stExpander"] { display: none !important; }
     
-    /* CRITICAL FIX: Flatten layout properties to block formatting to eliminate section overlapping */
+    /* Flatten layout properties to block formatting to eliminate section overlapping */
     div[class*="stVerticalBlock"], 
     div[data-testid="element-container"],
     [data-testid="stHorizontalBlock"],
@@ -52,7 +52,7 @@ st.markdown("""
         margin-bottom: 10px !important;
     }
 
-    /* Expand page container real estate bounds */
+    /* Expand page container real estate bounds to printable edges */
     .main .block-container {
         max-width: 100% !important;
         width: 100% !important;
@@ -60,27 +60,30 @@ st.markdown("""
         margin: 0 !important;
     }
     
-    /* CRITICAL FIX: Force Table Column Labels to Cleanly Wrap Around vs Cutting Off */
+    /* CRITICAL FIX: Squeeze table size constraints down to prevent right-side clipping */
     table { 
         width: 100% !important; 
+        max-width: 100% !important;
         border-collapse: collapse !important;
-        table-layout: auto !important; /* Proportionately self-sizes layout fields on paper grid scales */
+        table-layout: auto !important; /* Proportionately self-sizes fields safely inside right margins */
         page-break-inside: auto !important;
+        margin: 0 0 15px 0 !important;
     }
     tr {
         page-break-inside: avoid !important;
         page-break-after: auto !important;
     }
     th, td {
-        white-space: normal !important; /* Activates natural word text wrapping loops */
-        word-break: break-word !important; /* Safely breaks metrics strings without text compression crashes */
+        white-space: normal !important; /* Activates auto text-wrapping */
+        word-break: break-word !important; /* Breaks metrics strings without text compression crashes */
         overflow-wrap: break-word !important;
-        padding: 6px 8px !important;
-        font-size: 11px !important; /* Scaled down for paper dimensions printable columns readability */
+        padding: 3px 4px !important; /* Ultra-tight cell padding reclaims horizontal canvas room */
+        font-size: 8.5px !important; /* Shrunk for portrait paper dimensions printable layout safety */
         text-align: left !important;
+        line-height: 1.2 !important;
     }
     thead {
-        display: table-header-group !important; /* Safely replicates row title bars upon page split boundaries */
+        display: table-header-group !important; /* Replicates column header rows upon page split transitions */
     }
 }
 </style>
@@ -737,7 +740,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         route_eff = route_eff.sort_values(by='Rev per Drive Hour Raw', ascending=False)
         route_eff['Total Assigned Revenue'] = route_eff['Total_Revenue'].apply(lambda x: f"${x:,.2f}")
         route_eff['Total Drive Hours'] = route_eff['Total_Drive_Hrs'].apply(lambda x: f"{x:.1f} hrs")
-        route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"{x:.1f}/hr")
+        route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"${x:.1f}/hr")
         st.table(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True))
 
     if "📉 True Gross Margin per Clocked Hour" in test_choices:
