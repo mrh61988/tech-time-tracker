@@ -6,11 +6,17 @@ import io
 # Set up the page layout
 st.set_page_config(page_title="Tech Time Tracker", layout="wide")
 
-# --- CSS FOR CLEAN PORTRAIT/LANDSCAPE PRINTING ---
+# --- CSS FOR CLEAN LANDSCAPE FULL-WIDTH MULTI-PAGE PRINTING ---
 st.markdown("""
 <style>
 @media print {
-    /* Hide utility items, sidebar panels, file selectors, tabs, navigation and buttons */
+    /* Enforce landscape orientation to provide full width space for wide tables */
+    @page {
+        size: landscape;
+        margin: 0.4in !important;
+    }
+
+    /* Hide the entire sidebar, file uploaders, navigation tabs, and system menus */
     header { display: none !important; }
     [data-testid="stHeader"] { display: none !important; }
     [data-testid="stSidebar"] { display: none !important; }
@@ -22,7 +28,7 @@ st.markdown("""
     h1, .hide-on-print, .stAlert, iframe, button { display: none !important; }
     div[class*="stExpander"] { display: none !important; }
     
-    /* Flatten layout properties to block formatting to eliminate section overlapping */
+    /* Flatten flex and grid containers to standard sequential blocks to block overlapping */
     div[class*="stVerticalBlock"], 
     div[data-testid="element-container"],
     [data-testid="stHorizontalBlock"],
@@ -48,42 +54,44 @@ st.markdown("""
     h2, h3, h4 {
         page-break-inside: avoid !important;
         page-break-after: avoid !important;
-        margin-top: 20px !important;
-        margin-bottom: 10px !important;
+        margin-top: 25px !important;
+        margin-bottom: 12px !important;
     }
 
-    /* Expand page container real estate bounds to printable edges */
-    .main .block-container {
+    /* Unclamp outer container gutters to allow data to bleed to the printable edges */
+    div[data-testid="stAppViewBlockContainer"],
+    .main .block-container,
+    div[class*="block-container"] {
         max-width: 100% !important;
         width: 100% !important;
         padding: 0 !important;
         margin: 0 !important;
     }
     
-    /* CRITICAL FIX: Squeeze table size constraints down to prevent right-side clipping */
+    /* Enforce responsive auto-scaling tables matching full page canvas properties */
     table { 
         width: 100% !important; 
         max-width: 100% !important;
         border-collapse: collapse !important;
-        table-layout: auto !important; /* Proportionately self-sizes fields safely inside right margins */
+        table-layout: auto !important; /* Dynamically resizes columns to sit inside page bounds */
         page-break-inside: auto !important;
-        margin: 0 0 15px 0 !important;
+        margin: 0 0 20px 0 !important;
     }
     tr {
         page-break-inside: avoid !important;
         page-break-after: auto !important;
     }
     th, td {
-        white-space: normal !important; /* Activates auto text-wrapping */
-        word-break: break-word !important; /* Breaks metrics strings without text compression crashes */
+        white-space: normal !important; /* Enables automatic line wrapping within text cells */
+        word-break: break-word !important; /* Protects metrics labels from running past borders */
         overflow-wrap: break-word !important;
-        padding: 3px 4px !important; /* Ultra-tight cell padding reclaims horizontal canvas room */
-        font-size: 8.5px !important; /* Shrunk for portrait paper dimensions printable layout safety */
+        padding: 5px 6px !important; /* Compact balanced cell padding rules */
+        font-size: 10px !important; /* Scaled to remain highly crisp and readable under landscape mode */
         text-align: left !important;
-        line-height: 1.2 !important;
+        line-height: 1.3 !important;
     }
     thead {
-        display: table-header-group !important; /* Replicates column header rows upon page split transitions */
+        display: table-header-group !important; /* Re-renders table header columns title rows on split sheets */
     }
 }
 </style>
@@ -740,7 +748,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         route_eff = route_eff.sort_values(by='Rev per Drive Hour Raw', ascending=False)
         route_eff['Total Assigned Revenue'] = route_eff['Total_Revenue'].apply(lambda x: f"${x:,.2f}")
         route_eff['Total Drive Hours'] = route_eff['Total_Drive_Hrs'].apply(lambda x: f"{x:.1f} hrs")
-        route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"${x:.1f}/hr")
+        route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"{x:.1f}/hr")
         st.table(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True))
 
     if "📉 True Gross Margin per Clocked Hour" in test_choices:
