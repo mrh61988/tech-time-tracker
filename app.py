@@ -16,7 +16,7 @@ st.markdown("""
         margin: 0.4in !important;
     }
 
-    /* Hide the entire sidebar, file uploaders, navigation tabs, system menus, and utility buttons */
+    /* Hide structural utility blocks, upload buttons, tabs navigation bars, and panels from saved PDFs */
     header { display: none !important; }
     [data-testid="stHeader"] { display: none !important; }
     [data-testid="stSidebar"] { display: none !important; }
@@ -666,6 +666,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 except Exception: st.table(show_launches)
                 create_copy_button(show_launches, f"late_alert_{tab_key}")
 
+# --- CONSOLIDATED SANDBOX TAB VIEWS ENGINE ---
 def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices):
     if "🏆 The Golden Ratio Margin Predictor" in test_choices:
         st.markdown("### **🏆 The Golden Ratio Margin Predictor**")
@@ -772,7 +773,6 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"${x:.1f}/hr")
         st.table(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True))
 
-    # NEW TESTING MODULE 1: MULTI-TECH TEAM CREW PERFORMANCE ANALYTICS
     if "🦺 Multi-Tech Labor Yield vs. Solo Runs" in test_choices:
         st.markdown("### **🦺 Multi-Tech Labor Yield vs. Solo Runs (Co-Efficiency Analysis)**")
         st.markdown("*(Assesses crew execution values factoring an applied $22.00/hr secondary helper cost burden override)*")
@@ -815,7 +815,6 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         else:
             st.info("No paired team dispatches detected in current operational datasets.")
 
-    # NEW TESTING MODULE 2: WEEKDAY STAGING pickup OVERHEAD METRICS
     if "📅 Lowe's Store Staging Delays by Day of the Week" in test_choices:
         st.markdown("### **📅 Lowe's Store Staging Delays by Day of the Week**")
         st.markdown("*(Tracks supply chain delay velocities day-by-day to optimize loading schedules)*")
@@ -835,7 +834,64 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         else:
             st.info("No material store staging records discovered inside loaded field parameters.")
 
-# --- THE MAIN TOP-LEVEL BASE EXECUTION PIPELINE LAYER BLOCK ---
+    # NEW TESTING OPTION 2: OVERTIME ROI COST-BENEFIT AUDITOR
+    if "📊 Overtime ROI Cost-Benefit Auditor" in test_choices:
+        st.markdown("### **📊 Overtime ROI Cost-Benefit Auditor**")
+        st.markdown("*(Analyzes the direct financial return on investment for technicians producing premium overtime wage hours)*")
+        ot_audit_rows = []
+        for idx, row in final_df.iterrows():
+            name = row['Name']
+            clocked = row['Total_Weekly_Clocked_Hrs']
+            revenue = row['Total_Assigned_Revenue']
+            nl = name.lower()
+            
+            rate = 0.0
+            if 'nate' in nl or 'nathan' in nl: rate = 22.50
+            elif any(n in nl for n in ['edward', 'matt', 'tanner']): rate = 25.00
+            
+            if clocked > 40.0 and rate > 0:
+                ot_hours = clocked - 40.0
+                ot_premium_burden = ot_hours * rate * 0.5
+                ot_total_pay = ot_hours * rate * 1.5
+                roi_ratio = revenue / ot_total_pay if ot_total_pay > 0 else 0.0
+                ot_audit_rows.append({
+                    "Name": name,
+                    "Total Clocked Time": f"{clocked:.2f} hrs",
+                    "Overtime Time": f"{ot_hours:.2f} hrs",
+                    "Premium Burden Overhead (0.5x)": f"${ot_premium_burden:,.2f}",
+                    "Total OT Wage Cost (1.5x)": f"${ot_total_pay:,.2f}",
+                    "Total Weekly Revenue": f"${revenue:,.2f}",
+                    "Revenue Yield per OT Pay Dollar": f"${roi_ratio:,.2f}/$"
+                })
+        if ot_audit_rows:
+            ot_audit_df = pd.DataFrame(ot_rows_out := ot_audit_rows)
+            st.table(ot_audit_df)
+            create_copy_button(ot_audit_df, "overtime_roi_auditor")
+        else:
+            st.success("✅ Zero hourly technicians incurred premium overtime thresholds during this invoice cycle.")
+
+    # NEW TESTING OPTION 4: SINGLE-JOB SINGLE-TICKET WHALE LEADERBOARD
+    if "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard" in test_choices:
+        st.markdown("### **🏆 Single-Job \"Whale Alert\" Revenue Leaderboard**")
+        st.markdown("*(Highlights the top 5 highest-grossing unexploded individual ticket invoices completed across the division)*")
+        if not unexploded_ops.empty and 'Total Invoice Amount' in unexploded_ops.columns:
+            whale_df = unexploded_ops.sort_values(by='Total Invoice Amount', ascending=False).head(5).copy()
+            whale_summary = []
+            for _, r in whale_df.iterrows():
+                jid = int(r['#ID']) if ('#ID' in r and pd.notna(r['#ID'])) else "Unknown"
+                whale_summary.append({
+                    "Job ID": str(jid),
+                    "Assigned Crew Members": r['Assigned Team Members'],
+                    "Business Unit Sector": r['Business Unit'] if 'Business Unit' in r else "Unknown",
+                    "Ticket Invoiced Revenue": f"${r['Total Invoice Amount']:,.2f}"
+                })
+            whale_summary_df = pd.DataFrame(whale_summary)
+            st.table(whale_summary_df)
+            create_copy_button(whale_summary_df, "whale_alert_leaderboard")
+        else:
+            st.info("No invoice details located inside loaded operations datasets.")
+
+# --- RUN EXECUTION Pipeline BLOCK FOR FILE MOUNTING ---
 st.sidebar.header("📂 Data Loading Pipeline")
 time_file = st.sidebar.file_uploader("Upload Time Sheet (CSV)", type=['csv'])
 ops_file = st.sidebar.file_uploader("Upload Lowes Ops Export (CSV)", type=['csv'])
@@ -915,7 +971,7 @@ if time_file and ops_file:
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
 
-        # PARSE TIMESTAMPS FOR BOTH ENGINES TO ACQUIRE THE DAY OF THE WEEK
+        # PRE-FETCH TIMESTAMPS AT BASE TO SECURE TIME RECOGNITION BEFORE MERGING
         ts_cols = ['Lowes Store - Start Timestamp', 'On The Way - Start Timestamp', 'In Progress - Start Timestamp', 'On The Way - Start Timestamp.1', 'In Progress - Start Timestamp.1']
         available_ts_cols = [c for c in ts_cols if c in ops_df.columns]
         ops_df['Job_Date'] = ops_df[available_ts_cols].bfill(axis=1).iloc[:, 0]
@@ -944,7 +1000,6 @@ if time_file and ops_file:
             return 'In Progress'
         ops_df['Earliest_Status'] = ops_df['Earliest_Status_Col'].apply(map_status)
 
-        # UNEXPLODED MASTER DATASETS COPY CAPTURES DAY VELOCITIES SAFELY
         unexploded_ops = ops_df.copy()
         raw_unsplit_volume = unexploded_ops['Total Invoice Amount'].sum()
         
@@ -1233,7 +1288,7 @@ if time_file and ops_file:
                 create_copy_button(display_dfs[short_day].reset_index(drop=True), f"day_tab_{short_day}")
 
         with tabs[10]:
-            test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "¼ The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)", "🗺️ Route Optimization Flags", "🦺 Multi-Tech Labor Yield vs. Solo Runs", "📅 Lowe's Store Staging Delays by Day of the Week"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
+            test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "¼ The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)", "🗺️ Route Optimization Flags", "🦺 Multi-Tech Labor Yield vs. Solo Runs", "📅 Lowe's Store Staging Delays by Day of the Week", "📊 Overtime ROI Cost-Benefit Auditor", "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
             run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             
     except Exception as e:
