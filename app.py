@@ -825,7 +825,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         show_yield['Total Man-Hours'] = show_yield['Total_Man_Hours'].apply(format_hm)
         show_yield['Added Helper Cost'] = show_yield['Total_Helper_Cost'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
         show_yield['Avg Revenue per Job'] = show_yield['Avg Revenue per Job'].apply(lambda x: f"${x:,.2f}")
-        show_yield['Revenue per Man-Hour'] = show_yield['Revenue per Man-Hour'].apply(lambda x: f"${x:,.2f}/hr")
+        show_yield['Revenue per Man-Hour'] = show_yield['Revenue per Man-Hour'].apply(lambda x: f"${x:.1f}/hr")
         st.table(show_yield[['Type', 'Job_Count', 'Total Revenue', 'Total Field Hours', 'Total Man-Hours', 'Added Helper Cost', 'Avg Revenue per Job', 'Revenue per Man-Hour']].rename(columns={'Job_Count': 'Jobs Assigned'}))
         create_copy_button(show_yield, "multi_tech_yield")
         
@@ -1265,7 +1265,6 @@ if time_file and ops_file:
         daily_route = daily_route[daily_route['Total_Job_Time_Hours'] > 0].copy()
         daily_route['Drive %'] = (daily_route['Drive_Time_Hrs'] / daily_route['Total_Job_Time_Hours']) * 100
         
-        # CRITICAL RE-ALIGNMENT FIX: Unified, non-duplicate single linear assembly pipeline mapping for final_df records matrix
         final_df = pd.merge(time_df, job_time_pivot, on='Name', how='left').fillna(0)
         final_df = pd.merge(final_df, job_count_pivot, on='Name', how='left').fillna(0)
         if not bu_pivot.empty: final_df = pd.merge(final_df, bu_pivot[['Name', 'Simple_Installs_Hrs', 'Water_Heaters_Hrs', 'Simple_Installs_Count', 'Water_Heaters_Count']], on='Name', how='left').fillna(0)
@@ -1368,6 +1367,12 @@ if time_file and ops_file:
             
             # === MACRO DASHBOARD PANEL ===
             st.markdown("<br><hr><h3>📊 Macro Financial Performance Dashboard</h3>", unsafe_allow_html=True)
+            
+            # DEFINE MISSING VARIABLES EXPLICITLY IN tab ENGINE real estate
+            rev_per_hour_df_calc = final_df.copy()
+            rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(get_assumed_pay, axis=1)
+            total_assumed_pay = rev_per_hour_df_calc['Assumed Pay Amount'].sum()
+            pay_ratio_pct = (total_assumed_pay / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
             
             dash_metric_col1, dash_metric_col2, dash_metric_col3 = st.columns(3)
             with dash_metric_col1:
