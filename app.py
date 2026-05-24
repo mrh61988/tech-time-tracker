@@ -676,6 +676,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 except Exception: st.table(show_launches)
                 create_copy_button(show_launches, f"late_alert_{tab_key}")
 
+# --- CONSOLIDATED SANDBOX TAB VIEWS ENGINE ---
 def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices):
     if "🏆 The Golden Ratio Margin Predictor" in test_choices:
         st.markdown("### **🏆 The Golden Ratio Margin Predictor**")
@@ -843,7 +844,6 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         else:
             st.info("No material store staging records discovered inside loaded field parameters.")
 
-    # MODULE 11: OVERTIME ROI AUDITOR
     if "📊 Overtime ROI Cost-Benefit Auditor" in test_choices:
         st.markdown("### **📊 Overtime ROI Cost-Benefit Auditor**")
         st.markdown("*(Measures generated invoice revenue returns against the premium wage burden expenses of overtime dispatches)*")
@@ -879,7 +879,6 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         else:
             st.success("✅ Zero hourly technicians incurred premium overtime thresholds during this invoice cycle.")
 
-    # MODULE 12:True SINGLE JOB WHALE LEADERBOARD
     if "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard" in test_choices:
         st.markdown("### **🏆 Single-Job \"Whale Alert\" Revenue Leaderboard**")
         st.markdown("*(Highlights the top 5 highest-grossing individual unexploded invoices completed this cycle across the division)*")
@@ -980,7 +979,7 @@ if time_file and ops_file:
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
 
-        # TIMESTAMPS CRITICAL LIFECYCLE DISPATCH HOOK 
+        # TIMESTAMPS LIFECYCLE DISPATCH HOOK DEFINED ON LAUNCH BASE FOR BOTH PIPELINES
         ts_cols = ['Lowes Store - Start Timestamp', 'On The Way - Start Timestamp', 'In Progress - Start Timestamp', 'On The Way - Start Timestamp.1', 'In Progress - Start Timestamp.1']
         available_ts_cols = [c for c in ts_cols if c in ops_df.columns]
         ops_df['Job_Date'] = ops_df[available_ts_cols].bfill(axis=1).iloc[:, 0]
@@ -1040,6 +1039,31 @@ if time_file and ops_file:
         ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On The Way - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
+
+        ops_sorted = ops_df.dropna(subset=['Earliest_Start']).sort_values(['Assigned Team Members', 'Earliest_Start'])
+        bounds_df = ops_sorted.groupby(['Assigned Team Members', 'Short_Date']).agg(
+            First_Punch=('Earliest_Start', 'min'),
+            Last_Punch=('Estimated_End', 'max'),
+            First_Status=('Earliest_Status', 'first')
+        ).reset_index()
+        bounds_df['First Status Update'] = bounds_df['First_Punch'].dt.strftime('%I:%M %p')
+        bounds_df['Last Status Update'] = bounds_df['Last_Punch'].dt.strftime('%I:%M %p')
+        bounds_df['Total_Span_Hrs'] = (bounds_df['Last_Punch'] - bounds_df['First_Punch']).dt.total_seconds() / 3600.0
+        bounds_df['Total Time'] = bounds_df['Total_Span_Hrs'].apply(format_hm)
+        
+        delayed_launches_df = bounds_df[bounds_df.apply(check_late, axis=1)].copy()
+        
+        # CRITICAL RE-INJECTION ELEMENT: AGGREGATE BUSINESS UNITS METRICS PROPERLY
+        if 'Business Unit' in ops_df.columns:
+            bu_agg = ops_df.groupby(['Assigned Team Members', 'Business Unit']).agg(Total_Job_Time_Hours=('Total_Job_Time_Hours', 'sum'), BU_Job_Count=('Total_Job_Time_Hours', 'size')).reset_index()
+            bu_pivot_hrs = bu_agg.pivot(index='Assigned Team Members', columns='Business Unit', values='Total_Job_Time_Hours').reset_index().fillna(0)
+            bu_pivot_cnt = bu_agg.pivot(index='Assigned Team Members', columns='Business Unit', values='BU_Job_Count').reset_index().fillna(0)
+            bu_pivot = pd.merge(bu_pivot_hrs, bu_pivot_cnt, on='Assigned Team Members', suffixes=('_hrs', '_cnt'))
+            bu_pivot = bu_pivot.rename(columns={'Assigned Team Members': 'Name'})
+            for col in ['Lowes - Simple Installs_hrs', 'Lowes - Water Heaters_hrs', 'Lowes - Simple Installs_cnt', 'Lowes - Water Heaters_cnt']:
+                if col not in bu_pivot.columns: bu_pivot[col] = 0.0
+            bu_pivot = bu_pivot.rename(columns={'Lowes - Simple Installs_hrs': 'Simple_Installs_Hrs', 'Lowes - Water Heaters_hrs': 'Water_Heaters_Hrs', 'Lowes - Simple Installs_cnt': 'Simple_Installs_Count', 'Lowes - Water Heaters_cnt': 'Water_Heaters_Count'})
+        else: bu_pivot = pd.DataFrame(columns=['Name', 'Simple_Installs_Hrs', 'Water_Heaters_Hrs', 'Simple_Installs_Count', 'Water_Heaters_Count'])
 
         job_time_agg = ops_df.groupby(['Assigned Team Members', 'Day_of_Week'])['Total_Job_Time_Hours'].sum().reset_index()
         job_time_pivot = job_time_agg.pivot(index='Assigned Team Members', columns='Day_of_Week', values='Total_Job_Time_Hours').reset_index().rename(columns={'Assigned Team Members': 'Name'}).fillna(0)
@@ -1197,89 +1221,4 @@ if time_file and ops_file:
             bu_pay_split = ops_df.groupby('Business Unit')['Allocated_Job_Pay'].sum().reset_index().rename(columns={'Allocated_Job_Pay': 'Assumed Pay Raw'})
             bu_financial_matrix = pd.merge(bu_gross_rev, bu_pay_split, on='Business Unit', how='left').fillna(0.0)
             
-            bu_financial_matrix['Assumed Pay'] = bu_financial_matrix['Assumed Pay Raw'].apply(lambda x: f"${x:,.2f}")
-            bu_financial_matrix['Pay % of Revenue'] = np.where(
-                bu_financial_matrix['Gross Invoiced Revenue Raw'] > 0,
-                (bu_financial_matrix['Assumed Pay Raw'] / bu_financial_matrix['Gross Invoiced Revenue Raw']) * 100,
-                0.0
-            )
-            bu_financial_matrix['Pay % of Revenue'] = bu_financial_matrix['Pay % of Revenue'].apply(lambda x: f"{x:.1f}%")
-            bu_financial_matrix['Gross Invoiced Revenue'] = bu_financial_matrix['Gross Invoiced Revenue Raw'].apply(lambda x: f"${x:,.2f}")
-            
-            m_col1, m_col2 = st.columns([1.2, 1.8])
-            with m_col1:
-                st.markdown("<br>**📈 Gross Invoiced Revenue & Payroll by Business Unit**", unsafe_allow_html=True)
-                st.table(bu_financial_matrix[['Business Unit', 'Gross Invoiced Revenue', 'Rev Share %', 'Assumed Pay', 'Pay % of Revenue']].reset_index(drop=True))
-                create_copy_button(bu_financial_matrix[['Business Unit', 'Gross Invoiced Revenue', 'Rev Share %', 'Assumed Pay', 'Pay % of Revenue']], "bu_rev_and_pay")
-                
-                st.markdown("<br>**🎯 Average Ticket Size per BU**", unsafe_allow_html=True)
-                bu_avg_ticket = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].mean().reset_index()
-                bu_avg_ticket.columns = ['Business Unit', 'Average Ticket Size Raw']
-                bu_avg_ticket['Average Ticket Size'] = bu_avg_ticket['Average Ticket Size Raw'].apply(lambda x: f"${x:,.2f}")
-                st.table(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True))
-                create_copy_button(bu_avg_ticket[['Business Unit', 'Average Ticket Size']], "bu_avg_ticket")
-            with m_col2:
-                st.markdown("**📈 Pay Ratio per Clocked Hour**", unsafe_allow_html=True)
-                rev_per_hour_df = final_df.copy()
-                rev_per_hour_df['Total Clocked'] = rev_per_hour_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
-                rev_per_hour_df['Total Jobs'] = rev_per_hour_df['Total_Weekly_Job_Count'].astype(int)
-                rev_per_hour_df['Total Assigned Value'] = rev_per_hour_df['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
-                rev_per_hour_df['Assumed Pay Amount'] = rev_per_hour_df.apply(get_assumed_pay, axis=1)
-                rev_per_hour_df['Assumed Pay'] = rev_per_hour_df['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
-                rev_per_hour_df['Pay Pct'] = np.where(rev_per_hour_df['Total_Assigned_Revenue'] > 0, (rev_per_hour_df['Assumed Pay Amount'] / rev_per_hour_df['Total_Assigned_Revenue']) * 100, 0.0)
-                rev_per_hour_df['Pay % vs Assigned Revenue'] = rev_per_hour_df['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
-                
-                rev_per_hour_df['Net Margin Raw'] = rev_per_hour_df['Total_Assigned_Revenue'] - rev_per_hour_df['Assumed Pay Amount']
-                rev_per_hour_df['Total Net Margin'] = rev_per_hour_df['Net Margin Raw'].apply(lambda x: f"${x:,.2f}")
-                rev_per_hour_df['Margin per Clocked Hour Raw'] = np.where(rev_per_hour_df['Total_Weekly_Clocked_Hrs'] > 0, rev_per_hour_df['Net Margin Raw'] / rev_per_hour_df['Total_Weekly_Clocked_Hrs'], 0.0)
-                rev_per_hour_df['Margin per Clocked Hour'] = rev_per_hour_df['Margin per Clocked Hour Raw'].apply(lambda x: f"${x:,.2f}/hr")
-                
-                show_rev_per_hour_sorted = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue', 'Total Net Margin', 'Margin per Clocked Hour']]
-                st.table(show_rev_per_hour_sorted.reset_index(drop=True))
-                create_copy_button(show_rev_per_hour_sorted.reset_index(drop=True), "pay_ratio_per_clocked")
-            
-            st.markdown("<br><hr>", unsafe_allow_html=True)
-            run_baselines_matrix(ops_df)
-            
-            show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key="summary_tab")
-            
-        with tabs[1]:
-            st.markdown('<h3>Manager Overview - All Techs</h3>', unsafe_allow_html=True)
-            for tech in final_df['Name'].unique():
-                st.markdown(f"#### **{tech}**")
-                tech_data = final_df[final_df['Name'] == tech].iloc[0]
-                report_data = []
-                for full_day, short_day in {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}.items():
-                    report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(tech_data[short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])})
-                report_data.append({"Day": "TOTAL WEEKLY", "Jobs": int(tech_data['Total_Weekly_Job_Count']), "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']), "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']), "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])})
-                manager_day_df = pd.DataFrame(report_data)
-                st.table(manager_day_df)
-                create_copy_button(manager_day_df, f"manager_overview_{tech}")
-            show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key="manager_tab")
-            
-        with tabs[2]:
-            st.markdown('<h3>Printable Individual Report</h3>', unsafe_allow_html=True)
-            selected_tech = st.selectbox("Select a Technician:", final_df['Name'].unique())
-            if selected_tech:
-                tech_data = final_df[final_df['Name'] == selected_tech].iloc[0]
-                report_data = []
-                for full_day, short_day in {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}.items():
-                    report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(final_df[final_df['Name'] == selected_tech].iloc[0][short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])})
-                report_data.append({"Day": "TOTAL WEEKLY", "Jobs": int(tech_data['Total_Weekly_Job_Count']), "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']), "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']), "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])})
-                indiv_day_df = pd.DataFrame(report_data)
-                st.table(indiv_day_df)
-                create_copy_button(indiv_day_df, f"printable_indiv_{selected_tech}")
-
-        day_mapping = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
-        for i, full_day in enumerate(tab_names[3:10]): 
-            with tabs[i+3]:
-                short_day = day_mapping[full_day]
-                st.table(display_dfs[short_day].reset_index(drop=True))
-                create_copy_button(display_dfs[short_day].reset_index(drop=True), f"day_tab_{short_day}")
-
-        with tabs[10]:
-            test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "¼ The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)", "🗺️ Route Optimization Flags", "🦺 Multi-Tech Labor Yield vs. Solo Runs", "📅 Lowe's Store Staging Delays by Day of the Week", "📊 Overtime ROI Cost-Benefit Auditor", "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
-            run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
-            
-    except Exception as e:
-        st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
+            bu_financial_matrix['Assumed Pay'] = bu_financial_matrix['Assumed Pay Raw'].apply(lambda x: f"${x
