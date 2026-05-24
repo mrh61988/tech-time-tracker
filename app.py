@@ -82,15 +82,19 @@ st.markdown("""
         margin: 0 !important;
     }
     
-    /* Grants wide tables maximum layout canvas real estate */
+    /* Grants wide tables and dataframes maximum layout canvas real estate */
     div[data-testid="stTable"], 
-    div[data-testid="stTable"] > div, 
+    div[data-testid="stTable"] > div,
+    div[data-testid="stDataFrame"],
+    div[data-testid="stDataFrame"] > div,
     table {
         width: 100% !important;
         max-width: 100% !important;
         min-width: 100% !important;
-        display: table !important;
-        table-layout: auto !important;
+        display: block !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
     }
     
     table {
@@ -359,9 +363,9 @@ def run_baselines_matrix(ops_df):
         
     try:
         styled_matrix = matrix_df.reset_index(drop=True).style.apply(highlight_matrix_overhead, subset=['Total Avg Job Time', 'Avg WH Time', 'Avg LSI Time', 'Avg WH Store Time', 'Avg LSI Store Time'])
-        st.table(styled_matrix) 
+        st.dataframe(styled_matrix, use_container_width=True) 
     except Exception:
-        st.table(matrix_df.reset_index(drop=True))
+        st.dataframe(matrix_df.reset_index(drop=True), use_container_width=True)
         
     create_copy_button(matrix_df, "baselines_matrix")
         
@@ -373,8 +377,8 @@ def run_baselines_matrix(ops_df):
         st.markdown("##### 🛢️ Water Heaters Over-Baseline Jobs")
         if wh_over_baseline_rows:
             wh_matrix_df = pd.DataFrame(wh_over_baseline_rows).sort_values(by='sort_key', ascending=False).drop(columns=['sort_key']).reset_index(drop=True)
-            try: st.table(wh_matrix_df.style.apply(highlight_over_hour_row, axis=1))
-            except Exception: st.table(wh_matrix_df)
+            try: st.dataframe(wh_matrix_df.style.apply(highlight_over_hour_row, axis=1), use_container_width=True)
+            except Exception: st.dataframe(wh_matrix_df, use_container_width=True)
             create_copy_button(wh_matrix_df, "wh_over_baseline")
         else: st.success("✅ Zero individual Water Heater jobs exceeded the division baseline average.")
             
@@ -382,8 +386,8 @@ def run_baselines_matrix(ops_df):
         st.markdown("##### 🔧 Simple Installs Over-Baseline Jobs")
         if lsi_over_baseline_rows:
             lsi_matrix_df = pd.DataFrame(lsi_over_baseline_rows).sort_values(by='sort_key', ascending=False).drop(columns=['sort_key']).reset_index(drop=True)
-            try: st.table(lsi_matrix_df.style.apply(highlight_over_hour_row, axis=1))
-            except Exception: st.table(lsi_matrix_df)
+            try: st.dataframe(lsi_matrix_df.style.apply(highlight_over_hour_row, axis=1), use_container_width=True)
+            except Exception: st.dataframe(lsi_matrix_df, use_container_width=True)
             create_copy_button(lsi_matrix_df, "lsi_over_baseline")
         else: st.success("✅ Zero individual Simple Install jobs exceeded the division baseline average.")
 
@@ -445,7 +449,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             day_eff = (day_job / day_clocked * 100) if day_clocked > 0 else 0.0
             trend_data.append({"Day": d, "Total Clocked": format_hm(day_clocked), "Job Status Time": format_hm(day_job), "Efficiency Score": f"{day_eff:.1f}%"})
         trend_df = pd.DataFrame(trend_data)
-        st.table(trend_df)
+        st.dataframe(trend_df, use_container_width=True)
         create_copy_button(trend_df, f"trend_{tab_key}")
 
     with leaderboard_col:
@@ -463,8 +467,8 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             def highlight_leaderboard(row):
                 val = parse_diff_to_hours(row['Total Diff'])
                 return ['background-color: #ffcccc; color: #990000;'] * len(row) if val > 0 else [''] * len(row)
-            try: st.table(show_leaderboard.reset_index(drop=True).style.apply(highlight_leaderboard, axis=1))
-            except Exception: st.table(show_leaderboard.reset_index(drop=True))
+            try: st.dataframe(show_leaderboard.reset_index(drop=True).style.apply(highlight_leaderboard, axis=1), use_container_width=True)
+            except Exception: st.dataframe(show_leaderboard.reset_index(drop=True), use_container_width=True)
             create_copy_button(show_leaderboard.reset_index(drop=True), f"leaderboard_{tab_key}")
 
     # === OVERTIME HORIZON PREDICTOR ===
@@ -507,8 +511,8 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             if "🚨" in st_val or "⚠️ Low Volume" in st_val: return ['background-color: #ffcccc; color: #990000;'] * len(row)
             if "⚠️ High Overtime" in st_val: return ['background-color: #fff3cd; color: #856404;'] * len(row)
             return [''] * len(row)
-        try: st.table(ot_predictor_df.reset_index(drop=True).style.apply(style_ot_predictor, axis=1))
-        except Exception: st.table(ot_predictor_df.reset_index(drop=True))
+        try: st.dataframe(ot_predictor_df.reset_index(drop=True).style.apply(style_ot_predictor, axis=1), use_container_width=True)
+        except Exception: st.dataframe(ot_predictor_df.reset_index(drop=True), use_container_width=True)
         create_copy_button(ot_predictor_df.reset_index(drop=True), f"overtime_{tab_key}")
             
     st.markdown("<br>", unsafe_allow_html=True)
@@ -529,8 +533,8 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             gold_star_df['Total Diff'] = gold_star_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
             show_gold = gold_star_df[['Name', 'Total Clocked', 'Total Job Time', 'Daily Avg Diff', 'Total Diff']].copy()
             
-            try: st.table(show_gold.reset_index(drop=True).style.set_properties(**{'background-color': '#e6f4ea', 'color': '#137333'}))
-            except Exception: st.table(show_gold.reset_index(drop=True))
+            try: st.dataframe(show_gold.reset_index(drop=True).style.set_properties(**{'background-color': '#e6f4ea', 'color': '#137333'}), use_container_width=True)
+            except Exception: st.dataframe(show_gold.reset_index(drop=True), use_container_width=True)
             create_copy_button(show_gold.reset_index(drop=True), f"gold_star_{tab_key}")
 
     with col_right:
@@ -555,8 +559,8 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             
             show_skill = skill_df[['Name', 'Simple Installs Eff', 'Water Heaters Eff', 'Action Required']].rename(columns={'Simple Installs Eff': 'LSI Efficiency', 'Water Heaters Eff': 'WH Efficiency'})
             def style_flags(row): return ['background-color: #fff3cd; color: #856404; font-weight: bold;'] * len(row) if '⚠️' in row['Action Required'] else [''] * len(row)
-            try: st.table(show_skill.reset_index(drop=True).style.apply(style_flags, axis=1))
-            except Exception: st.table(show_skill.reset_index(drop=True))
+            try: st.dataframe(show_skill.reset_index(drop=True).style.apply(style_flags, axis=1), use_container_width=True)
+            except Exception: st.dataframe(show_skill.reset_index(drop=True), use_container_width=True)
             create_copy_button(show_skill.reset_index(drop=True), f"skills_{tab_key}")
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -568,7 +572,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
         poor_routes['Drive Time'] = poor_routes['Drive_Time_Hrs'].apply(format_hm)
         poor_routes['Work Time'] = poor_routes['In_Progress_Time_Hrs'].apply(format_hm)
         route_df_export = poor_routes[['Assigned Team Members', 'Short_Date', 'Job_Count', 'Drive Time', 'Work Time', 'Drive %']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date', 'Job_Count': 'Jobs'}).reset_index(drop=True)
-        st.table(route_df_export)
+        st.dataframe(route_df_export, use_container_width=True)
         create_copy_button(route_df_export, f"routes_{tab_key}")
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -578,8 +582,8 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
         st.markdown("*(Aggregates the total number of delayed morning launches per technician across the week)*")
         if not delayed_launches_df.empty:
             launch_counts = delayed_launches_df.groupby('Assigned Team Members').size().reset_index(name='Total Late Days').sort_values(by='Total Late Days', ascending=False)
-            try: st.table(launch_counts.reset_index(drop=True).style.set_properties(**{'background-color': '#fff3cd', 'color': '#856404;'}, subset=['Total Late Days']))
-            except Exception: st.table(launch_counts.reset_index(drop=True))
+            try: st.dataframe(launch_counts.reset_index(drop=True).style.set_properties(**{'background-color': '#fff3cd', 'color': '#856404;'}, subset=['Total Late Days']), use_container_width=True)
+            except Exception: st.dataframe(launch_counts.reset_index(drop=True), use_container_width=True)
             create_copy_button(launch_counts.reset_index(drop=True).rename(columns={'Assigned Team Members': 'Name'}), f"late_score_{tab_key}")
 
     with launch_empty_col:
@@ -592,8 +596,8 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 tech_launches_df = delayed_launches_df[delayed_launches_df['Assigned Team Members'] == selected_late_tech].copy()
                 tech_launches_df['First Punch log'] = tech_launches_df['First_Punch'].dt.strftime('%I:%M %p') + " (" + tech_launches_df['First_Status'] + ")"
                 show_launches = tech_launches_df.sort_values(by='First_Punch', ascending=False)[['Short_Date', 'First Punch log']].rename(columns={'Short_Date': 'Date'}).reset_index(drop=True)
-                try: st.table(show_launches.style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'}))
-                except Exception: st.table(show_launches)
+                try: st.dataframe(show_launches.style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'}), use_container_width=True)
+                except Exception: st.dataframe(show_launches, use_container_width=True)
                 create_copy_button(show_launches, f"late_alert_{tab_key}")
 
 # --- CONSOLIDATED SANDBOX TAB VIEWS ENGINE ---
@@ -618,8 +622,8 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             golden_summary['Avg Efficiency'] = golden_summary['Avg_Efficiency'].apply(lambda x: f"{x:.1f}%")
             golden_df['Daily Efficiency'] = golden_df['Daily Efficiency'].apply(lambda x: f"{x:.1f}%")
             g_col1, g_col2 = st.columns(2)
-            with g_col1: st.table(golden_summary[['Profile', 'Days', 'Avg Efficiency']])
-            with g_col2: st.table(golden_df[['Day', 'LSI Mix %', 'Profile', 'Daily Efficiency']])
+            with g_col1: st.dataframe(golden_summary[['Profile', 'Days', 'Avg Efficiency']], use_container_width=True)
+            with g_col2: st.dataframe(golden_df[['Day', 'LSI Mix %', 'Profile', 'Daily Efficiency']], use_container_width=True)
 
     if "🔄 The Context-Switching Penalty Alert" in test_choices:
         st.markdown("### **🔄 Context-Switching Penalty Alert**")
@@ -634,7 +638,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             context_agg = daily_merged.groupby('Day Type').agg(Total_Days=('Short_Date', 'count'), Avg_Job_Turnaround=('Avg Job Time', 'mean')).reset_index()
             if not context_agg.empty:
                 context_agg['Average Fleet Job Turnaround'] = context_agg['Avg_Job_Turnaround'].apply(format_hm)
-                st.table(context_agg[['Day Type', 'Total_Days', 'Average Fleet Job Turnaround']].rename(columns={'Total_Days': 'Days Analyzed'}))
+                st.dataframe(context_agg[['Day Type', 'Total_Days', 'Average Fleet Job Turnaround']].rename(columns={'Total_Days': 'Days Analyzed'}), use_container_width=True)
 
     if "🕵️ The Ghost Punch & Payroll Discrepancy Auditor" in test_choices:
         st.markdown("### **🕵️ The Ghost Punch & Payroll Discrepancy Auditor**")
@@ -650,7 +654,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 jobs = row[f'{d}_Job_Count']
                 if clocked > 0 and jobs == 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🕵️ Paid But Idle (Clocked In, 0 Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": 0})
                 elif clocked == 0 and jobs > 0: ghost_alerts.append({"Technician": tech_name, "Pay Profile": pay_type, "Day": d, "Audit Type": "🚨 Unpaid Field Work (0 Hours Clocked, Jobs Run)", "Clocked Hours": format_hm(clocked), "Jobs Done": int(jobs)})
-        if ghost_alerts: st.table(pd.DataFrame(ghost_alerts))
+        if ghost_alerts: st.dataframe(pd.DataFrame(ghost_alerts), use_container_width=True)
         else: st.success("Perfect alignment! No payroll discrepancy errors detected.")
 
     if "¼ The Lowe's Store Staging Efficiency Scorecard" in test_choices:
@@ -660,7 +664,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             store_stats = ops_df.groupby(store_cols[0])['Store_Time_Hrs'].mean().reset_index()
             store_stats.columns = ['Store Identifier', 'Avg Delay Length (Hrs)']
             store_stats['Avg Delay Length'] = store_stats['Avg Delay Length (Hrs)'].apply(format_hm)
-            st.table(store_stats.sort_values(by='Avg Delay Length (Hrs)', ascending=False)[['Store Identifier', 'Avg Delay Length']])
+            st.dataframe(store_stats.sort_values(by='Avg Delay Length (Hrs)', ascending=False)[['Store Identifier', 'Avg Delay Length']], use_container_width=True)
 
     if "📊 Macro Financial Performance Dashboard" in test_choices:
         st.markdown("### **📊 Macro Financial Performance Dashboard**")
@@ -671,7 +675,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             bu_avg_ticket = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].mean().reset_index()
             bu_avg_ticket.columns = ['Business Unit', 'Average Ticket Size Raw']
             bu_avg_ticket['Average Ticket Size'] = bu_avg_ticket['Average Ticket Size Raw'].apply(lambda x: f"${x:,.2f}")
-            st.table(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True))
+            st.dataframe(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True), use_container_width=True)
         with m_col2:
             st.markdown("**📈 Pay Ratio per Clocked Hour**")
             rev_per_hour_df = final_df.copy()
@@ -682,7 +686,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             rev_per_hour_df['Pay Pct'] = np.where(rev_per_hour_df['Total_Assigned_Revenue'] > 0, (rev_per_hour_df['Assumed Pay Amount'] / rev_per_hour_df['Total_Assigned_Revenue']) * 100, 0.0)
             rev_per_hour_df['Pay % vs Assigned Revenue'] = rev_per_hour_df['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
             show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[['Name', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue']]
-            st.table(show_rev_per_hour.reset_index(drop=True))
+            st.dataframe(show_rev_per_hour.reset_index(drop=True), use_container_width=True)
 
     if "📊 Business Unit Revenue Velocity" in test_choices:
         st.markdown("### **📊 Business Unit Revenue Velocity**")
@@ -691,7 +695,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         bu_rev_df['Revenue Share %'] = (bu_rev_df['Total Invoice Amount'] / unexploded_ops['Total Invoice Amount'].sum()) * 100
         bu_rev_df['Total Revenue'] = bu_rev_df['Total Invoice Amount'].apply(lambda x: f"${x:,.2f}")
         bu_rev_df['Revenue Share %'] = bu_rev_df['Revenue Share %'].apply(lambda x: f"{x:.1f}%")
-        st.table(bu_rev_df[['Business Unit', 'Total Revenue', 'Revenue Share %']].reset_index(drop=True))
+        st.dataframe(bu_rev_df[['Business Unit', 'Total Revenue', 'Revenue Share %']].reset_index(drop=True), use_container_width=True)
 
     if "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)" in test_choices:
         st.markdown("### **🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)**")
@@ -701,7 +705,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         route_eff['Total Assigned Revenue'] = route_eff['Total_Revenue'].apply(lambda x: f"${x:,.2f}")
         route_eff['Total Drive Hours'] = route_eff['Total_Drive_Hrs'].apply(lambda x: f"{x:.1f} hrs")
         route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"{x:.1f}/hr")
-        st.table(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True))
+        st.dataframe(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True), use_container_width=True)
 
     if "🦺 Multi-Tech Labor Yield vs. Solo Runs" in test_choices:
         st.markdown("### **🦺 Multi-Tech Labor Yield vs. Solo Runs (Co-Efficiency Analysis)**")
@@ -729,7 +733,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         show_yield['Added Helper Cost'] = show_yield['Total_Helper_Cost'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
         show_yield['Avg Revenue per Job'] = show_yield['Avg Revenue per Job'].apply(lambda x: f"${x:,.2f}")
         show_yield['Revenue per Man-Hour'] = show_yield['Revenue per Man-Hour'].apply(lambda x: f"${x:.1f}/hr")
-        st.table(show_yield[['Type', 'Job_Count', 'Total Revenue', 'Total Field Hours', 'Total Man-Hours', 'Added Helper Cost', 'Avg Revenue per Job', 'Revenue per Man-Hour']].rename(columns={'Job_Count': 'Jobs Assigned'}))
+        st.dataframe(show_yield[['Type', 'Job_Count', 'Total Revenue', 'Total Field Hours', 'Total Man-Hours', 'Added Helper Cost', 'Avg Revenue per Job', 'Revenue per Man-Hour']].rename(columns={'Job_Count': 'Jobs Assigned'}), use_container_width=True)
         create_copy_button(show_yield, "multi_tech_yield")
         
         st.markdown("#### 🦺 Granular Team Dispatch Review Log")
@@ -740,7 +744,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             team_jobs['Helper Cost'] = team_jobs['Helper_Labor_Cost'].apply(lambda x: f"${x:,.2f}")
             team_jobs['Man-Hours'] = team_jobs['Total_Man_Hours'].apply(format_hm)
             show_team_jobs = team_jobs[['#ID', 'Assigned Team Members', 'Business Unit', 'Total Revenue', 'Job Duration', 'Man-Hours', 'Helper Cost']].rename(columns={'#ID': 'Job ID'})
-            st.table(show_team_jobs)
+            st.dataframe(show_team_jobs, use_container_width=True)
             create_copy_button(show_team_jobs, "granular_team_log")
         else:
             st.info("No paired team dispatches detected in current operational datasets.")
@@ -759,7 +763,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             show_staging = staging_agg.copy()
             show_staging['Total Hours Delayed'] = show_staging['Total_Hours'].apply(format_hm)
             show_staging['Avg Delay per Visit'] = show_staging['Avg Delay per Visit Raw'].apply(format_hm)
-            st.table(show_staging[['Day_of_Week', 'Total_Visits', 'Total Hours Delayed', 'Avg Delay per Visit']].rename(columns={'Day_of_Week': 'Day', 'Total_Visits': 'Store Pickups'}))
+            st.dataframe(show_staging[['Day_of_Week', 'Total_Visits', 'Total Hours Delayed', 'Avg Delay per Visit']].rename(columns={'Day_of_Week': 'Day', 'Total_Visits': 'Store Pickups'}), use_container_width=True)
             create_copy_button(show_staging[['Day_of_Week', 'Total_Visits', 'Total Hours Delayed', 'Avg Delay per Visit']], "store_staging_by_day")
         else:
             st.info("No material store staging records discovered inside loaded field parameters.")
@@ -794,7 +798,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 })
         if ot_audit_rows:
             ot_audit_df = pd.DataFrame(ot_audit_rows)
-            st.table(ot_audit_df)
+            st.dataframe(ot_audit_df, use_container_width=True)
             create_copy_button(ot_audit_df, "overtime_roi_auditor")
         else:
             st.success("✅ Zero hourly technicians incurred premium overtime thresholds during this invoice cycle.")
@@ -814,7 +818,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                     "Ticket Invoiced Revenue": f"${r['Total Invoice Amount']:,.2f}"
                 })
             whale_summary_df = pd.DataFrame(whale_summary)
-            st.table(whale_summary_df)
+            st.dataframe(whale_summary_df, use_container_width=True)
             create_copy_button(whale_summary_df, "whale_alert_leaderboard")
         else:
             st.info("No invoice details located inside loaded operations datasets.")
@@ -898,7 +902,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                     "Net Profit ($)": f"${net_profit_sum:,.2f}",
                     "Net Profit (%)": f"{(net_profit_sum / gross_revenue_sum * 100):.1f}%" if gross_revenue_sum > 0 else "0.0%"
                 }])
-                st.table(totals_summary_df)
+                st.dataframe(totals_summary_df, use_container_width=True)
                 create_copy_button(totals_summary_df, "profitability_summary_totals")
                 
             st.markdown("   ")
@@ -935,9 +939,9 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 
                 try:
                     styled_reg = prof_register_df.style.apply(highlight_low_margins, axis=1)
-                    st.table(styled_reg)
+                    st.dataframe(styled_reg, use_container_width=True)
                 except Exception:
-                    st.table(prof_register_df)
+                    st.dataframe(prof_register_df, use_container_width=True)
                 create_copy_button(prof_register_df, "sortable_job_margins_register")
             else: st.info("No core internal crew members jobs found for selected parameters layout block.")
         else: st.info("Product/Service financial costs metrics columns missing from current source sheets.")
@@ -1005,6 +1009,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             cc_matrix['Net Profit (%)'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Net_Profit_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
             
             cc_matrix['Cost Ratio % vs Rev'] = cc_matrix['Cost Ratio % vs Rev'].apply(lambda x: f"{x:.1f}%")
+            cc_matrix['Net Profit (%)'] = cc_matrix['Net_Profit_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100
             cc_matrix['Net Profit (%)'] = cc_matrix['Net Profit (%)'].apply(lambda x: f"{x:.1f}%")
             cc_matrix['Gross Invoiced Revenue'] = cc_matrix['Gross_Invoiced_Raw'].apply(lambda x: f"${x:,.2f}")
             cc_matrix['Total Combined Cost'] = cc_matrix['Combined_Cost_Total_Raw'].apply(lambda x: f"${x:,.2f}")
@@ -1012,7 +1017,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             cc_matrix['Net Profit ($)'] = cc_matrix['Net_Profit_Total_Raw'].apply(lambda x: f"${x:,.2f}")
             
             show_cc = cc_matrix[['Business Unit', 'Jobs', 'Gross Invoiced Revenue', 'Total Combined Cost', 'Cost Ratio % vs Rev', 'Tech Wage Burden', 'Net Profit ($)', 'Net Profit (%)']].rename(columns={'Jobs': 'Jobs Assigned'})
-            st.table(show_cc)
+            st.dataframe(show_cc, use_container_width=True)
             create_copy_button(show_cc, "product_vs_service_cost_breakdown")
         else: st.info("Product/Service financial costs metrics columns missing from current source sheets.")
 
@@ -1297,9 +1302,9 @@ if time_file and ops_file:
             
             try:
                 styled_weekly = display_dfs['Weekly'].reset_index(drop=True).style.set_properties(**{'background-color': '#fff3cd', 'font-weight': 'bold', 'color': '#856404;'}, subset=['WH Efficiency'])
-                st.table(styled_weekly) 
+                st.dataframe(styled_weekly, use_container_width=True) 
             except Exception:
-                st.table(display_dfs['Weekly'].reset_index(drop=True))
+                st.dataframe(display_dfs['Weekly'].reset_index(drop=True), use_container_width=True)
                 
             create_copy_button(display_dfs['Weekly'], "weekly_summary")
             
@@ -1352,15 +1357,15 @@ if time_file and ops_file:
             m_col1, m_col2 = st.columns([1.2, 1.8])
             with m_col1:
                 st.markdown("<br>**📈 Gross Invoiced Revenue & Payroll by Business Unit**", unsafe_allow_html=True)
-                st.table(bu_financial_matrix[['Business Unit', 'Gross Invoiced Revenue', 'Rev Share %', 'Assumed Pay', 'Pay % of Revenue']].reset_index(drop=True))
+                st.dataframe(bu_financial_matrix[['Business Unit', 'Gross Invoiced Revenue', 'Rev Share %', 'Assumed Pay', 'Pay % of Revenue']].reset_index(drop=True), use_container_width=True)
                 create_copy_button(bu_financial_matrix[['Business Unit', 'Gross Invoiced Revenue', 'Rev Share %', 'Assumed Pay', 'Pay % of Revenue']], "bu_rev_and_pay")
                 
                 st.markdown("<br>**🎯 Average Ticket Size per BU**", unsafe_allow_html=True)
                 bu_avg_ticket = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].mean().reset_index()
                 bu_avg_ticket.columns = ['Business Unit', 'Average Ticket Size Raw']
                 bu_avg_ticket['Average Ticket Size'] = bu_avg_ticket['Average Ticket Size Raw'].apply(lambda x: f"${x:,.2f}")
-                st.table(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True))
-                create_copy_button(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True), "bu_avg_ticket")
+                st.dataframe(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True), use_container_width=True)
+                create_copy_button(bu_avg_ticket[['Business Unit', 'Average Ticket Size']], "bu_avg_ticket")
             with m_col2:
                 st.markdown("**📈 Pay Ratio per Clocked Hour**", unsafe_allow_html=True)
                 rev_per_hour_df = final_df.copy()
@@ -1378,7 +1383,7 @@ if time_file and ops_file:
                 rev_per_hour_df['Margin per Clocked Hour'] = rev_per_hour_df['Margin per Clocked Hour Raw'].apply(lambda x: f"${x:,.2f}/hr")
                 
                 show_rev_per_hour_sorted = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue', 'Total Net Margin', 'Margin per Clocked Hour']]
-                st.table(show_rev_per_hour_sorted.reset_index(drop=True))
+                st.dataframe(show_rev_per_hour_sorted.reset_index(drop=True), use_container_width=True)
                 create_copy_button(show_rev_per_hour_sorted.reset_index(drop=True), "pay_ratio_per_clocked")
             
             st.markdown("<br><hr>", unsafe_allow_html=True)
@@ -1396,7 +1401,7 @@ if time_file and ops_file:
                     report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(tech_data[short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])})
                 report_data.append({"Day": "TOTAL WEEKLY", "Jobs": int(tech_data['Total_Weekly_Job_Count']), "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']), "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']), "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])})
                 manager_day_df = pd.DataFrame(report_data)
-                st.table(manager_day_df)
+                st.dataframe(manager_day_df, use_container_width=True)
                 create_copy_button(manager_day_df, f"manager_overview_{tech}")
             show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key="manager_tab")
             
@@ -1408,16 +1413,16 @@ if time_file and ops_file:
                 report_data = []
                 for full_day, short_day in {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}.items():
                     report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(final_df[final_df['Name'] == selected_tech].iloc[0][short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])})
-                report_data.append({"Day": "TOTAL WEEKLY", "Jobs": int(tech_data['Total_Weekly_Job_Count']), "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']), "Job Time": format_hm(final_df[final_df['Name'] == selected_tech].iloc[0][short_day + '_Job_Hrs']), "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])})
+                report_data.append({"Day": "TOTAL WEEKLY", "Jobs": int(tech_data['Total_Weekly_Job_Count']), "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']), "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']), "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])})
                 indiv_day_df = pd.DataFrame(report_data)
-                st.table(indiv_day_df)
+                st.dataframe(indiv_day_df, use_container_width=True)
                 create_copy_button(indiv_day_df, f"printable_indiv_{selected_tech}")
 
         day_mapping = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
         for i, full_day in enumerate(tab_names[3:10]): 
             with tabs[i+3]:
                 short_day = day_mapping[full_day]
-                st.table(display_dfs[short_day].reset_index(drop=True))
+                st.dataframe(display_dfs[short_day].reset_index(drop=True), use_container_width=True)
                 create_copy_button(display_dfs[short_day].reset_index(drop=True), f"day_tab_{short_day}")
 
         with tabs[10]:
