@@ -13,10 +13,10 @@ st.markdown("""
     /* Enforce landscape orientation to maximize wide printable space layout margins */
     @page {
         size: landscape;
-        margin: 0.4in !important;
+        margin: 0.5in !important;
     }
 
-    /* Hide the entire sidebar, file uploaders, navigation tabs, and system menus */
+    /* Hide the entire sidebar, file uploaders, navigation tabs, system menus, and utility buttons */
     header { display: none !important; }
     [data-testid="stHeader"] { display: none !important; }
     [data-testid="stSidebar"] { display: none !important; }
@@ -27,30 +27,6 @@ st.markdown("""
     div[data-baseweb="tab-list"] { display: none !important; }
     h1, .hide-on-print, .stAlert, iframe, button { display: none !important; }
     div[class*="stExpander"] { display: none !important; }
-    
-    /* Force column blocks side-by-side natively on wide horizontal landscape layouts */
-    [data-testid="stHorizontalBlock"] {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important; /* Force side-by-side execution mapping across landscape viewport margins */
-        width: 100% !important;
-        gap: 20px !important;
-    }
-    [data-testid="column"] {
-        flex: 1 1 0% !important;
-        min-width: 0 !important;
-        height: auto !important;
-        overflow: visible !important;
-        margin-bottom: 0px !important;
-        page-break-inside: avoid !important;
-    }
-    
-    h2, h3, h4 {
-        page-break-inside: avoid !important;
-        page-break-after: avoid !important;
-        margin-top: 25px !important;
-        margin-bottom: 12px !important;
-    }
 
     /* Unclamp outer container gutters to allow data to bleed cleanly to the printable edges */
     div[data-testid="stAppViewBlockContainer"],
@@ -62,12 +38,59 @@ st.markdown("""
         margin: 0 !important;
     }
     
-    /* Enforce full-width text wrapping table styles safely inside right borders */
+    /* Default: Flatten layout properties to blocks to allow tables full width access without clipping */
+    div[class*="stVerticalBlock"], 
+    div[data-testid="element-container"],
+    div[data-testid="stHorizontalBlock"],
+    div[data-testid="column"] {
+        display: block !important;
+        position: static !important;
+        float: none !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 100% !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+        margin: 0 0 25px 0 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+    }
+    
+    div[data-testid="column"] {
+        page-break-inside: avoid !important;
+    }
+    
+    h2, h3, h4 {
+        page-break-inside: avoid !important;
+        page-break-after: avoid !important;
+        margin-top: 25px !important;
+        margin-bottom: 12px !important;
+    }
+
+    /* CRITICAL FIX: Only target horizontal blocks containing Metric summary cards to align side-by-side */
+    div[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        width: 100% !important;
+        gap: 15px !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) div[data-testid="column"] {
+        display: inline-block !important;
+        flex: 1 1 0% !important;
+        min-width: 120px !important;
+        width: auto !important;
+        max-width: none !important;
+        margin: 0 !important;
+    }
+    
+    /* Enforce responsive auto-scaling tables matching full page landscape properties */
     table { 
         width: 100% !important; 
         max-width: 100% !important;
         border-collapse: collapse !important;
-        table-layout: auto !important;
+        table-layout: auto !important; /* Dynamically resizes columns to sit inside landscape right margins */
         page-break-inside: auto !important;
         margin: 0 0 20px 0 !important;
     }
@@ -76,11 +99,11 @@ st.markdown("""
         page-break-after: auto !important;
     }
     th, td {
-        white-space: normal !important; /* Keeps labels text wrapping safely onto clean nested lines */
+        white-space: normal !important; /* Keeps labels text wrapping safely onto clean wrapped lines */
         word-break: break-word !important;
         overflow-wrap: break-word !important;
         padding: 5px 6px !important;
-        font-size: 10px !important; /* Highly crisp font sizing for maximum sheet width density allocation */
+        font-size: 10px !important; /* Crisp font sizing for landscape margin density allocation */
         text-align: left !important;
         line-height: 1.3 !important;
     }
@@ -311,7 +334,7 @@ def create_copy_button(df, raw_key):
                     btn.style.color = "#3c4043";
                     btn.style.borderColor = "#dadce0";
                 }}, 2000);
-            }} else {{
+                }} else {{
                 btn.innerHTML = "❌ Copy failed";
             }}
         }} catch (err) {{
