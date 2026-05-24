@@ -527,7 +527,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         margin_df['Total Net Margin'] = margin_df['Net Margin Raw'].apply(lambda x: f"${x:,.2f}")
         margin_df['Total Clocked'] = margin_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
         margin_df['Margin per Clocked Hour'] = margin_df['Margin per Clocked Hour Raw'].apply(lambda x: f"${x:,.2f}/hr")
-        st.dataframe(margin_df[['Name', 'Total Clocked', 'Total Assigned Revenue', 'Assumed Pay', 'Total Net Margin', 'Margin per Clocked Hour']].reset_index(drop=True), use_container_width=True)
+        st.dataframe(margin_df[['Name', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Total Net Margin', 'Margin per Clocked Hour']].reset_index(drop=True), use_container_width=True)
 
     # === ADVANCED BASELINES MATRIX CONTEXT LAYOUTS ===
     if "📋 Advanced Team Processing Baselines Matrix" in test_choices:
@@ -541,13 +541,12 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         div_wh_baseline = wh_jobs['Total_Job_Time_Hours'].mean() if not wh_jobs.empty else 3.5
         div_lsi_baseline = lsi_jobs['Total_Job_Time_Hours'].mean() if not lsi_jobs.empty else 2.0
         
-        # Filter division metrics to strictly average rows where store time occurs (> 0)
+        # Filter division baseline store parameters to strictly ignore direct-to-site jobs
         wh_jobs_with_store = wh_jobs[wh_jobs['Store_Time_Hrs'] > 0]
         lsi_jobs_with_store = lsi_jobs[lsi_jobs['Store_Time_Hrs'] > 0]
         div_wh_store_baseline = wh_jobs_with_store['Store_Time_Hrs'].mean() if not wh_jobs_with_store.empty else 0.5
         div_lsi_store_baseline = lsi_jobs_with_store['Store_Time_Hrs'].mean() if not lsi_jobs_with_store.empty else 0.3
         
-        # FIXED: Added Blended Total Avg marker metadata metric token to baseline panel header summary strip
         st.markdown(f"""
         📊 **Current Division Baseline Averages (Store Averages Ignore Direct-To-Site Jobs):** &nbsp;&nbsp;•&nbsp;&nbsp;**Blended Total Avg:** `{format_hm(div_avg_total)}` &nbsp;&nbsp;|&nbsp;&nbsp; **WH Job Length:** `{format_hm(div_wh_baseline)}` &nbsp;&nbsp;|&nbsp;&nbsp; **LSI Job Length:** `{format_hm(div_lsi_baseline)}` 
         &nbsp;&nbsp;•&nbsp;&nbsp;**WH Store Delay:** `{format_hm(div_wh_store_baseline)}` &nbsp;&nbsp;|&nbsp;&nbsp; **LSI Store Delay:** `{format_hm(div_lsi_store_baseline)}`
@@ -560,7 +559,6 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             t_wh = tech_jobs[tech_jobs['Business Unit'] == 'Lowes - Water Heaters']
             t_lsi = tech_jobs[tech_jobs['Business Unit'] == 'Lowes - Simple Installs']
             
-            # FIXED: Evaluated total un-blended weekly performance averages across every contract assigned
             avg_total_val = tech_jobs['Total_Job_Time_Hours'].mean() if not tech_jobs.empty else np.nan
             avg_wh_val = t_wh['Total_Job_Time_Hours'].mean() if not t_wh.empty else np.nan
             avg_lsi_val = t_lsi['Total_Job_Time_Hours'].mean() if not t_lsi.empty else np.nan
@@ -575,18 +573,22 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             
             matrix_rows.append({
                 "Name": tech_name,
-                # FIXED: Injected Blended Total Avg Job Time column array fields to replace legacy variance layout indices
                 "Total Avg Job Time": f"{format_hm(avg_total_val)} (Div: {format_hm(div_avg_total)})" if pd.notna(avg_total_val) else "-",
                 "Avg WH Time": f"{format_hm(avg_wh_val)} (Div: {format_hm(div_wh_baseline)})" if pd.notna(avg_wh_val) else "-",
                 "Avg LSI Time": f"{format_hm(avg_lsi_val)} (Div: {format_hm(div_lsi_baseline)})" if pd.notna(avg_lsi_val) else "-",
                 "Avg WH Store Time": f"{format_hm(avg_wh_store_val)} (Div: {format_hm(div_wh_store_baseline)})" if pd.notna(avg_wh_store_val) else "-",
                 "Avg LSI Store Time": f"{format_hm(avg_lsi_store_val)} (Div: {format_hm(div_lsi_store_baseline)})" if pd.notna(avg_lsi_store_val) else "-",
-                "Max Single Job Length": format_hm(max_job)
+                "Max Single Job Length": format_hm(max_job),
+                # FIXED: Added raw sorting key value straight to data vector dictionaries
+                "sort_key": avg_total_val if pd.notna(avg_total_val) else -1.0
             })
             
         matrix_df = pd.DataFrame(matrix_rows)
+        if not matrix_df.empty:
+            # FIXED: Sorted the compiled results array matrix by highest total avg job time raw values descending
+            matrix_df = matrix_df.sort_values(by='sort_key', ascending=False).drop(columns=['sort_key'])
+            
         try:
-            # FIXED: Included 'Total Avg Job Time' column into backend background highlighting subset mapping framework
             styled_matrix = matrix_df.reset_index(drop=True).style.apply(highlight_matrix_overhead, subset=['Total Avg Job Time', 'Avg WH Time', 'Avg LSI Time', 'Avg WH Store Time', 'Avg LSI Store Time'])
             st.dataframe(styled_matrix, use_container_width=True)
         except Exception:
@@ -629,7 +631,6 @@ if time_file and ops_file:
         ops_df = ops_df.dropna(subset=['Assigned Team Members'])
         time_cols = ['Lowes Store - Completed Total Time in Status', 'On The Way - Completed Total Time in Status', 'In Progress - Completed Total Time in Status', 'On The Way - Completed Total Time in Status.1', 'In Progress - Completed Total Time in Status.1']
         
-        # Pre-process numeric elements
         for col in time_cols: ops_df[col] = pd.to_numeric(ops_df[col], errors='coerce').fillna(0)
         ops_df['Total Invoice Amount'] = pd.to_numeric(ops_df.get('Total Invoice Amount', pd.Series([0])), errors='coerce').fillna(0.0)
         
@@ -639,7 +640,6 @@ if time_file and ops_file:
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
         unexploded_ops = ops_df.copy()
         
-        # Preserve absolute raw sum macro calculations
         raw_unsplit_volume = unexploded_ops['Total Invoice Amount'].sum()
         
         ts_cols = ['Lowes Store - Start Timestamp', 'On The Way - Start Timestamp', 'In Progress - Start Timestamp', 'On The Way - Start Timestamp.1', 'In Progress - Start Timestamp.1']
@@ -830,7 +830,6 @@ if time_file and ops_file:
         bu_summary_df['WH Efficiency'] = final_df['Water Heaters Eff']
         bu_summary_df['Total Efficiency'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, (final_df['Total_Weekly_Job_Hrs'] / final_df['Total_Weekly_Clocked_Hrs']) * 100, 0.0)
         bu_summary_df['Total Efficiency'] = bu_summary_df['Total Efficiency'].apply(lambda x: f"{x:.1f}%")
-        
         bu_summary_df['Total Unallocated Hours'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
         display_dfs['Weekly'] = bu_summary_df
         
@@ -1082,12 +1081,10 @@ if time_file and ops_file:
                 wh_jobs = ops_df[ops_df['Business Unit'] == 'Lowes - Water Heaters']
                 lsi_jobs = ops_df[ops_df['Business Unit'] == 'Lowes - Simple Installs']
                 
-                # Pull global baselines for total job durations
                 div_avg_total = ops_df['Total_Job_Time_Hours'].mean() if not ops_df.empty else 0.0
                 div_wh_baseline = wh_jobs['Total_Job_Time_Hours'].mean() if not wh_jobs.empty else 3.5
                 div_lsi_baseline = lsi_jobs['Total_Job_Time_Hours'].mean() if not lsi_jobs.empty else 2.0
                 
-                # FIXED: Filter division baseline store parameters to strictly ignore direct-to-site jobs
                 wh_jobs_with_store = wh_jobs[wh_jobs['Store_Time_Hrs'] > 0]
                 lsi_jobs_with_store = lsi_jobs[lsi_jobs['Store_Time_Hrs'] > 0]
                 div_wh_store_baseline = wh_jobs_with_store['Store_Time_Hrs'].mean() if not wh_jobs_with_store.empty else 0.5
@@ -1109,7 +1106,6 @@ if time_file and ops_file:
                     avg_wh_val = t_wh['Total_Job_Time_Hours'].mean() if not t_wh.empty else np.nan
                     avg_lsi_val = t_lsi['Total_Job_Time_Hours'].mean() if not t_lsi.empty else np.nan
                     
-                    # FIXED: Filter individual technician metrics to completely ignore direct-to-site work orders with zero hours
                     t_wh_store = t_wh[t_wh['Store_Time_Hrs'] > 0]
                     t_lsi_store = t_lsi[t_lsi['Store_Time_Hrs'] > 0]
                     avg_wh_store_val = t_wh_store['Store_Time_Hrs'].mean() if not t_wh_store.empty else np.nan
@@ -1124,10 +1120,14 @@ if time_file and ops_file:
                         "Avg LSI Time": f"{format_hm(avg_lsi_val)} (Div: {format_hm(div_lsi_baseline)})" if pd.notna(avg_lsi_val) else "-",
                         "Avg WH Store Time": f"{format_hm(avg_wh_store_val)} (Div: {format_hm(div_wh_store_baseline)})" if pd.notna(avg_wh_store_val) else "-",
                         "Avg LSI Store Time": f"{format_hm(avg_lsi_store_val)} (Div: {format_hm(div_lsi_store_baseline)})" if pd.notna(avg_lsi_store_val) else "-",
-                        "Max Single Job Length": format_hm(max_job)
+                        "Max Single Job Length": format_hm(max_job),
+                        "sort_key": avg_total_val if pd.notna(avg_total_val) else -1.0
                     })
                     
                 matrix_df = pd.DataFrame(matrix_rows)
+                if not matrix_df.empty:
+                    matrix_df = matrix_df.sort_values(by='sort_key', ascending=False).drop(columns=['sort_key'])
+                    
                 try:
                     styled_matrix = matrix_df.reset_index(drop=True).style.apply(highlight_matrix_overhead, subset=['Total Avg Job Time', 'Avg WH Time', 'Avg LSI Time', 'Avg WH Store Time', 'Avg LSI Store Time'])
                     st.dataframe(styled_matrix, use_container_width=True)
