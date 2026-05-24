@@ -10,8 +10,12 @@ st.set_page_config(page_title="Tech Time Tracker", layout="wide")
 st.markdown("""
 <style>
 @media print {
+    /* Hide the sidebar, upload mechanisms, headers, and tabs on output sheets */
     header { display: none !important; }
     [data-testid="stHeader"] { display: none !important; }
+    [data-testid="stSidebar"] { display: none !important; }
+    section[data-testid="stSidebar"] { display: none !important; }
+    [data-testid="stSidebarCollapseButton"] { display: none !important; }
     [data-testid="stFileUploader"] { display: none !important; }
     [data-testid="stSelectbox"] { display: none !important; }
     div[data-baseweb="tab-list"] { display: none !important; }
@@ -21,15 +25,38 @@ st.markdown("""
     iframe { display: none !important; }
     div[class*="stExpander"] { display: none !important; }
     
+    /* Force column structures to stack vertically down print sheets to prevent horizontal overlapping */
+    [data-testid="stHorizontalBlock"] {
+        flex-direction: column !important;
+        width: 100% !important;
+        min-width: 100% !important;
+        gap: 35px !important;
+    }
+    [data-testid="column"] {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 100% !important;
+        flex: 1 1 auto !important;
+    }
+    
+    /* Expand print view boundaries to standard maximum dimensions */
     .main .block-container {
         max-width: 100% !important;
         width: 100% !important;
         padding: 0 !important;
         margin: 0 !important;
     }
+    
+    /* Uncap dataframes and expand hidden scroll regions to render full list views on page generation */
     table { width: 100% !important; table-layout: auto !important; }
-    [data-testid="stTable"] { width: 100% !important; }
-    [data-testid="stDataFrame"] > div { height: auto !important; max-height: none !important; overflow: visible !important; }
+    [data-testid="stTable"] { width: 100% !important; display: block !important; }
+    div[data-testid="stDataFrame"], 
+    div[data-testid="stDataFrame"] > div,
+    div[class*="StyledDataGridContainer"] {
+        overflow: visible !important;
+        height: auto !important;
+        max-height: none !important;
+    }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -222,14 +249,14 @@ def highlight_over_hour_row(row):
             pass
     return [''] * len(row)
 
-# NATIVE CLIPBOARD EXPORT HOOK GENERATOR
+# NATIVE SYSTEM CLIPBOARD DATA MATRIX EXPORTER
 def create_copy_button(df, raw_key):
     safe_key = "".join([c if c.isalnum() else "_" for c in raw_key])
     tsv_str = df.to_csv(sep='\t', index=False)
     safe_tsv = tsv_str.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
     
     button_html = f"""
-    <div style="text-align: left; margin-top: 5px; margin-bottom: 8px;">
+    <div class="hide-on-print" style="text-align: left; margin-top: 5px; margin-bottom: 8px;">
         <textarea id="tsv_{safe_key}" style="position: absolute; left: -9999px;">{safe_tsv}</textarea>
         <button id="btn_{safe_key}" onclick="copyTSV_{safe_key}()" style="background-color: #ffffff; color: #3c4043; padding: 6px 14px; border: 1px solid #dadce0; border-radius: 4px; cursor: pointer; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: background-color 0.2s;">
             📋 Copy Table Data (For Email/Sheets/Docs)
@@ -778,7 +805,7 @@ if time_file and ops_file:
         ops_df['Total Invoice Amount'] = pd.to_numeric(ops_df.get('Total Invoice Amount', pd.Series([0])), errors='coerce').fillna(0.0)
         
         ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
-        ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On The Way - Completed Total Time in Status.1', 0)) / 3600.0
+        ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On Way - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
         unexploded_ops = ops_df.copy()
@@ -1062,9 +1089,8 @@ if time_file and ops_file:
                 rev_per_hour_df['Margin per Clocked Hour Raw'] = np.where(rev_per_hour_df['Total_Weekly_Clocked_Hrs'] > 0, rev_per_hour_df['Net Margin Raw'] / rev_per_hour_df['Total_Weekly_Clocked_Hrs'], 0.0)
                 rev_per_hour_df['Margin per Clocked Hour'] = rev_per_hour_df['Margin per Clocked Hour Raw'].apply(lambda x: f"${x:,.2f}/hr")
                 
-                show_rev_per_hour = rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue', 'Total Net Margin', 'Margin per Clocked Hour']]
-                st.dataframe(show_rev_per_hour.reset_index(drop=True).style.apply(highlight_pay_pct_row, axis=1), use_container_width=True)
-                create_copy_button(show_rev_per_hour, "pay_ratio_per_clocked")
+                st.dataframe(rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue', 'Total Net Margin', 'Margin per Clocked Hour']].reset_index(drop=True), use_container_width=True)
+                create_copy_button(rev_per_hour_df.sort_values(by='Pay Pct', ascending=False)[['Name', 'Total Jobs', 'Total Clocked', 'Total Assigned Value', 'Assumed Pay', 'Pay % vs Assigned Revenue', 'Total Net Margin', 'Margin per Clocked Hour']], "pay_ratio_per_clocked")
             
             st.markdown("<br><hr>", unsafe_allow_html=True)
             run_baselines_matrix(ops_df)
@@ -1106,7 +1132,7 @@ if time_file and ops_file:
                 create_copy_button(display_dfs[short_day].reset_index(drop=True), f"day_tab_{short_day}")
 
         with tabs[10]:
-            test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "¼ The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)", "📉 True Gross Margin per Clocked Hour"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
+            test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "¼ The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)", "🗺️ Route Optimization Flags"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
             run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             
     except Exception as e:
