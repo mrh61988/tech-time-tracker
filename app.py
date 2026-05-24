@@ -306,7 +306,7 @@ def highlight_over_hour_row(row):
             pass
     return [''] * len(row)
 
-# AUDITOR ROW MARGIN HIGHLIGHTER ENGINE
+# AUDITOR LOW MARGIN CONDITIONAL FILTER HIGHLIGHT ENGINE
 def highlight_low_margins(row):
     styles = [''] * len(row)
     if 'Line of Business' in row and 'Margin %' in row:
@@ -919,7 +919,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
     # INTERACTIVE SORTABLE COMPREHENSIVE REVENUE NET PROFITABILITY MATRIX PANEL
     if "🛢️ Water Heater True Net Profitability Margin Auditor" in test_choices:
         st.markdown("### **💵 Division True Net Profitability Margin Auditor**")
-        st.markdown("*(Evaluates net profitability metrics across selected sectors factoring applied contract payout structures)*")
+        st.markdown("*(Evaluates net profitability metrics across selected sectors factoring applied contract structures and cost back-outs)*")
         if not unexploded_ops.empty and 'Total Product Cost [tax inc]' in unexploded_ops.columns:
             df_prof = unexploded_ops.copy()
             df_prof['Product_Cost'] = pd.to_numeric(df_prof['Total Product Cost [tax inc]'], errors='coerce').fillna(0.0)
@@ -927,12 +927,20 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             df_prof['Combined_Lowe_Costs'] = df_prof['Product_Cost'] + df_prof['Service_Cost']
             df_prof['Tech_Count'] = df_prof['Assigned Team Members'].apply(lambda x: len([m.strip() for m in str(x).split(',') if m.strip()]))
             
-            # Helper logic to filter contractor scopes
+            # Helper logic to isolate contractor scopes
             CORE_TECHS = ['Bryan Pickett', 'Edward Lopez', 'Erik Tange', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
             def check_contractor(tech_str):
                 raw_members = [m.strip() for m in str(tech_str).split(',') if m.strip()]
                 return not any(m in CORE_TECHS for m in raw_members)
             df_prof['Is_Contractor'] = df_prof['Assigned Team Members'].apply(check_contractor)
+            
+            # CRITICAL COST SUBTRACTION RULE: For all water heater jobs, subtract flat rates ($100 solo / $175 helper) from Total Combined Costs
+            df_prof['Cost_Burden_Sub'] = np.where(
+                df_prof['Business Unit'] == 'Lowes - Water Heaters',
+                np.where(df_prof['Tech_Count'] > 1, 175.0, 100.0),
+                0.0
+            )
+            df_prof['Combined_Lowe_Costs'] = df_prof['Combined_Lowe_Costs'] - df_prof['Cost_Burden_Sub']
             
             df_prof['Flat_Rate_Labor'] = np.where(
                 df_prof['Business Unit'] == 'Lowes - Water Heaters',
@@ -941,7 +949,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             )
             df_prof['Logged_Time_Pay'] = df_prof['#ID'].map(ops_df.groupby('#ID')['Allocated_Job_Pay'].sum().to_dict()).fillna(0.0)
             
-            # CRITICAL WAGE REQUIREMENT: For contractor LSI dispatches match pay cargo 100% to invoice total values
+            # Contractor LSI dispatches set payload burden exactly matching gross revenue totals
             df_prof['Assumed_Labor_Payload'] = np.where(
                 (df_prof['Business Unit'] == 'Lowes - Simple Installs') & df_prof['Is_Contractor'],
                 df_prof['Total Invoice Amount'],
@@ -960,7 +968,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             if selected_bu_filter != "All Sectors":
                 df_prof_filtered = df_prof_filtered[df_prof_filtered['Business Unit'] == selected_bu_filter]
                 
-            # CRITICAL DEPLOYMENT FILTER: Completely eliminate pure contractor jobs from the onscreen tracking table grid list
+            # Completely eliminate contractor jobs from onscreen table display
             df_prof_filtered = df_prof_filtered[~df_prof_filtered['Is_Contractor']]
                 
             if not df_prof_filtered.empty:
@@ -1024,6 +1032,14 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 return not any(m in CORE_TECHS for m in raw_members)
             df_cc['Is_Contractor'] = df_cc['Assigned Team Members'].apply(check_contractor_cc)
             
+            # CRITICAL COST SUBTRACTION MATRIX: Apply matching cost back-out updates inside the summary model parameters
+            df_cc['Cost_Burden_Sub'] = np.where(
+                df_cc['Business Unit'] == 'Lowes - Water Heaters',
+                np.where(df_cc['Tech_Count'] > 1, 175.0, 100.0),
+                0.0
+            )
+            df_cc['Combined_Cost'] = df_cc['Combined_Cost'] - df_cc['Cost_Burden_Sub']
+            
             df_cc['Flat_Rate_Labor'] = np.where(
                 df_cc['Business Unit'] == 'Lowes - Water Heaters',
                 np.where(df_cc['Tech_Count'] > 1, 175.0, 100.0),
@@ -1031,7 +1047,6 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             )
             df_cc['Logged_Time_Pay'] = df_cc['#ID'].map(ops_df.groupby('#ID')['Allocated_Job_Pay'].sum().to_dict()).fillna(0.0)
             
-            # Apply matching contractor dispatch calculation safeguards to macro matrix summary structures
             df_cc['Assumed_Labor_Payload'] = np.where(
                 (df_cc['Business Unit'] == 'Lowes - Simple Installs') & df_cc['Is_Contractor'],
                 df_cc['Total Invoice Amount'],
@@ -1136,11 +1151,11 @@ if time_file and ops_file:
         ops_df['Total Invoice Amount'] = pd.to_numeric(ops_df.get('Total Invoice Amount', pd.Series([0])), errors='coerce').fillna(0.0)
         
         ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
-        ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On The Way - Completed Total Time in Status.1', 0)) / 3600.0
+        ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On Way - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
 
-        # TIMESTAMPS DEFINED ON LAUNCH BASE FOR BOTH PIPELINES
+        # TIMESTAMPS CRITICAL LIFECYCLE DISPATCH HOOK DEFINED ON LAUNCH BASE FOR BOTH PIPELINES
         ts_cols = ['Lowes Store - Start Timestamp', 'On The Way - Start Timestamp', 'In Progress - Start Timestamp', 'On The Way - Start Timestamp.1', 'In Progress - Start Timestamp.1']
         available_ts_cols = [c for c in ts_cols if c in ops_df.columns]
         ops_df['Job_Date'] = ops_df[available_ts_cols].bfill(axis=1).iloc[:, 0]
@@ -1402,7 +1417,7 @@ if time_file and ops_file:
                 bu_avg_ticket.columns = ['Business Unit', 'Average Ticket Size Raw']
                 bu_avg_ticket['Average Ticket Size'] = bu_avg_ticket['Average Ticket Size Raw'].apply(lambda x: f"${x:,.2f}")
                 st.table(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True))
-                create_copy_button(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True), "bu_avg_ticket")
+                create_copy_button(bu_avg_ticket[['Business Unit', 'Average Ticket Size']], "bu_avg_ticket")
             with m_col2:
                 st.markdown("**📈 Pay Ratio per Clocked Hour**", unsafe_allow_html=True)
                 rev_per_hour_df = final_df.copy()
