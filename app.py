@@ -111,7 +111,7 @@ st.markdown("""
         text-align: left !important;
         line-height: 1.25 !important;
     }
-    for thead {
+    thead {
         display: table-header-group !important;
     }
 }
@@ -894,7 +894,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             st.table(ot_audit_df)
             create_copy_button(ot_audit_df, "overtime_roi_auditor")
         else:
-            st.success("✅ Zero hourly technicians incurred premium overtime thresholds during this invoice cycle.")
+            st.success("¼ Hourly technicians worked zero premium overtime thresholds during this session cycle.")
 
     if "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard" in test_choices:
         st.markdown("### **🏆 Single-Job \"Whale Alert\" Revenue Leaderboard**")
@@ -916,10 +916,10 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         else:
             st.info("No invoice details located inside loaded operations datasets.")
 
-    # INTERACTIVE SORTABLE COMPREHENSIVE REVENUE NET PROFITABILITY MATRIX PANEL
+    # Sortable Filterable revenue profit margins table panel layer block
     if "🛢️ Water Heater True Net Profitability Margin Auditor" in test_choices:
         st.markdown("### **💵 Division True Net Profitability Margin Auditor**")
-        st.markdown("*(Evaluates net profitability metrics across selected sectors factoring applied contract structures and cost back-outs)*")
+        st.markdown("*(Evaluates net profitability metrics across selected sectors. Overview totals include contractors, itemized register excludes them)*")
         if not unexploded_ops.empty and 'Total Product Cost [tax inc]' in unexploded_ops.columns:
             df_prof = unexploded_ops.copy()
             df_prof['Product_Cost'] = pd.to_numeric(df_prof['Total Product Cost [tax inc]'], errors='coerce').fillna(0.0)
@@ -927,7 +927,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             df_prof['Combined_Lowe_Costs'] = df_prof['Product_Cost'] + df_prof['Service_Cost']
             df_prof['Tech_Count'] = df_prof['Assigned Team Members'].apply(lambda x: len([m.strip() for m in str(x).split(',') if m.strip()]))
             
-            # Helper logic to isolate contractor scopes
+            # Helper contractor lookup routine definitions
             CORE_TECHS = ['Bryan Pickett', 'Edward Lopez', 'Erik Tange', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
             def check_contractor(tech_str):
                 raw_members = [m.strip() for m in str(tech_str).split(',') if m.strip()]
@@ -964,26 +964,32 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             with sort_pane_col:
                 selected_sort_choice = st.selectbox("Sort Itemized Register Results By:", ["Highest Net Profit", "Lowest Net Profit", "Highest Gross Invoice", "Highest Margin %", "Job ID"], key="sorting_perf_matrix")
                 
-            df_prof_filtered = df_prof.copy()
+            # CRITICAL FIX SYNCHRONIZATION: Overview Totals df_prof_totals includes contractors cleanly matching user query
+            df_prof_totals = df_prof.copy()
             if selected_bu_filter != "All Sectors":
-                df_prof_filtered = df_prof_filtered[df_prof_filtered['Business Unit'] == selected_bu_filter]
+                df_prof_totals = df_prof_totals[df_prof_totals['Business Unit'] == selected_bu_filter]
                 
-            # Completely eliminate contractor jobs from onscreen table display
-            df_prof_filtered = df_prof_filtered[~df_prof_filtered['Is_Contractor']]
-                
-            if not df_prof_filtered.empty:
+            if not df_prof_totals.empty:
                 totals_summary_df = pd.DataFrame([{
-                    "Total Dispatches Closed": int(len(df_prof_filtered)),
-                    "Gross Invoiced Revenue": f"${df_prof_filtered['Total Invoice Amount'].sum():,.2f}",
-                    "Total Combined Cost": f"${df_prof_filtered['Combined_Lowe_Costs'].sum():,.2f}",
-                    "Assumed Labor Payroll Burden": f"${df_prof_filtered['Assumed_Labor_Payload'].sum():,.2f}",
-                    "Net Profit": f"${df_prof_filtered['Net_Profit_Raw'].sum():,.2f}",
-                    "Blended Margin %": f"{(df_prof_filtered['Net_Profit_Raw'].sum() / df_prof_filtered['Total Invoice Amount'].sum() * 100):.1f}%" if df_prof_filtered['Total Invoice Amount'].sum() > 0 else "0.0%"
+                    "Total Dispatches Closed": int(len(df_prof_totals)),
+                    "Gross Invoiced Revenue": f"${df_prof_totals['Total Invoice Amount'].sum():,.2f}",
+                    "Total Combined Cost": f"${df_prof_totals['Combined_Lowe_Costs'].sum():,.2f}",
+                    "Assumed Labor Payroll Burden": f"${df_prof_totals['Assumed_Labor_Payload'].sum():,.2f}",
+                    "Net Profit": f"${df_prof_totals['Net_Profit_Raw'].sum():,.2f}",
+                    "Blended Margin %": f"{(df_prof_totals['Net_Profit_Raw'].sum() / df_prof_totals['Total Invoice Amount'].sum() * 100):.1f}%" if df_prof_totals['Total Invoice Amount'].sum() > 0 else "0.0%"
                 }])
                 st.table(totals_summary_df)
                 create_copy_button(totals_summary_df, "profitability_summary_totals")
                 
-                st.markdown("   ")
+            st.markdown("   ")
+            
+            # Itemized register matches filter lookup step and completely removes pure contractors from the log rows view
+            df_prof_filtered = df_prof.copy()
+            if selected_bu_filter != "All Sectors":
+                df_prof_filtered = df_prof_filtered[df_prof_filtered['Business Unit'] == selected_bu_filter]
+            df_prof_filtered = df_prof_filtered[~df_prof_filtered['Is_Contractor']]
+            
+            if not df_prof_filtered.empty:
                 df_prof_filtered['Profit Margin %'] = np.where(df_prof_filtered['Total Invoice Amount'] > 0, (df_prof_filtered['Net_Profit_Raw'] / df_prof_filtered['Total Invoice Amount'] * 100), 0.0)
                 
                 # Apply dynamic interactive sorting configurations
@@ -1013,12 +1019,12 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 except Exception:
                     st.table(prof_register_df)
                 create_copy_button(prof_register_df, "sortable_job_margins_register")
-            else: st.info("No core team elements matching selected parameters found.")
+            else: st.info("No core internal crew members jobs found for selected parameters layout block.")
         else: st.info("Product/Service financial costs metrics columns missing from current source sheets.")
 
     if "📦 Product vs. Service Cost Component Breakdown Matrix" in test_choices:
         st.markdown("### **📦 Lowe's Combined Cost Performance Matrix**")
-        st.markdown("*(Isolates combined material and service expenses metrics and maps accurate Net Profit thresholds by sector)*")
+        st.markdown("*(Isolates combined material and service expenses metrics and maps accurate Net Profit thresholds by sector inclusive of contractor fields)*")
         if not unexploded_ops.empty and 'Total Product Cost [tax inc]' in unexploded_ops.columns:
             df_cc = unexploded_ops.copy()
             df_cc['Prod_Cost'] = pd.to_numeric(df_cc['Total Product Cost [tax inc]'], errors='coerce').fillna(0.0)
@@ -1032,10 +1038,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
                 return not any(m in CORE_TECHS for m in raw_members)
             df_cc['Is_Contractor'] = df_cc['Assigned Team Members'].apply(check_contractor_cc)
             
-            # CRITICAL SYNC FIX: Filter contractor dispatches out of cost matrix to ensure absolute alignment
-            df_cc = df_cc[~df_cc['Is_Contractor']]
-            
-            # Non-negative bounding floor limits subtract adjustments from parameters
+            # CRITICAL CONSOLIDATION STEP: Contractor inclusion layer active for macro breakdown grids to secure matching metrics tracking values
             df_cc['Cost_Burden_Sub'] = np.where(
                 df_cc['Business Unit'] == 'Lowes - Water Heaters',
                 np.where(df_cc['Tech_Count'] > 1, 175.0, 100.0),
@@ -1158,7 +1161,7 @@ if time_file and ops_file:
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
 
-        # TIMESTAMPS DEFINED ON LAUNCH BASE FOR BOTH PIPELINES
+        # TIMESTAMPS CRITICAL LIFECYCLE DISPATCH HOOK DEFINED ON LAUNCH BASE FOR BOTH PIPELINES
         ts_cols = ['Lowes Store - Start Timestamp', 'On The Way - Start Timestamp', 'In Progress - Start Timestamp', 'On The Way - Start Timestamp.1', 'In Progress - Start Timestamp.1']
         available_ts_cols = [c for c in ts_cols if c in ops_df.columns]
         ops_df['Job_Date'] = ops_df[available_ts_cols].bfill(axis=1).iloc[:, 0]
@@ -1287,7 +1290,6 @@ if time_file and ops_file:
         
         final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
         final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * 3.5
-        final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
         final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
         final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
 
