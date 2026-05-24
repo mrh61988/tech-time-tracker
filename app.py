@@ -189,7 +189,7 @@ def highlight_pay_pct_row(row):
     return styles
 
 # --- MAIN BLOCK REPORT ENGINE ---
-def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
+def show_advanced_reporting(ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     
     # === BOSS TOOLS SECTION ===
@@ -550,15 +550,17 @@ if time_file and ops_file:
         ops_df = ops_df.dropna(subset=['Assigned Team Members'])
         time_cols = ['Lowes Store - Completed Total Time in Status', 'On The Way - Completed Total Time in Status', 'In Progress - Completed Total Time in Status', 'On The Way - Completed Total Time in Status.1', 'In Progress - Completed Total Time in Status.1']
         
+        # Pre-process numeric elements
         for col in time_cols: ops_df[col] = pd.to_numeric(ops_df[col], errors='coerce').fillna(0)
         ops_df['Total Invoice Amount'] = pd.to_numeric(ops_df.get('Total Invoice Amount', pd.Series([0])), errors='coerce').fillna(0.0)
         
         ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
-        ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On Way - Completed Total Time in Status.1', 0)) / 3600.0
+        ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On The Way - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
         unexploded_ops = ops_df.copy()
         
+        # Preserve absolute raw sum macro calculations
         raw_unsplit_volume = unexploded_ops['Total Invoice Amount'].sum()
         
         ts_cols = ['Lowes Store - Start Timestamp', 'On The Way - Start Timestamp', 'In Progress - Start Timestamp', 'On The Way - Start Timestamp.1', 'In Progress - Start Timestamp.1']
@@ -685,12 +687,14 @@ if time_file and ops_file:
         final_df['Rev_Per_Clocked_Hr'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, final_df['Total_Assigned_Revenue'] / final_df['Total_Weekly_Clocked_Hrs'], 0.0)
             
         st.sidebar.header("🔧 Job Status Time Adjustments")
-        global_adj_str = st.sidebar.text_input("🌍 Global Adj (HH:MM)", value="0:00", key="global_adj")
-        global_adj_hrs = parse_adj_hm(global_adj_str)
+        # FIXED: Upgraded global control layout to number entry with native step controls
+        global_adj_mins = st.sidebar.number_input("🌍 Global Adj (Minutes)", value=0, step=15, key="global_adj")
+        global_adj_hrs = global_adj_mins / 60.0
         adjustments = {}
         for tech in sorted(final_df['Name'].unique()):
-            adj_str = st.sidebar.text_input(f"{tech} Adj", value="0:00", key=f"adj_{tech}")
-            adjustments[tech] = parse_adj_hm(adj_str) + global_adj_hrs
+            # FIXED: Upgraded team adjustments entries to interactive plus/minus stepped fields
+            tech_adj_mins = st.sidebar.number_input(f"{tech} Adj (Minutes)", value=0, step=15, key=f"adj_{tech}")
+            adjustments[tech] = (tech_adj_mins / 60.0) + global_adj_hrs
             
         final_df['Adjustment_Hrs'] = final_df['Name'].map(adjustments).fillna(0.0)
         final_df['Total_Weekly_Job_Hrs'] = final_df['Total_Weekly_Job_Hrs'] + final_df['Adjustment_Hrs']
@@ -774,6 +778,7 @@ if time_file and ops_file:
             total_assumed_pay = rev_per_hour_df_calc['Assumed Pay Amount'].sum()
             pay_ratio_pct = (total_assumed_pay / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
             
+            # Positioned summary KPI cards side-by-side symmetrically on the same level
             dash_metric_col1, dash_metric_col2, dash_metric_col3 = st.columns(3)
             with dash_metric_col1:
                 st.metric(label="Division Gross Invoiced Volume", value=f"${raw_unsplit_volume:,.2f}")
@@ -782,6 +787,7 @@ if time_file and ops_file:
             with dash_metric_col3:
                 st.metric(label="Division Labor Pay Ratio", value=f"{pay_ratio_pct:.1f}%")
                 
+            # Pre-compute the exact pay proportions distributed across Business Units using 'Assigned Team Members'
             ops_df['Computed_Row_Pay'] = ops_df['Assigned Team Members'].map(rev_per_hour_df_calc.set_index('Name')['Assumed Pay Amount'].to_dict()).fillna(0.0)
             tech_total_field_hrs = ops_df.groupby('Assigned Team Members')['Total_Job_Time_Hours'].sum().reset_index().rename(columns={'Total_Job_Time_Hours': 'Tech_Total_Work_Hrs'})
             
@@ -834,7 +840,7 @@ if time_file and ops_file:
                 rev_per_hour_df['Pay Pct'] = np.where(rev_per_hour_df['Total_Assigned_Revenue'] > 0, (rev_per_hour_df['Assumed Pay Amount'] / rev_per_hour_df['Total_Assigned_Revenue']) * 100, 0.0)
                 rev_per_hour_df['Pay % vs Assigned Revenue'] = rev_per_hour_df['Pay Pct'].apply(lambda x: f"{x:.1f}%" if x > 0 else "-")
                 
-                # FIXED: Injected Total Net Margin and Margin per Clocked Hour into main production panel view table grid columns selection array
+                # FIXED: Added Total Net Margin and Margin per Clocked Hour straight into your primary production table loop view mapping arrays
                 rev_per_hour_df['Net Margin Raw'] = rev_per_hour_df['Total_Assigned_Revenue'] - rev_per_hour_df['Assumed Pay Amount']
                 rev_per_hour_df['Total Net Margin'] = rev_per_hour_df['Net Margin Raw'].apply(lambda x: f"${x:,.2f}")
                 rev_per_hour_df['Margin per Clocked Hour Raw'] = np.where(rev_per_hour_df['Total_Weekly_Clocked_Hrs'] > 0, rev_per_hour_df['Net Margin Raw'] / rev_per_hour_df['Total_Weekly_Clocked_Hrs'], 0.0)
