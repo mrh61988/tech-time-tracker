@@ -209,103 +209,6 @@ def get_assumed_pay(row):
             return clocked * rate
     return 0.0
 
-def highlight_daily(val):
-    hrs = parse_diff_to_hours(val)
-    if hrs > 1.0: return 'background-color: #ffcccc; color: #990000;'
-    return ''
-
-def highlight_individual_report(row, days_worked):
-    styles = [''] * len(row)
-    if 'Difference' in row and 'Day' in row:
-        diff_idx = row.index.get_loc('Difference')
-        diff_hrs = parse_diff_to_hours(row['Difference'])
-        if row['Day'] == "TOTAL WEEKLY":
-            if diff_hrs > (days_worked * 1.0): styles[diff_idx] = 'background-color: #ffcccc; color: #990000;'
-        else:
-            if diff_hrs > 1.0: styles[diff_idx] = 'background-color: #ffcccc; color: #990000;'
-    return styles
-
-def highlight_bench_col(s):
-    styles = []
-    for val in s:
-        try:
-            if ' (Div: ' in str(val):
-                tech_str, div_str = val.split(' (Div: ')
-                t_h = parse_hm(tech_str)
-                d_h = parse_hm(div_str.replace(')', ''))
-                if t_h > d_h * 1.25 and t_h > 0:
-                    styles.append('background-color: #ffcccc; color: #990000;')
-                    continue
-            styles.append('')
-        except:
-            styles.append('')
-    return styles
-
-def highlight_consistency(s):
-    styles = []
-    for val in s:
-        if val == "⚠️ Low Consistency":
-            styles.append('background-color: #ffcccc; color: #990000; font-weight: bold;')
-        elif val == "⭐ High Consistency":
-            styles.append('background-color: #e6f4ea; color: #137333; font-weight: bold;')
-        else:
-            styles.append('')
-    return styles
-
-def highlight_pay_pct_row(row):
-    styles = [''] * len(row)
-    if 'Pay % vs Assigned Revenue' in row.index and 'Name' in row.index:
-        val = row['Pay % vs Assigned Revenue']
-        name = str(row['Name']).lower()
-        if val != '-' and pd.notna(val):
-            try:
-                v = float(str(val).replace('%', ''))
-                idx = row.index.get_loc('Pay % vs Assigned Revenue')
-                if 'bryan' in name or 'erik' in name:
-                    if v < 34.0:
-                        styles[idx] = 'background-color: #e6f4ea; color: #137333; font-weight: bold;'
-                    else:
-                        styles[idx] = 'background-color: #ffcccc; color: #990000;'
-                else:
-                    if v < 20.0:
-                        styles[idx] = 'background-color: #e6f4ea; color: #137333; font-weight: bold;'
-                    else:
-                        styles[idx] = 'background-color: #ffcccc; color: #990000;'
-            except:
-                pass
-    return styles
-
-def highlight_matrix_overhead(s):
-    styles = []
-    for val in s:
-        if val == '-' or pd.isna(val) or ' (Div: ' not in str(val):
-            styles.append('')
-            continue
-        try:
-            tech_part, div_part = str(val).split(' (Div: ')
-            t_val = parse_hm(tech_part)
-            d_val = parse_hm(div_part.replace(')', ''))
-            if t_val > d_val:
-                styles.append('background-color: #ffcccc; color: #990000;')
-            else:
-                styles.append('')
-        except:
-            styles.append('')
-    return styles
-
-def highlight_over_hour_row(row):
-    val = str(row['Over Division Average By']).replace('+', '').strip()
-    if ':' in val:
-        try:
-            parts = val.split(':')
-            h = int(parts[0])
-            m = int(parts[1]) if len(parts) > 1 else 0
-            if h > 1 or (h == 1 and m > 0):
-                return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row)
-        except:
-            pass
-    return [''] * len(row)
-
 # AUDITOR ROW MARGIN HIGHLIGHTER ENGINE
 def highlight_low_margins(row):
     styles = [''] * len(row)
@@ -916,6 +819,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
         else:
             st.info("No invoice details located inside loaded operations datasets.")
 
+    # INTERACTIVE SORTABLE COMPREHENSIVE REVENUE NET PROFITABILITY MATRIX PANEL
     if "🛢️ Water Heater True Net Profitability Margin Auditor" in test_choices:
         st.markdown("### **💵 Division True Net Profitability Margin Auditor**")
         st.markdown("*(Evaluates net profitability metrics across selected sectors factoring applied contract structures and cost back-outs)*")
@@ -1072,7 +976,7 @@ def run_sandbox_tab(unexploded_ops, ops_df, final_df, daily_route, test_choices)
             cc_matrix['Cost Ratio % vs Rev'] = cc_matrix['Cost Ratio % vs Rev'].apply(lambda x: f"{x:.1f}%")
             cc_matrix['Net Profit (%)'] = cc_matrix['Net_Profit_Total_Raw'].sum() / cc_matrix['Gross_Invoiced_Raw'].sum() * 100 if cc_matrix['Gross_Invoiced_Raw'].sum() > 0 else 0.0
             cc_matrix['Net Profit (%)'] = cc_matrix['Net_Profit_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100
-            cc_matrix['Net Profit (%)'] = cc_matrix['Net_Profit_ (%)' if 'Net_Profit_ (%)' in cc_matrix else 'Net Profit (%)'].apply(lambda x: f"{x:.1f}%")
+            cc_matrix['Net Profit (%)'] = cc_matrix['Net Profit (%)'].apply(lambda x: f"{x:.1f}%")
             cc_matrix['Gross Invoiced Revenue'] = cc_matrix['Gross_Invoiced_Raw'].apply(lambda x: f"${x:,.2f}")
             cc_matrix['Total Combined Cost'] = cc_matrix['Combined_Cost_Total_Raw'].apply(lambda x: f"${x:,.2f}")
             cc_matrix['Net Profit ($)'] = cc_matrix['Net_Profit_Total_Raw'].apply(lambda x: f"${x:,.2f}")
@@ -1162,7 +1066,7 @@ if time_file and ops_file:
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
 
-        # TIMESTAMPS DEFINED ON LAUNCH BASE FOR BOTH PIPELINES
+        # TIMESTAMPS CRITICAL LIFECYCLE DISPATCH HOOK DEFINED ON LAUNCH BASE FOR BOTH PIPELINES
         ts_cols = ['Lowes Store - Start Timestamp', 'On The Way - Start Timestamp', 'In Progress - Start Timestamp', 'On The Way - Start Timestamp.1', 'In Progress - Start Timestamp.1']
         available_ts_cols = [c for c in ts_cols if c in ops_df.columns]
         ops_df['Job_Date'] = ops_df[available_ts_cols].bfill(axis=1).iloc[:, 0]
@@ -1232,31 +1136,33 @@ if time_file and ops_file:
         else:
             ops_df = pd.DataFrame(columns=ops_df.columns)
 
+        # CRITICAL HOOK FIX: Force variable mirroring properties mapping strings safely inside row items columns
+        ops_df['Name'] = ops_df['Assigned Team Members']
+
         ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
         ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On The Way - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
 
         if 'Business Unit' in ops_df.columns:
-            bu_agg = ops_df.groupby(['Assigned Team Members', 'Business Unit']).agg(Total_Job_Time_Hours=('Total_Job_Time_Hours', 'sum'), BU_Job_Count=('Total_Job_Time_Hours', 'size')).reset_index()
-            bu_pivot_hrs = bu_agg.pivot(index='Assigned Team Members', columns='Business Unit', values='Total_Job_Time_Hours').reset_index().fillna(0)
-            bu_pivot_cnt = bu_agg.pivot(index='Assigned Team Members', columns='Business Unit', values='BU_Job_Count').reset_index().fillna(0)
-            bu_pivot = pd.merge(bu_pivot_hrs, bu_pivot_cnt, on='Assigned Team Members', suffixes=('_hrs', '_cnt'))
-            bu_pivot = bu_pivot.rename(columns={'Assigned Team Members': 'Name'})
+            bu_agg = ops_df.groupby(['Name', 'Business Unit']).agg(Total_Job_Time_Hours=('Total_Job_Time_Hours', 'sum'), BU_Job_Count=('Total_Job_Time_Hours', 'size')).reset_index()
+            bu_pivot_hrs = bu_agg.pivot(index='Name', columns='Business Unit', values='Total_Job_Time_Hours').reset_index().fillna(0)
+            bu_pivot_cnt = bu_agg.pivot(index='Name', columns='Business Unit', values='BU_Job_Count').reset_index().fillna(0)
+            bu_pivot = pd.merge(bu_pivot_hrs, bu_pivot_cnt, on='Name', suffixes=('_hrs', '_cnt'))
             for col in ['Lowes - Simple Installs_hrs', 'Lowes - Water Heaters_hrs', 'Lowes - Simple Installs_cnt', 'Lowes - Water Heaters_cnt']:
                 if col not in bu_pivot.columns: bu_pivot[col] = 0.0
             bu_pivot = bu_pivot.rename(columns={'Lowes - Simple Installs_hrs': 'Simple_Installs_Hrs', 'Lowes - Water Heaters_hrs': 'Water_Heaters_Hrs', 'Lowes - Simple Installs_cnt': 'Simple_Installs_Count', 'Lowes - Water Heaters_cnt': 'Water_Heaters_Count'})
         else: bu_pivot = pd.DataFrame(columns=['Name', 'Simple_Installs_Hrs', 'Water_Heaters_Hrs', 'Simple_Installs_Count', 'Water_Heaters_Count'])
 
-        job_time_agg = ops_df.groupby(['Assigned Team Members', 'Day_of_Week'])['Total_Job_Time_Hours'].sum().reset_index()
-        job_time_pivot = job_time_agg.pivot(index='Assigned Team Members', columns='Day_of_Week', values='Total_Job_Time_Hours').reset_index().rename(columns={'Assigned Team Members': 'Name'}).fillna(0)
+        job_time_agg = ops_df.groupby(['Name', 'Day_of_Week'])['Total_Job_Time_Hours'].sum().reset_index()
+        job_time_pivot = job_time_agg.pivot(index='Name', columns='Day_of_Week', values='Total_Job_Time_Hours').reset_index().fillna(0)
         for day in days:
             if day not in job_time_pivot.columns: job_time_pivot[day] = 0.0
         job_time_pivot = job_time_pivot.rename(columns={d: d + '_Job_Hrs' for d in days})
         job_time_pivot['Total_Weekly_Job_Hrs'] = job_time_pivot[[d + '_Job_Hrs' for d in days]].sum(axis=1)
         
-        job_count_agg = ops_df.groupby(['Assigned Team Members', 'Day_of_Week']).size().reset_index(name='Job_Count')
-        job_count_pivot = job_count_agg.pivot(index='Assigned Team Members', columns='Day_of_Week', values='Job_Count').reset_index().rename(columns={'Assigned Team Members': 'Name'}).fillna(0)
+        job_count_agg = ops_df.groupby(['Name', 'Day_of_Week']).size().reset_index(name='Job_Count')
+        job_count_pivot = job_count_agg.pivot(index='Name', columns='Day_of_Week', values='Job_Count').reset_index().fillna(0)
         for day in days:
             if day not in job_count_pivot.columns: job_count_pivot[day] = 0
         job_count_pivot = job_count_pivot.rename(columns={d: d + '_Job_Count' for d in days})
@@ -1266,7 +1172,7 @@ if time_file and ops_file:
         daily_route = daily_route[daily_route['Total_Job_Time_Hours'] > 0].copy()
         daily_route['Drive %'] = (daily_route['Drive_Time_Hrs'] / daily_route['Total_Job_Time_Hours']) * 100
         
-        # Unified assembly pipeline matching matrix elements
+        # Linear assembly maps matching matrix parameters pipelines
         final_df = pd.merge(time_df, job_time_pivot, on='Name', how='left').fillna(0)
         final_df = pd.merge(final_df, job_count_pivot, on='Name', how='left').fillna(0)
         if not bu_pivot.empty: final_df = pd.merge(final_df, bu_pivot[['Name', 'Simple_Installs_Hrs', 'Water_Heaters_Hrs', 'Simple_Installs_Count', 'Water_Heaters_Count']], on='Name', how='left').fillna(0)
@@ -1274,7 +1180,7 @@ if time_file and ops_file:
             final_df['Simple_Installs_Hrs'] = final_df['Water_Heaters_Hrs'] = 0.0
             final_df['Simple_Installs_Count'] = final_df['Water_Heaters_Count'] = 0
             
-        tech_rev_agg = ops_df.groupby('Assigned Team Members')['Total Invoice Amount'].sum().reset_index()
+        tech_rev_agg = ops_df.groupby('Name')['Total Invoice Amount'].sum().reset_index()
         tech_rev_agg.columns = ['Name', 'Total_Assigned_Revenue']
         final_df = pd.merge(final_df, tech_rev_agg, on='Name', how='left').fillna(0.0)
         final_df['Rev_Per_Clocked_Hr'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, final_df['Total_Assigned_Revenue'] / final_df['Total_Weekly_Clocked_Hrs'], 0.0)
@@ -1370,7 +1276,7 @@ if time_file and ops_file:
             # === MACRO DASHBOARD PANEL ===
             st.markdown("<br><hr><h3>📊 Macro Financial Performance Dashboard</h3>", unsafe_allow_html=True)
             
-            # CRITICAL INITIALIZATION FIX: Re-bind macro summary dictionary mappings before metric loads
+            # Macro calculations sequence loop execution
             rev_per_hour_df_calc = final_df.copy()
             rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(get_assumed_pay, axis=1)
             total_assumed_pay = rev_per_hour_df_calc['Assumed Pay Amount'].sum()
@@ -1384,7 +1290,7 @@ if time_file and ops_file:
             with dash_metric_col3:
                 st.metric(label="Division Labor Pay Ratio", value=f"{pay_ratio_pct:.1f}%")
                 
-            # CRITICAL RE-ALIGNMENT: Build bu_financial_matrix inside the global workspace tab view scope
+            # Macro matrix calculation sequence mapping parameters
             ops_df['Computed_Row_Pay'] = ops_df['Name'].map(rev_per_hour_df_calc.set_index('Name')['Assumed Pay Amount'].to_dict()).fillna(0.0)
             tech_total_field_hrs = ops_df.groupby('Name')['Total_Job_Time_Hours'].sum().reset_index().rename(columns={'Total_Job_Time_Hours': 'Tech_Total_Work_Hrs'})
             if 'Tech_Total_Work_Hrs' in ops_df.columns: ops_df = ops_df.drop(columns=['Tech_Total_Work_Hrs'])
