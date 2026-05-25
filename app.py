@@ -100,6 +100,7 @@ st.markdown("""
         border-collapse: collapse !important;
         margin: 0 0 15px 0 !important;
     }
+    border-collapse: collapse !important;
     tr {
         page-break-inside: avoid !important;
     }
@@ -302,49 +303,6 @@ def get_adjusted_table_pay(row):
     if 'sean marble' in nl:
         return max(0.0, base_pay - st.session_state.get('sean_absence_penalty_global', 0.0))
     return base_pay
-
-# NATIVE SYSTEM CLIPBOARD DATA EXPORTER (DEFINED AT GLOBAL SCOPE LEVEL)
-def create_copy_button(df, raw_key):
-    safe_key = "".join([c if c.isalnum() else "_" for c in raw_key])
-    tsv_str = df.to_csv(sep='\t', index=False)
-    safe_tsv = tsv_str.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
-    
-    button_html = f"""
-    <div class="hide-on-print" style="text-align: left; margin-top: 5px; margin-bottom: 8px;">
-        <textarea id="tsv_{safe_key}" style="position: absolute; left: -9999px;">{safe_tsv}</textarea>
-        <button id="btn_{safe_key}" onclick="copyTSV_{safe_key}()" style="background-color: #ffffff; color: #3c4043; padding: 6px 14px; border: 1px solid #dadce0; border-radius: 4px; cursor: pointer; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: background-color 0.2s;">
-            📋 Copy Table Data (For Email/Sheets/Docs)
-        </button>
-    </div>
-    <script>
-    function copyTSV_{safe_key}() {{
-        var copyText = document.getElementById("tsv_{safe_key}");
-        copyText.select();
-        copyText.setSelectionRange(0, 999999);
-        try {{
-            var successful = document.execCommand('copy');
-            var btn = document.getElementById("btn_{safe_key}");
-            if (successful) {{
-                btn.innerHTML = "✅ Copied table to clipboard!";
-                btn.style.backgroundColor = "#e6f4ea";
-                btn.style.color = "#137333";
-                btn.style.borderColor = "#137333";
-                setTimeout(function() {{
-                    btn.innerHTML = "📋 Copy Table Data (For Email/Sheets/Docs)";
-                    btn.style.backgroundColor = "#ffffff";
-                    btn.style.color = "#3c4043";
-                    btn.style.borderColor = "#dadce0";
-                }}, 2000);
-                }} else {{
-                btn.innerHTML = "❌ Copy failed";
-            }}
-        }} catch (err) {{
-            console.error('Execution fallback error:', err);
-        }}
-    }}
-    </script>
-    """
-    st.components.v1.html(button_html, height=38)
 
 # --- ADVANCED TIMELINE MATRICES ---
 def run_baselines_matrix(ops_df):
@@ -643,7 +601,52 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             except Exception: st.dataframe(show_skill.reset_index(drop=True), use_container_width=True)
             create_copy_button(show_skill.reset_index(drop=True), f"skills_{tab_key}")
 
-st.markdown("<br>", unsafe_allow_html=True)
+    # ⭐ Restored the missing dashboard sections inside function block scope
+    st.markdown("<br><h4>🗺️ Route Optimization Flags</h4>", unsafe_allow_html=True)
+    st.markdown("*(Identifies service days where a technician spent over 40% of their billable shift driving to audit route density)*")
+    poor_routes = daily_route[daily_route['Drive %'] > 40.0].copy()
+    if not poor_routes.empty:
+        poor_routes = poor_routes.sort_values(by='Drive %', ascending=False)
+        poor_routes['Drive %'] = poor_routes['Drive %'].apply(lambda x: f"{x:.1f}%")
+        poor_routes['Drive Time'] = poor_routes['Drive_Time_Hrs'].apply(format_hm)
+        poor_routes['Work Time'] = poor_routes['In_Progress_Time_Hrs'].apply(format_hm)
+        route_df_export = poor_routes[['Assigned Team Members', 'Short_Date', 'Job_Count', 'Drive Time', 'Work Time', 'Drive %']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date', 'Job_Count': 'Jobs'}).reset_index(drop=True)
+        st.dataframe(route_df_export, use_container_width=True)
+        create_copy_button(route_df_export, f"routes_{tab_key}")
+    else:
+        st.success("✅ Great density alignment! No single transport lane routing fell below benchmark efficiency requirements.")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    launch_col, launch_empty_col = st.columns(2)
+    with launch_col:
+        st.markdown("<h4>📊 Late Deployment Scorecard</h4>", unsafe_allow_html=True)
+        st.markdown("*(Aggregates the total number of delayed morning launches per technician across the week)*")
+        if not delayed_launches_df.empty:
+            launch_counts = delayed_launches_df.groupby('Assigned Team Members').size().reset_index(name='Total Late Days').sort_values(by='Total Late Days', ascending=False)
+            try: st.dataframe(launch_counts.reset_index(drop=True).style.set_properties(**{'background-color': '#fff3cd', 'color': '#856404;'}, subset=['Total Late Days']), use_container_width=True)
+            except Exception: st.dataframe(launch_counts.reset_index(drop=True), use_container_width=True)
+            create_copy_button(launch_counts.reset_index(drop=True).rename(columns={'Assigned Team Members': 'Name'}), f"late_score_{tab_key}")
+        else:
+            st.success("✅ Zero morning momentum delays recorded for core internal dispatches.")
+
+    with launch_empty_col:
+        st.markdown("<h4>🚗 Delayed Launch Alert</h4>", unsafe_allow_html=True)
+        st.markdown("*(Provides a day-by-day chronological log of start-of-day timeline compliance delays)*")
+        if not delayed_launches_df.empty:
+            tech_late_list = sorted(delayed_launches_df['Assigned Team Members'].unique())
+            most_late_tech = delayed_launches_df['Assigned Team Members'].value_counts().idxmax()
+            default_late_idx = tech_late_list.index(most_late_tech) if most_late_tech in tech_late_list else 0
+            
+            selected_late_tech = st.selectbox("Select Tech to view launch times:", tech_late_list, index=default_late_idx, key=f"late_launch_{tab_key}")
+            if selected_late_tech:
+                tech_launches_df = delayed_launches_df[delayed_launches_df['Assigned Team Members'] == selected_late_tech].copy()
+                tech_launches_df['First Punch log'] = tech_launches_df['First_Punch'].dt.strftime('%I:%M %p') + " (" + tech_launches_df['First_Status'] + ")"
+                show_launches = tech_launches_df.sort_values(by='First_Punch', ascending=False)[['Short_Date', 'First Punch log']].rename(columns={'Short_Date': 'Date'}).reset_index(drop=True)
+                try: st.dataframe(show_launches.style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'}), use_container_width=True)
+                except Exception: st.dataframe(show_launches, use_container_width=True)
+                create_copy_button(show_launches, f"late_alert_{tab_key}")
+        else:
+            st.info("No timeline momentum compliance delays located inside current operational data streams.")
 
 # --- THE MAIN TOP-LEVEL BASE EXECUTION PIPELINE LAYER BLOCK ---
 st.sidebar.header("📂 Data Loading Pipeline")
@@ -925,7 +928,6 @@ if time_file and ops_file:
         final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
         final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
 
-        # 🚀 RE-INTEGRATED CONSOLIDATED SPLITS INITIALIZATION LAYER
         display_dfs = {}
         for day in days:
             final_df[day + '_Diff_Hrs'] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
@@ -975,7 +977,6 @@ if time_file and ops_file:
         bu_summary_df['Total Unallocated Hours'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
         display_dfs['Weekly'] = bu_summary_df
 
-        # Secure total summaries layout mapping metrics securely inside parameters bounds
         total_assumed_pay_adjusted = max(0.0, df_macro_pay['Assumed_Labor_Payload'].sum() - sean_penalty_value)
         pay_ratio_pct_adjusted = (total_assumed_pay_adjusted / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
 
