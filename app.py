@@ -529,7 +529,6 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             leaderboard_df['Total Diff'] = leaderboard_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
             
             show_leaderboard = leaderboard_df[['Name', 'Total Clocked', 'Total Job Time', 'Manual Adj', 'Daily Avg Diff', 'Total Diff']].copy()
-            # ⭐ CRITICAL OPERATIONAL HIGHLIGHT UPGRADE: Highlight *only* the specific cell grid if threshold baseline >= 1:30
             def highlight_leaderboard(row):
                 styles = [''] * len(row)
                 if 'Daily Avg Diff' in row.index:
@@ -1268,7 +1267,7 @@ if time_file and ops_file:
                 show_yield['Total Man-Hours'] = show_yield['Total_Man_Hours'].apply(format_hm)
                 show_yield['Added Helper Cost'] = show_yield['Total_Helper_Cost'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
                 show_yield['Avg Revenue per Job'] = show_yield['Avg Revenue per Job'].apply(lambda x: f"${x:,.2f}")
-                show_yield['Revenue per Man-Hour'] = show_yield['Revenue per Man-Hour'].apply(lambda x: f"${x:.1f}/hr")
+                show_yield['Revenue per Man-Hour'] = summary_yield['Revenue per Man-Hour'].apply(lambda x: f"${x:.1f}/hr")
                 st.dataframe(show_yield[['Type', 'Job_Count', 'Total Revenue', 'Total Field Hours', 'Total Man-Hours', 'Added Helper Cost', 'Avg Revenue per Job', 'Revenue per Man-Hour']].rename(columns={'Job_Count': 'Jobs Assigned'}), use_container_width=True)
                 create_copy_button(show_yield, "multi_tech_yield")
                 
@@ -1302,7 +1301,7 @@ if time_file and ops_file:
                     st.dataframe(show_staging[['Day_of_Week', 'Total_Visits', 'Total Hours Delayed', 'Avg Delay per Visit']].rename(columns={'Day_of_Week': 'Day', 'Total_Visits': 'Store Pickups'}), use_container_width=True)
                     create_copy_button(show_staging[['Day_of_Week', 'Total_Visits', 'Total Hours Delayed', 'Avg Delay per Visit']], "store_staging_by_day")
                 else:
-                    st.info("No material store staging records discovered inside logged field parameters.")
+                    st.info("No material store staging records discovered inside loaded field parameters.")
 
             if "📊 Overtime ROI Cost-Benefit Auditor" in test_choices:
                 st.markdown("### **📊 Overtime ROI Cost-Benefit Auditor**")
@@ -1456,7 +1455,7 @@ if time_file and ops_file:
                 cc_matrix['Cost Ratio % vs Rev'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Combined_Cost_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
                 cc_matrix['Cost Ratio % vs Rev'] = cc_matrix['Cost Ratio % vs Rev'].apply(lambda x: f"{x:.1f}%")
                 cc_matrix['Net Profit (%)'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Net_Profit_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
-                cc_matrix['Net Profit (%)'] = cc_matrix['Net_Profit (%)'].apply(lambda x: f"{x:.1f}%")
+                cc_matrix['Net Profit (%)'] = cc_matrix['Net Profit (%)'].apply(lambda x: f"{x:.1f}%")
                 cc_matrix['Gross Invoiced Revenue'] = cc_matrix['Gross_Invoiced_Raw'].apply(lambda x: f"${x:,.2f}")
                 cc_matrix['Total Combined Cost'] = cc_matrix['Combined_Cost_Total_Raw'].apply(lambda x: f"${x:,.2f}")
                 cc_matrix['Tech Wage Burden'] = cc_matrix['Assumed_Labor_Payload_Raw'].apply(lambda x: f"${x:,.2f}")
