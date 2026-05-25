@@ -301,49 +301,6 @@ def get_adjusted_table_pay(row):
         return max(0.0, base_pay - st.session_state.get('sean_absence_penalty_global', 0.0))
     return base_pay
 
-# NATIVE SYSTEM CLIPBOARD DATA EXPORTER (DEFINED AT GLOBAL SCOPE LEVEL)
-def create_copy_button(df, raw_key):
-    safe_key = "".join([c if c.isalnum() else "_" for c in raw_key])
-    tsv_str = df.to_csv(sep='\t', index=False)
-    safe_tsv = tsv_str.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
-    
-    button_html = f"""
-    <div class="hide-on-print" style="text-align: left; margin-top: 5px; margin-bottom: 8px;">
-        <textarea id="tsv_{safe_key}" style="position: absolute; left: -9999px;">{safe_tsv}</textarea>
-        <button id="btn_{safe_key}" onclick="copyTSV_{safe_key}()" style="background-color: #ffffff; color: #3c4043; padding: 6px 14px; border: 1px solid #dadce0; border-radius: 4px; cursor: pointer; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: background-color 0.2s;">
-            📋 Copy Table Data (For Email/Sheets/Docs)
-        </button>
-    </div>
-    <script>
-    function copyTSV_{safe_key}() {{
-        var copyText = document.getElementById("tsv_{safe_key}");
-        copyText.select();
-        copyText.setSelectionRange(0, 999999);
-        try {{
-            var successful = document.execCommand('copy');
-            var btn = document.getElementById("btn_{safe_key}");
-            if (successful) {{
-                btn.innerHTML = "✅ Copied table to clipboard!";
-                btn.style.backgroundColor = "#e6f4ea";
-                btn.style.color = "#137333";
-                btn.style.borderColor = "#137333";
-                setTimeout(function() {{
-                    btn.innerHTML = "📋 Copy Table Data (For Email/Sheets/Docs)";
-                    btn.style.backgroundColor = "#ffffff";
-                    btn.style.color = "#3c4043";
-                    btn.style.borderColor = "#dadce0";
-                }}, 2000);
-                }} else {{
-                btn.innerHTML = "❌ Copy failed";
-            }}
-        }} catch (err) {{
-            console.error('Execution fallback error:', err);
-        }}
-    }}
-    </script>
-    """
-    st.components.v1.html(button_html, height=38)
-
 # --- ADVANCED TIMELINE MATRICES ---
 def run_baselines_matrix(ops_df):
     st.markdown("<h4>Advanced Team Processing Baselines Matrix</h4>", unsafe_allow_html=True)
@@ -684,14 +641,6 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 except Exception: st.dataframe(show_launches, use_container_width=True)
                 create_copy_button(show_launches, f"late_alert_{tab_key}")
 
-# --- GLOBAL WRAPPER SYNCHRONIZATION LANE HOOK ---
-def get_adjusted_table_pay(row):
-    nl = str(row['Name']).lower()
-    base_pay = get_assumed_pay(row)
-    if 'sean marble' in nl:
-        return max(0.0, base_pay - st.session_state.get('sean_absence_penalty_global', 0.0))
-    return base_pay
-
 # --- THE MAIN TOP-LEVEL BASE EXECUTION PIPELINE LAYER BLOCK ---
 st.sidebar.header("📂 Data Loading Pipeline")
 time_file = st.sidebar.file_uploader("Upload Time Sheet (CSV)", type=['csv'])
@@ -768,8 +717,6 @@ if time_file and ops_file:
         ops_df['Total Invoice Amount'] = pd.to_numeric(ops_df.get('Total Invoice Amount', pd.Series([0])), errors='coerce').fillna(0.0)
         
         ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
-        ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On Way - Completed Total Time in Status.1', 0) if 'On Way - Completed Total Time in Status.1' in ops_df.columns else 0.0)
-        # fallback path handles both formatting columns safely
         ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On The Way - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
@@ -835,7 +782,6 @@ if time_file and ops_file:
             for member in core_members_on_job:
                 new_row = row.copy()
                 new_row['Assigned Team Members'] = member
-                # ⭐ FULL CREW MATRIX METRIC DUPLICATION RULES IMPLEMENTED SUCCESSFULLY
                 new_row['Total Invoice Amount'] = row['Total Invoice Amount']
                 exploded_rows.append(new_row)
                 
@@ -879,7 +825,6 @@ if time_file and ops_file:
         daily_route = ops_df.groupby(['Assigned Team Members', 'Short_Date']).agg(Drive_Time_Hrs=('Drive_Time_Hrs', 'sum'), In_Progress_Time_Hrs=('In_Progress_Time_Hrs', 'sum'), Total_Job_Time_Hours=('Total_Job_Time_Hours', 'sum'), Job_Count=('Total_Job_Time_Hours', 'size')).reset_index()
         daily_route = daily_route[daily_route['Total_Job_Time_Hours'] > 0].copy()
         daily_route['Drive %'] = (daily_route['Drive_Time_Hrs'] / daily_route['Total_Job_Time_Hours']) * 100
-        # ⭐ GEOSPATIAL MAP ALIGNMENT KEY: Enforce Name reference column presence to future-proof Tab 10 Context-Switching crashes
         daily_route['Name'] = daily_route['Assigned Team Members']
         
         # Unified assembly pipeline mapping for final_df records matrix
@@ -896,7 +841,7 @@ if time_file and ops_file:
         final_df['Rev_Per_Clocked_Hr'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, final_df['Total_Assigned_Revenue'] / final_df['Total_Weekly_Clocked_Hrs'], 0.0)
 
         # =========================================================================================
-        # 🧪 SEAN MARBLE TIME-SHEET ATTENDANCE ABSENCE EVALUATION CHECK LOOP (GLOBAL STABILIZATION)
+        # 🧪 SEAN MARBLE TIME-SHEET ATTENDANCE ABSENCE EVALUATION CHECK LOOP (GLOBAL SYNCHRONIZATION)
         # =========================================================================================
         sean_timecard = final_df[final_df['Name'] == 'Sean Marble']
         if not sean_timecard.empty:
@@ -972,7 +917,7 @@ if time_file and ops_file:
         final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
         final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
 
-        # 🚀 STRATEGIC POSITION ROUTING RE-ESTABLISHED (FIXES KEYERROR DISMISSAL ON LAUNCH MAPPING PARAMS)
+        # 🚀 RE-INTEGRATED CONSOLIDATED SPLITS INITIALIZATION LAYER (FIXES THE NAMEERROR COMPLETELY)
         display_dfs = {}
         for day in days:
             final_df[day + '_Diff_Hrs'] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
