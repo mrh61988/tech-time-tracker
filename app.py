@@ -888,7 +888,7 @@ if time_file and ops_file:
         else:
             sean_penalty = 0.0
 
-        # Global layout analytical lambda routing handles overrides cleanly across all blocks
+        # Global layout analytical function mapping safely across all views indices layout parameters
         def get_adjusted_table_pay(row):
             pay = get_assumed_pay(row)
             if 'sean marble' in str(row['Name']).lower():
@@ -941,6 +941,97 @@ if time_file and ops_file:
             np.maximum(df_macro_pay['Flat_Rate_Labor'], df_macro_pay['Logged_Time_Pay'])
         )
         df_macro_pay['Net_Profit_Raw'] = df_macro_pay['Total Invoice Amount'] - df_macro_pay['Combined_Lowe_Costs'] - df_macro_pay['Assumed_Labor_Payload']
+            
+        st.sidebar.header("🔧 Job Status Time Adjustments")
+        global_adj_mins = st.sidebar.number_input("🌍 Global Adj (Minutes)", value=0, step=15, key="global_adj")
+        global_adj_hrs = global_adj_mins / 60.0
+        adjustments = {}
+        for tech in sorted(final_df['Name'].unique()):
+            tech_adj_mins = st.sidebar.number_input(f"{tech} Adj (Minutes)", value=0, step=15, key=f"adj_{tech}")
+            adjustments[tech] = (tech_adj_mins / 60.0) + global_adj_hrs
+            
+        final_df['Adjustment_Hrs'] = final_df['Name'].map(adjustments).fillna(0.0)
+        final_df['Total_Weekly_Job_Hrs'] = final_df['Total_Weekly_Job_Hrs'] + final_df['Adjustment_Hrs']
+        
+        final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
+        final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * 3.5
+        final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
+        final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
+        final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
+
+        # 🚀 RE-INTEGRATED CONSOLIDATED SPLITS INITIALIZATION LAYER (FIXES THE NAMEERROR COMPLETELY)
+        display_dfs = {}
+        for day in days:
+            final_df[day + '_Diff_Hrs'] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
+            final_df[f'{day} Jobs'] = final_df[day + '_Job_Count'].astype(int)
+            final_df[f'{day} Clocked'] = final_df[day + '_Clocked_Hrs'].apply(format_hm)
+            final_df[f'{day} Job Time'] = final_df[day + '_Job_Hrs'].apply(format_hm)
+            final_df[f'{day} Diff'] = final_df[day + '_Diff_Hrs'].apply(format_hm)
+            
+            day_df = pd.DataFrame()
+            day_df['Name'] = final_df['Name']
+            day_df[f'{day} Jobs'] = final_df[f'{day} Jobs']
+            day_df[f'{day} Clocked'] = final_df[f'{day} Clocked']
+            day_df[f'{day} Job Time'] = final_df[f'{day} Job Time']
+            day_df[f'{day} Diff'] = final_df[f'{day} Diff']
+            display_dfs[day] = day_df
+            
+        manager_cols = ['Name']
+        for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]: manager_cols.extend([f'{d} Jobs', f'{d} Clocked', f'{d} Job Time', f'{d} Diff'])
+        display_dfs['Manager'] = final_df[manager_cols]
+        
+        final_df['Total_Weekly_Diff_Hrs'] = final_df['Total_Weekly_Clocked_Hrs'] - final_df['Total_Weekly_Job_Hrs']
+        final_df['Daily_Avg_Diff_Hrs'] = np.where(final_df['Days_Worked'] > 0, final_df['Total_Weekly_Diff_Hrs'] / final_df['Days_Worked'], 0.0)
+        
+        final_df['Simple Installs'] = final_df['Simple_Installs_Hrs'].apply(format_hm)
+        final_df['Water Heaters'] = final_df['Water_Heaters_Hrs'].apply(format_hm)
+        final_df['Simple Installs Eff'] = np.where(final_df['Assumed_LSI_Clocked'] > 0, (final_df['Simple_Installs_Hrs'] / final_df['Assumed_LSI_Clocked']) * 100, 0.0)
+        final_df['Water Heaters Eff'] = np.where(final_df['Assumed_WH_Clocked'] > 0, (final_df['Water_Heaters_Hrs'] / final_df['Assumed_WH_Clocked']) * 100, 0.0)
+        final_df['LSI_Eff_Raw'] = final_df['Simple Installs Eff']
+        final_df['WH_Eff_Raw'] = final_df['Water Heaters Eff']
+        
+        final_df = final_df.sort_values(by='WH_Eff_Raw', ascending=False)
+        final_df['Simple Installs Eff'] = final_df['LSI_Eff_Raw'].apply(lambda x: f"{x:.1f}%")
+        final_df['Water Heaters Eff'] = final_df['WH_Eff_Raw'].apply(lambda x: f"{x:.1f}%")
+        
+        bu_summary_df = pd.DataFrame()
+        bu_summary_df['Name'] = final_df['Name']
+        bu_summary_df['Total Clocked'] = final_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
+        bu_summary_df['Total Jobs'] = final_df['Total_Weekly_Job_Count'].astype(int)
+        bu_summary_df['LSI Jobs'] = final_df['Simple_Installs_Count'].astype(int)
+        bu_summary_df['LSI Tracked Hours'] = final_df['Simple Installs']
+        bu_summary_df['LSI Efficiency'] = final_df['Simple Installs Eff']
+        bu_summary_df['WH Jobs'] = final_df['Water_Heaters_Count'].astype(int)
+        bu_summary_df['WH Tracked Hours'] = final_df['Water Heaters']
+        bu_summary_df['WH Efficiency'] = final_df['Water Heaters Eff']
+        bu_summary_df['Total Efficiency'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, (final_df['Total_Weekly_Job_Hrs'] / final_df['Total_Weekly_Clocked_Hrs']) * 100, 0.0)
+        bu_summary_df['Total Efficiency'] = bu_summary_df['Total Efficiency'].apply(lambda x: f"{x:.1f}%")
+        bu_summary_df['Total Unallocated Hours'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
+        display_dfs['Weekly'] = bu_summary_df
+
+        # Formulate macro totals structures safely with guaranteed chronological scoping parameters
+        total_assumed_pay_adjusted = max(0.0, df_macro_pay['Assumed_Labor_Payload'].sum() - sean_penalty)
+        pay_ratio_pct_adjusted = (total_assumed_pay_adjusted / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
+
+        bu_gross_rev = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].sum().reset_index()
+        bu_gross_rev.columns = ['Business Unit', 'Gross Invoiced Revenue Raw']
+        total_macro_sum = bu_gross_rev['Gross Invoiced Revenue Raw'].sum() if bu_gross_rev['Gross Invoiced Revenue Raw'].sum() > 0 else 1.0
+        bu_gross_rev['Rev Share %'] = (bu_gross_rev['Gross Invoiced Revenue Raw'] / total_macro_sum * 100).apply(lambda x: f"{x:.1f}%")
+        
+        bu_pay_split = df_macro_pay.groupby('Business Unit')['Assumed_Labor_Payload'].sum().reset_index().rename(columns={'Assumed_Labor_Payload': 'Assumed Pay Raw'})
+        for idx, r in bu_pay_split.iterrows():
+            if r['Business Unit'] == 'Lowes - Simple Installs':
+                bu_pay_split.loc[idx, 'Assumed Pay Raw'] = max(0.0, bu_pay_split.loc[idx, 'Assumed Pay Raw'] - sean_penalty)
+                
+        bu_financial_matrix = pd.merge(bu_gross_rev, bu_pay_split, on='Business Unit', how='left').fillna(0.0)
+        bu_financial_matrix['Assumed Pay'] = bu_financial_matrix['Assumed Pay Raw'].apply(lambda x: f"${x:,.2f}")
+        bu_financial_matrix['Pay % of Revenue'] = np.where(
+            bu_financial_matrix['Gross Invoiced Revenue Raw'] > 0,
+            (bu_financial_matrix['Assumed Pay Raw'] / bu_financial_matrix['Gross Invoiced Revenue Raw']) * 100,
+            0.0
+        )
+        bu_financial_matrix['Pay % of Revenue'] = bu_financial_matrix['Pay % of Revenue'].apply(lambda x: f"{x:.1f}%")
+        bu_financial_matrix['Gross Invoiced Revenue'] = bu_financial_matrix['Gross Invoiced Revenue Raw'].apply(lambda x: f"${x:,.2f}")
 
         tab_names = ["Weekly Summary", "Manager Overview", "Individual Tech Report", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "🧪 Test Section"]
         tabs = st.tabs(tab_names)
@@ -1256,7 +1347,7 @@ if time_file and ops_file:
                     st.dataframe(ot_audit_df, use_container_width=True)
                     create_copy_button(ot_audit_df, "overtime_roi_auditor")
                 else:
-                    st.success("✅ Zero hourly technicians incurred premium overtime thresholds during this invoice cycle.")
+                    st.success("% Hourly technicians worked zero premium overtime thresholds during this session cycle.")
 
             if "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard" in test_choices:
                 st.markdown("### **🏆 Single-Job \"Whale Alert\" Revenue Leaderboard**")
@@ -1375,7 +1466,7 @@ if time_file and ops_file:
                 cc_matrix['Cost Ratio % vs Rev'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Combined_Cost_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
                 cc_matrix['Cost Ratio % vs Rev'] = cc_matrix['Cost Ratio % vs Rev'].apply(lambda x: f"{x:.1f}%")
                 cc_matrix['Net Profit (%)'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Net_Profit_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
-                cc_matrix['Net Profit (%)'] = cc_matrix['Net Profit (%)'].apply(lambda x: f"{x:.1f}%")
+                cc_matrix['Net Profit (%)'] = cc_matrix['Net_Profit (%)'].apply(lambda x: f"{x:.1f}%")
                 cc_matrix['Gross Invoiced Revenue'] = cc_matrix['Gross_Invoiced_Raw'].apply(lambda x: f"${x:,.2f}")
                 cc_matrix['Total Combined Cost'] = cc_matrix['Combined_Cost_Total_Raw'].apply(lambda x: f"${x:,.2f}")
                 cc_matrix['Tech Wage Burden'] = cc_matrix['Assumed_Labor_Payload_Raw'].apply(lambda x: f"${x:,.2f}")
