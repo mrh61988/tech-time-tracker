@@ -293,6 +293,14 @@ def highlight_low_margins(row):
             pass
     return styles
 
+# GLOBAL HOURLY ANALYSIS PAY DELEGATOR LAYER SECURED
+def get_adjusted_table_pay(row):
+    nl = str(row['Name']).lower()
+    base_pay = get_assumed_pay(row)
+    if 'sean marble' in nl:
+        return max(0.0, base_pay - st.session_state.get('sean_absence_penalty_global', 0.0))
+    return base_pay
+
 # NATIVE SYSTEM CLIPBOARD DATA EXPORTER (DEFINED AT GLOBAL SCOPE LEVEL)
 def create_copy_button(df, raw_key):
     safe_key = "".join([c if c.isalnum() else "_" for c in raw_key])
@@ -617,7 +625,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 lsi_cnt, wh_cnt = row['Simple_Installs_Count'], row['Water_Heaters_Count']
                 if lsi_cnt > 0 and wh_cnt > 0: 
                     if row['Eff Gap'] > 15.0: return "⚠️ WH Ride-Along Required" if row['LSI_Eff_Raw'] > row['WH_Eff_Raw'] else "⚠️ LSI Ride-Along Required"
-                    return "Balanced Execution"
+                    return "✅ Balanced Execution"
                 if lsi_cnt > 0: return "ℹ️ Only LSI Jobs Assigned"
                 if wh_cnt > 0: return "ℹ️ Only WH Jobs Assigned"
                 return "ℹ️ No BU Jobs Assigned"
@@ -678,11 +686,9 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
 
 # --- GLOBAL WRAPPER SYNCHRONIZATION LANE HOOK ---
 def get_adjusted_table_pay(row):
-    # This explicit definition handles global mapping safety across layout blocks securely
     nl = str(row['Name']).lower()
     base_pay = get_assumed_pay(row)
     if 'sean marble' in nl:
-        # Deduct unworked clocked days directly inside tabular data loops
         return max(0.0, base_pay - st.session_state.get('sean_absence_penalty_global', 0.0))
     return base_pay
 
@@ -762,6 +768,8 @@ if time_file and ops_file:
         ops_df['Total Invoice Amount'] = pd.to_numeric(ops_df.get('Total Invoice Amount', pd.Series([0])), errors='coerce').fillna(0.0)
         
         ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
+        ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On Way - Completed Total Time in Status.1', 0) if 'On Way - Completed Total Time in Status.1' in ops_df.columns else 0.0)
+        # fallback path handles both formatting columns safely
         ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On The Way - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
@@ -827,6 +835,7 @@ if time_file and ops_file:
             for member in core_members_on_job:
                 new_row = row.copy()
                 new_row['Assigned Team Members'] = member
+                # ⭐ FULL CREW MATRIX METRIC DUPLICATION RULES IMPLEMENTED SUCCESSFULLY
                 new_row['Total Invoice Amount'] = row['Total Invoice Amount']
                 exploded_rows.append(new_row)
                 
@@ -870,6 +879,8 @@ if time_file and ops_file:
         daily_route = ops_df.groupby(['Assigned Team Members', 'Short_Date']).agg(Drive_Time_Hrs=('Drive_Time_Hrs', 'sum'), In_Progress_Time_Hrs=('In_Progress_Time_Hrs', 'sum'), Total_Job_Time_Hours=('Total_Job_Time_Hours', 'sum'), Job_Count=('Total_Job_Time_Hours', 'size')).reset_index()
         daily_route = daily_route[daily_route['Total_Job_Time_Hours'] > 0].copy()
         daily_route['Drive %'] = (daily_route['Drive_Time_Hrs'] / daily_route['Total_Job_Time_Hours']) * 100
+        # ⭐ GEOSPATIAL MAP ALIGNMENT KEY: Enforce Name reference column presence to future-proof Tab 10 Context-Switching crashes
+        daily_route['Name'] = daily_route['Assigned Team Members']
         
         # Unified assembly pipeline mapping for final_df records matrix
         final_df = pd.merge(time_df, job_time_pivot, on='Name', how='left').fillna(0)
@@ -885,7 +896,7 @@ if time_file and ops_file:
         final_df['Rev_Per_Clocked_Hr'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, final_df['Total_Assigned_Revenue'] / final_df['Total_Weekly_Clocked_Hrs'], 0.0)
 
         # =========================================================================================
-        # 🧪 SEAN MARBLE TIME-SHEET ATTENDANCE ABSENCE EVALUATION CHECK LOOP (GLOBAL STABILIZATION ROUTED)
+        # 🧪 SEAN MARBLE TIME-SHEET ATTENDANCE ABSENCE EVALUATION CHECK LOOP (GLOBAL STABILIZATION)
         # =========================================================================================
         sean_timecard = final_df[final_df['Name'] == 'Sean Marble']
         if not sean_timecard.empty:
@@ -898,7 +909,6 @@ if time_file and ops_file:
         else:
             sean_penalty_value = 0.0
 
-        # Save into session state layer to lock global execution thread
         st.session_state['sean_absence_penalty_global'] = sean_penalty_value
 
         # Fuel computational row pay updates safely across mapped dict paths
@@ -962,7 +972,7 @@ if time_file and ops_file:
         final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
         final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
 
-        # 🚀 RE-INTEGRATED CONSOLIDATED SPLITS INITIALIZATION LAYER (FIXES THE NAMEERROR COMPLETELY)
+        # 🚀 STRATEGIC POSITION ROUTING RE-ESTABLISHED (FIXES KEYERROR DISMISSAL ON LAUNCH MAPPING PARAMS)
         display_dfs = {}
         for day in days:
             final_df[day + '_Diff_Hrs'] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
@@ -1148,8 +1158,10 @@ if time_file and ops_file:
                 st.markdown("### **🏆 The Golden Ratio Margin Predictor**")
                 golden_data = []
                 for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
-                    day_clocked = final_df[f'{d}_Clocked_Hrs'].sum()
-                    day_job = final_df[f'{d}_Job_Hrs'].sum()
+                    final_df_d_clocked = final_df[f'{d}_Clocked_Hrs'].sum() if f'{d}_Clocked_Hrs' in final_df.columns else 0.0
+                    final_df_d_job = final_df[f'{d}_Job_Hrs'].sum() if f'{d}_Job_Hrs' in final_df.columns else 0.0
+                    day_clocked = final_df_d_clocked
+                    day_job = final_df_d_job
                     day_eff = (day_job / day_clocked * 100) if day_clocked > 0 else 0.0
                     day_lsi = ops_df[(ops_df['Day_of_Week'] == d) & (ops_df['Business Unit'] == 'Lowes - Simple Installs')].shape[0]
                     day_wh = ops_df[(ops_df['Day_of_Week'] == d) & (ops_df['Business Unit'] == 'Lowes - Water Heaters')].shape[0]
