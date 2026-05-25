@@ -962,7 +962,7 @@ if time_file and ops_file:
             </div>
             """, height=45)
 
-            # === HEADERS: OPERATIONAL METRICS EXECUTIVE SCORECARD UPDATED ===
+            # === HEADERS: OPERATIONAL METRICS EXECUTIVE SCORECARD ===
             st.markdown("### 🏢 Division Operational Health & Productivity Scorecard")
             
             div_health_col1, div_health_col2, div_health_col3, div_health_col4 = st.columns(4)
@@ -1160,7 +1160,6 @@ if time_file and ops_file:
                 st.dataframe(manager_day_df, use_container_width=True)
                 create_copy_button(manager_day_df, f"manager_overview_{tech}")
                 
-            # BUG FIXED: Indented correctly outside the technician loop sequence to prevent crash errors
             st.markdown("<br><hr>", unsafe_allow_html=True)
             show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key="manager_tab")
             
@@ -1185,7 +1184,7 @@ if time_file and ops_file:
                 create_copy_button(display_dfs[short_day].reset_index(drop=True), f"day_tab_{short_day}")
 
         with tabs[10]:
-            test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "¼ The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)", "🗺️ Route Optimization Flags", "🦺 Multi-Tech Labor Yield vs. Solo Runs", "📅 Lowe's Store Staging Delays by Day of the Week", "📊 Overtime ROI Cost-Benefit Auditor", "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard", "🗺️ Interactive Territory Density and Hotspot Mapping", "🗺️ Geographic Revenue Yield per Drive Hour"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
+            test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "¼ The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)", "🗺️ Route Optimization Flags", "🦺 Multi-Tech Labor Yield vs. Solo Runs", "📅 Lowe's Store Staging Delays by Day of the Week", "📊 Overtime ROI Cost-Benefit Auditor", "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard", "🗺️ Interactive Territory Density and Hotspot Mapping", "🗺️ Geographic Revenue Yield per Drive Hour", "🚛 End-of-Day (EOD) Payroll Slippage Auditor"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
             
             if "🏆 The Golden Ratio Margin Predictor" in test_choices:
                 st.markdown("### **🏆 The Golden Ratio Margin Predictor**")
@@ -1473,6 +1472,32 @@ if time_file and ops_file:
                     st.dataframe(final_yield_df, use_container_width=True)
                     create_copy_button(final_yield_df, "geographic_revenue_yield_drive_hour")
                 else: st.info("Location Address column missing from raw ops datasets.")
+
+            # ===Restored "🚛 End-of-Day (EOD) Payroll Slippage Auditor" View Option Blocks===
+            if "🚛 End-of-Day (EOD) Payroll Slippage Auditor" in test_choices:
+                st.markdown("### **🚛 End-of-Day (EOD) Payroll Slippage Auditor**")
+                st.markdown("*(Flags instances where a technician remained clocked in for more than 90 minutes after completing their final job order)*")
+                
+                if 'sample_df' in locals() and not bounds_df.empty:
+                    sample_df['Short_Date'] = sample_df['Clock_In_dt'].dt.strftime('%m-%d-%Y')
+                    ts_eod = sample_df.groupby(['User', 'Short_Date'])['Clock_Out_dt'].max().reset_index()
+                    ts_eod.columns = ['Assigned Team Members', 'Short_Date', 'Actual_Clock_Out']
+                    
+                    eod_merged = pd.merge(bounds_df, ts_eod, on=['Assigned Team Members', 'Short_Date'], how='inner')
+                    eod_merged['Slippage_Hrs'] = (eod_merged['Actual_Clock_Out'] - eod_merged['Last_Punch']).dt.total_seconds() / 3600.0
+                    
+                    slippage_alerts = eod_merged[eod_merged['Slippage_Hrs'] > 1.5].copy()
+                    if not slippage_alerts.empty:
+                        slippage_alerts = slippage_alerts.sort_values(by='Slippage_Hrs', ascending=False)
+                        slippage_alerts['Job Close Time'] = slippage_alerts['Last_Punch'].dt.strftime('%I:%M %p')
+                        slippage_alerts['Timecard Clockout'] = slippage_alerts['Actual_Clock_Out'].dt.strftime('%I:%M %p')
+                        slippage_alerts['Unaccounted Overtime'] = slippage_alerts['Slippage_Hrs'].apply(format_hm)
+                        
+                        show_slippage = slippage_alerts[['Assigned Team Members', 'Short_Date', 'Job Close Time', 'Timecard Clockout', 'Unaccounted Overtime']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date'})
+                        st.dataframe(show_slippage.reset_index(drop=True), use_container_width=True)
+                        create_copy_button(show_slippage, "eod_slippage_auditor")
+                    else:
+                        st.success("✅ Excellent shift close alignment. All technician timecards match close-of-work operational profiles.")
 
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
