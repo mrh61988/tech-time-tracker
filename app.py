@@ -625,7 +625,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 lsi_cnt, wh_cnt = row['Simple_Installs_Count'], row['Water_Heaters_Count']
                 if lsi_cnt > 0 and wh_cnt > 0: 
                     if row['Eff Gap'] > 15.0: return "⚠️ WH Ride-Along Required" if row['LSI_Eff_Raw'] > row['WH_Eff_Raw'] else "⚠️ LSI Ride-Along Required"
-                    return "✅ Balanced Execution"
+                    return "Balanced Execution"
                 if lsi_cnt > 0: return "ℹ️ Only LSI Jobs Assigned"
                 if wh_cnt > 0: return "ℹ️ Only WH Jobs Assigned"
                 return "ℹ️ No BU Jobs Assigned"
@@ -884,7 +884,7 @@ if time_file and ops_file:
         final_df['Rev_Per_Clocked_Hr'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, final_df['Total_Assigned_Revenue'] / final_df['Total_Weekly_Clocked_Hrs'], 0.0)
 
         # =========================================================================================
-        # 🧪 SEAN MARBLE TIME-SHEET ATTENDANCE ABSENCE EVALUATION CHECK LOOP (GLOBAL STABILIZATION ROUTED)
+        # 🧪 SEAN MARBLE TIME-SHEET ATTENDANCE ABSENCE EVALUATION CHECK LOOP (GLOBAL SYNCHRONIZATION)
         # =========================================================================================
         sean_timecard = final_df[final_df['Name'] == 'Sean Marble']
         if not sean_timecard.empty:
@@ -899,7 +899,7 @@ if time_file and ops_file:
 
         st.session_state['sean_absence_penalty_global'] = sean_penalty_value
 
-        # ⭐ STABILIZED MAPPING LAYER DESIGN: Direct column creation maps array metrics safely with NO index drops
+        # ⭐ FIXED DICTIONARY GENERATION PLACED HERE: Directly use zip values layout matrix to prevent index KeyError
         rev_per_hour_df_calc = final_df.copy()
         rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(get_adjusted_table_pay, axis=1)
 
@@ -1319,7 +1319,7 @@ if time_file and ops_file:
                     st.dataframe(show_staging[['Day_of_Week', 'Total_Visits', 'Total Hours Delayed', 'Avg Delay per Visit']].rename(columns={'Day_of_Week': 'Day', 'Total_Visits': 'Store Pickups'}), use_container_width=True)
                     create_copy_button(show_staging[['Day_of_Week', 'Total_Visits', 'Total Hours Delayed', 'Avg Delay per Visit']], "store_staging_by_day")
                 else:
-                    st.info("No material store staging records discovered inside loaded field parameters.")
+                    st.info("No material store staging records discovered inside logged field parameters.")
 
             if "📊 Overtime ROI Cost-Benefit Auditor" in test_choices:
                 st.markdown("### **📊 Overtime ROI Cost-Benefit Auditor**")
@@ -1397,7 +1397,7 @@ if time_file and ops_file:
                     
                     if selected_bu_filter in ["All Sectors", "Lowes - Water Heaters", "Lowes - Simple Installs"]:
                         if 'sean marble' in [tech.lower() for tech in ops_df['Name'].unique()]:
-                            labor_payload_sum = max(0.0, labor_payload_sum - sean_penalty)
+                            labor_payload_sum = max(0.0, labor_payload_sum - sean_penalty_value)
                     
                     net_profit_sum = gross_revenue_sum - combined_cost_sum - labor_payload_sum
                     
