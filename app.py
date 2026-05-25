@@ -555,7 +555,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             status = "⚠️ Low Volume Warning (Under 35 Hrs)" if hrs < 35.0 else "✅ Salary - Exempt"
             ot_hrs = "-"
         elif "bryan" in nl or "erik" in nl:
-            status = "🚨 High Burnout Risk (Over 45 Hrs)" if hrs > 45.0 else "✅ Piece Rate - Exempt"
+            status = "🚨 High Burnout Risk (Over 45 Hrs)" if hrs > 45.0 else "Piece Rate - Exempt"
             ot_hrs = "-"
         else:
             if hrs > 40:
@@ -817,7 +817,7 @@ if time_file and ops_file:
             for member in core_members_on_job:
                 new_row = row.copy()
                 new_row['Assigned Team Members'] = member
-                # ⭐ CO-ASSIGNMENT RE-ENGINEERING: Crew dispatch targets inherit un-split full invoice metrics 
+                # ⭐ FULL CREW MATRIX UPGRADE: Crediting full ticket values to all active paired technicians
                 new_row['Total Invoice Amount'] = row['Total Invoice Amount']
                 exploded_rows.append(new_row)
                 
@@ -942,10 +942,23 @@ if time_file and ops_file:
         display_dfs['Weekly'] = bu_summary_df
 
         # =========================================================================================
-        # 🧪 GLOBAL PIPELINE ARITHMETIC CORE ASSIGNMENT PANEL (RESOLVES INTER-TAB SCOPING ERRORS)
+        # 🧪 SEAN MARBLE PERFORMANCE METRICS AND ATTENDANCE ABSENCE DEDUCTIONS ENGINE
         # =========================================================================================
+        sean_timecard = final_df[final_df['Name'] == 'Sean Marble']
+        if not sean_timecard.empty:
+            sean_row = sean_timecard.iloc[0]
+            unworked_clocked_days = 0
+            for d in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']:
+                if sean_row[f'{d}_Clocked_Hrs'] <= 0:
+                    unworked_clocked_days += 1
+            sean_penalty = unworked_clocked_days * 269.0
+        else:
+            sean_penalty = 0.0
+
+        # === 🚀 STRATEGIC RE-ORDER ROUTING PLACED HERE TO SECURE CHRONOLOGICAL INITIALIZATION ===
         rev_per_hour_df_calc = final_df.copy()
-        rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(get_assumed_pay, axis=1)
+        # Apply rule-based pay adjustments over the temporary reference arrays to keep calculations in sync
+        rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(lambda r: max(0.0, get_assumed_pay(r) - sean_penalty) if 'sean marble' in str(r['Name']).lower() else get_assumed_pay(r), axis=1)
 
         ops_df['Computed_Row_Pay'] = ops_df['Name'].map(rev_per_hour_df_calc.set_index('Name')['Assumed Pay Amount'].to_dict()).fillna(0.0)
         tech_total_field_hrs = ops_df.groupby('Name')['Total_Job_Time_Hours'].sum().reset_index().rename(columns={'Total_Job_Time_Hours': 'Tech_Total_Work_Hrs'})
@@ -962,7 +975,6 @@ if time_file and ops_file:
             ops_df['Allocated_Job_Pay']
         )
 
-        # 🚀 CHRONOLOGICAL CORRECTION HOOK: df_macro_pay instantiated *before* computing summaries
         df_macro_pay = unexploded_ops.copy()
         df_macro_pay['Tech_Count'] = df_macro_pay['Assigned Team Members'].apply(lambda x: len([m.strip() for m in str(x).split(',') if m.strip()]))
         df_macro_pay['Is_Contractor'] = df_macro_pay['Assigned Team Members'].apply(check_contractor)
@@ -990,20 +1002,8 @@ if time_file and ops_file:
             np.maximum(df_macro_pay['Flat_Rate_Labor'], df_macro_pay['Logged_Time_Pay'])
         )
         df_macro_pay['Net_Profit_Raw'] = df_macro_pay['Total Invoice Amount'] - df_macro_pay['Combined_Lowe_Costs'] - df_macro_pay['Assumed_Labor_Payload']
-        
-        # ⭐ SEAN MARBLE TIME-SHEET ATTENDANCE ABSENCE EVALUATION CHECK LOOP
-        sean_timecard = final_df[final_df['Name'] == 'Sean Marble']
-        if not sean_timecard.empty:
-            sean_row = sean_timecard.iloc[0]
-            unworked_clocked_days = 0
-            for d in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']:
-                if sean_row[f'{d}_Clocked_Hrs'] <= 0:
-                    unworked_clocked_days += 1
-            sean_penalty = unworked_clocked_days * 269.0
-        else:
-            sean_penalty = 0.0
 
-        # Formulate macro totals structures safely with guaranteed chronological scoping parameters
+        # Formulate macro totals structures globally to completely eliminate Tab 10 KeyErrors
         total_assumed_pay_adjusted = max(0.0, df_macro_pay['Assumed_Labor_Payload'].sum() - sean_penalty)
         pay_ratio_pct_adjusted = (total_assumed_pay_adjusted / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
 
@@ -1080,7 +1080,7 @@ if time_file and ops_file:
                 rev_per_hour_df['Total Jobs'] = rev_per_hour_df['Total_Weekly_Job_Count'].astype(int)
                 rev_per_hour_df['Total Assigned Value'] = rev_per_hour_df['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
                 
-                # ⭐ SEAN MARBLE PAY SYNC RECALCULATION DEPLOYED OVER CURRENT HOURLY ACTIVE LANE VIEW
+                # ⭐ SEAN MARBLE PAY SYNC RECALCULATION HOOK APPLIED HERE WITH FIXED AND STABILIZED TIME METRICS
                 def get_adjusted_table_pay(row):
                     pay = get_assumed_pay(row)
                     if 'sean marble' in str(row['Name']).lower():
