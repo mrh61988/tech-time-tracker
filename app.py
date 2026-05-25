@@ -201,7 +201,7 @@ def get_first_core_tech(tech_str):
 
 def parse_az_city(addr):
     s = str(addr).lower()
-    for c in ["prescott", "chandler", "scottsdale", "phoenix", "goodyear", "mesa", "glendale", "gilbert", "tempe", "peoria", "surprise", "buckeye", "avondale"]:
+    for c in ["prescott", "chandler", "scottsdale", "phoenix", "goodyear", "mesa", "glendale", "gilbert", "tempe", "peoria", "surprise", "buckeye", "avondale", "tucson", "marana", "maricopa", "sierra vista", "green valley"]:
         if c in s:
             return c.title()
     return "Phoenix Region"
@@ -1263,7 +1263,7 @@ if time_file and ops_file:
                 show_yield['Total Man-Hours'] = show_yield['Total_Man_Hours'].apply(format_hm)
                 show_yield['Added Helper Cost'] = show_yield['Total_Helper_Cost'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
                 show_yield['Avg Revenue per Job'] = show_yield['Avg Revenue per Job'].apply(lambda x: f"${x:,.2f}")
-                show_yield['Revenue per Man-Hour'] = show_yield['Revenue per Man-Hour'].apply(lambda x: f"${x:.1f}/hr")
+                show_yield['Revenue per Man-Hour'] = summary_yield['Revenue per Man-Hour'].apply(lambda x: f"${x:.1f}/hr")
                 st.dataframe(show_yield[['Type', 'Job_Count', 'Total Revenue', 'Total Field Hours', 'Total Man-Hours', 'Added Helper Cost', 'Avg Revenue per Job', 'Revenue per Man-Hour']].rename(columns={'Job_Count': 'Jobs Assigned'}), use_container_width=True)
                 create_copy_button(show_yield, "multi_tech_yield")
                 
@@ -1469,7 +1469,9 @@ if time_file and ops_file:
                     "Phoenix": [33.4484, -112.0740], "Scottsdale": [33.4942, -111.9261], "Chandler": [33.3062, -111.8413],
                     "Goodyear": [33.4353, -112.3582], "Prescott": [34.5400, -112.4685], "Mesa": [33.4152, -111.8315],
                     "Glendale": [33.5387, -112.1860], "Gilbert": [33.3528, -111.7890], "Tempe": [33.4255, -111.9400],
-                    "Peoria": [33.5806, -112.2374], "Surprise": [33.6292, -112.3679], "Avondale": [33.4356, -112.3496]
+                    "Peoria": [33.5806, -112.2374], "Surprise": [33.6292, -112.3679], "Avondale": [33.4356, -112.3496],
+                    "Tucson": [32.2226, -110.9747], "Marana": [32.4367, -111.2254], "Sierra Vista": [31.5545, -110.3037],
+                    "Green Valley": [31.8543, -110.9937], "Maricopa": [33.0581, -112.0476], "Tolleson": [33.4500, -112.2593]
                 }
                 
                 df_map = ops_df.copy()
@@ -1515,6 +1517,6 @@ if time_file and ops_file:
                     st.dataframe(final_yield_df, use_container_width=True)
                     create_copy_button(final_yield_df, "geographic_revenue_yield_drive_hour")
                 else: st.info("Location Address column missing from raw ops datasets.")
-                
+
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
