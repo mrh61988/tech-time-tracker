@@ -765,7 +765,7 @@ if time_file and ops_file:
             for d in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']:
                 if sean_row[f'{d}_Clocked_Hrs'] <= 0:
                     unworked_clocked_days += 1
-            sean_penalty_value = unworked_clocked_days * 269.0
+            sean_penalty_value = unworked_clocked_days * (1346.154 / 5.0)
         else:
             sean_penalty_value = 0.0
 
@@ -1129,7 +1129,7 @@ if time_file and ops_file:
                 route_eff = route_eff.sort_values(by='Rev per Drive Hour Raw', ascending=False)
                 route_eff['Total Assigned Revenue'] = route_eff['Total_Revenue'].apply(lambda x: f"${x:,.2f}")
                 route_eff['Total Drive Hours'] = route_eff['Total_Drive_Hrs'].apply(lambda x: f"{x:.1f} hrs")
-                route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"${x:.1f}/hr")
+                route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"{x:.1f}/hr")
                 st.dataframe(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Travel Hour']].rename(columns={'Revenue per Travel Hour': 'Revenue per Drive Hour'}).reset_index(drop=True), use_container_width=True)
 
             if "🦺 Multi-Tech Labor Yield vs. Solo Runs" in test_choices:
@@ -1269,7 +1269,7 @@ if time_file and ops_file:
                     
                     if selected_bu_filter in ["All Sectors", "Lowes - Water Heaters", "Lowes - Simple Installs"]:
                         if 'sean marble' in [tech.lower() for tech in ops_df['Name'].unique()]:
-                            labor_payload_sum = max(0.0, labor_payload_sum - sean_penalty)
+                            labor_payload_sum = max(0.0, labor_payload_sum - sean_penalty_value)
                     
                     net_profit_sum = gross_revenue_sum - combined_cost_sum - labor_payload_sum
                     
