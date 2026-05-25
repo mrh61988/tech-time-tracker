@@ -817,7 +817,6 @@ if time_file and ops_file:
             for member in core_members_on_job:
                 new_row = row.copy()
                 new_row['Assigned Team Members'] = member
-                # ⭐ FULL CREW MATRIX UPGRADE: Crediting full ticket values to all active paired technicians
                 new_row['Total Invoice Amount'] = row['Total Invoice Amount']
                 exploded_rows.append(new_row)
                 
@@ -942,7 +941,7 @@ if time_file and ops_file:
         display_dfs['Weekly'] = bu_summary_df
 
         # =========================================================================================
-        # 🧪 SEAN MARBLE PERFORMANCE METRICS AND ATTENDANCE ABSENCE DEDUCTIONS ENGINE
+        # 🧪 SEAN MARBLE TIME-SHEET ATTENDANCE ABSENCE EVALUATION CHECK LOOP
         # =========================================================================================
         sean_timecard = final_df[final_df['Name'] == 'Sean Marble']
         if not sean_timecard.empty:
@@ -955,9 +954,8 @@ if time_file and ops_file:
         else:
             sean_penalty = 0.0
 
-        # === 🚀 STRATEGIC RE-ORDER ROUTING PLACED HERE TO SECURE CHRONOLOGICAL INITIALIZATION ===
+        # === STRATEGIC INITIALIZATION SYNCHRONIZATION LANE ===
         rev_per_hour_df_calc = final_df.copy()
-        # Apply rule-based pay adjustments over the temporary reference arrays to keep calculations in sync
         rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(lambda r: max(0.0, get_assumed_pay(r) - sean_penalty) if 'sean marble' in str(r['Name']).lower() else get_assumed_pay(r), axis=1)
 
         ops_df['Computed_Row_Pay'] = ops_df['Name'].map(rev_per_hour_df_calc.set_index('Name')['Assumed Pay Amount'].to_dict()).fillna(0.0)
@@ -1003,7 +1001,6 @@ if time_file and ops_file:
         )
         df_macro_pay['Net_Profit_Raw'] = df_macro_pay['Total Invoice Amount'] - df_macro_pay['Combined_Lowe_Costs'] - df_macro_pay['Assumed_Labor_Payload']
 
-        # Formulate macro totals structures globally to completely eliminate Tab 10 KeyErrors
         total_assumed_pay_adjusted = max(0.0, df_macro_pay['Assumed_Labor_Payload'].sum() - sean_penalty)
         pay_ratio_pct_adjusted = (total_assumed_pay_adjusted / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
 
@@ -1079,13 +1076,6 @@ if time_file and ops_file:
                 rev_per_hour_df['Total Clocked'] = rev_per_hour_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
                 rev_per_hour_df['Total Jobs'] = rev_per_hour_df['Total_Weekly_Job_Count'].astype(int)
                 rev_per_hour_df['Total Assigned Value'] = rev_per_hour_df['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
-                
-                # ⭐ SEAN MARBLE PAY SYNC RECALCULATION HOOK APPLIED HERE WITH FIXED AND STABILIZED TIME METRICS
-                def get_adjusted_table_pay(row):
-                    pay = get_assumed_pay(row)
-                    if 'sean marble' in str(row['Name']).lower():
-                        pay = max(0.0, pay - sean_penalty)
-                    return pay
                 
                 rev_per_hour_df['Assumed Pay Amount'] = rev_per_hour_df.apply(get_adjusted_table_pay, axis=1)
                 rev_per_hour_df['Assumed Pay'] = rev_per_hour_df['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
@@ -1229,7 +1219,7 @@ if time_file and ops_file:
                     rev_per_hour_df['Total Clocked'] = rev_per_hour_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
                     rev_per_hour_df['Total Assigned Value'] = rev_per_hour_df['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
                     
-                    # ⭐ SEAN MARBLE ABSENCE BURDEN RECALCULATION LOOP SYNCED TIGHTLY TO CLOCKED TIMECARDS
+                    # ⭐ SEAN MARBLE ABSENCE BURDEN RECALCULATION WITH TIME SHEET CRITERIA IN MODULAR LANE VIEW
                     rev_per_hour_df['Assumed Pay Amount'] = rev_per_hour_df.apply(lambda r: max(0.0, get_assumed_pay(r) - sean_penalty) if 'sean marble' in str(r['Name']).lower() else get_assumed_pay(r), axis=1)
                     rev_per_hour_df['Assumed Pay'] = rev_per_hour_df['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
                     rev_per_hour_df['Pay Pct'] = np.where(rev_per_hour_df['Total_Assigned_Revenue'] > 0, (rev_per_hour_df['Assumed Pay Amount'] / rev_per_hour_df['Total_Assigned_Revenue']) * 100, 0.0)
@@ -1469,7 +1459,8 @@ if time_file and ops_file:
                 cc_matrix['Cost Ratio % vs Rev'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Combined_Cost_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
                 cc_matrix['Cost Ratio % vs Rev'] = cc_matrix['Cost Ratio % vs Rev'].apply(lambda x: f"{x:.1f}%")
                 cc_matrix['Net Profit (%)'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Net_Profit_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
-                cc_matrix['Net Profit (%)'] = cc_matrix['Net_Profit (%)'].apply(lambda x: f"{x:.1f}%")
+                # 🎯 FUTURE PROOF TYPO REPLACEMENT Deployed HERE: Swapped underscore key reference on the right side to a whitespace format matching keys accurately
+                cc_matrix['Net Profit (%)'] = cc_matrix['Net Profit (%)'].apply(lambda x: f"{x:.1f}%")
                 cc_matrix['Gross Invoiced Revenue'] = cc_matrix['Gross_Invoiced_Raw'].apply(lambda x: f"${x:,.2f}")
                 cc_matrix['Total Combined Cost'] = cc_matrix['Combined_Cost_Total_Raw'].apply(lambda x: f"${x:,.2f}")
                 cc_matrix['Tech Wage Burden'] = cc_matrix['Assumed_Labor_Payload_Raw'].apply(lambda x: f"${x:,.2f}")
