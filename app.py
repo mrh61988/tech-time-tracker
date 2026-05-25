@@ -962,7 +962,7 @@ if time_file and ops_file:
             </div>
             """, height=45)
 
-            # === HEADERS: ADJUSTED OPERATIONAL METRICS EXECUTIVE SCORECARD ===
+            # === HEADERS: OPERATIONAL METRICS EXECUTIVE SCORECARD UPDATED ===
             st.markdown("### 🏢 Division Operational Health & Productivity Scorecard")
             
             div_health_col1, div_health_col2, div_health_col3, div_health_col4 = st.columns(4)
@@ -1160,12 +1160,13 @@ if time_file and ops_file:
                 st.dataframe(manager_day_df, use_container_width=True)
                 create_copy_button(manager_day_df, f"manager_overview_{tech}")
                 
-                st.markdown("<br><hr>", unsafe_allow_html=True)
-                show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key="manager_tab")
+            # BUG FIXED: Indented correctly outside the technician loop sequence to prevent crash errors
+            st.markdown("<br><hr>", unsafe_allow_html=True)
+            show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key="manager_tab")
             
         with tabs[2]:
             st.markdown('<h3>Printable Individual Report</h3>', unsafe_allow_html=True)
-            selected_tech = st.selectbox("Select a Technician:", final_df['Name'].unique())
+            selected_tech = st.selectbox("Select a Technician:", final_df['Name'].unique(), key="printable_tech_selector")
             if selected_tech:
                 tech_data = final_df[final_df['Name'] == selected_tech].iloc[0]
                 report_data = []
