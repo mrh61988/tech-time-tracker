@@ -100,7 +100,6 @@ st.markdown("""
         border-collapse: collapse !important;
         margin: 0 0 15px 0 !important;
     }
-    border-collapse: collapse !important;
     tr {
         page-break-inside: avoid !important;
     }
@@ -304,6 +303,49 @@ def get_adjusted_table_pay(row):
         return max(0.0, base_pay - st.session_state.get('sean_absence_penalty_global', 0.0))
     return base_pay
 
+# NATIVE SYSTEM CLIPBOARD DATA EXPORTER (DEFINED AT GLOBAL SCOPE LEVEL)
+def create_copy_button(df, raw_key):
+    safe_key = "".join([c if c.isalnum() else "_" for c in raw_key])
+    tsv_str = df.to_csv(sep='\t', index=False)
+    safe_tsv = tsv_str.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+    
+    button_html = f"""
+    <div class="hide-on-print" style="text-align: left; margin-top: 5px; margin-bottom: 8px;">
+        <textarea id="tsv_{safe_key}" style="position: absolute; left: -9999px;">{safe_tsv}</textarea>
+        <button id="btn_{safe_key}" onclick="copyTSV_{safe_key}()" style="background-color: #ffffff; color: #3c4043; padding: 6px 14px; border: 1px solid #dadce0; border-radius: 4px; cursor: pointer; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: background-color 0.2s;">
+            📋 Copy Table Data (For Email/Sheets/Docs)
+        </button>
+    </div>
+    <script>
+    function copyTSV_{safe_key}() {{
+        var copyText = document.getElementById("tsv_{safe_key}");
+        copyText.select();
+        copyText.setSelectionRange(0, 999999);
+        try {{
+            var successful = document.execCommand('copy');
+            var btn = document.getElementById("btn_{safe_key}");
+            if (successful) {{
+                btn.innerHTML = "✅ Copied table to clipboard!";
+                btn.style.backgroundColor = "#e6f4ea";
+                btn.style.color = "#137333";
+                btn.style.borderColor = "#137333";
+                setTimeout(function() {{
+                    btn.innerHTML = "📋 Copy Table Data (For Email/Sheets/Docs)";
+                    btn.style.backgroundColor = "#ffffff";
+                    btn.style.color = "#3c4043";
+                    btn.style.borderColor = "#dadce0";
+                }}, 2000);
+                }} else {{
+                btn.innerHTML = "❌ Copy failed";
+            }}
+        }} catch (err) {{
+            console.error('Execution fallback error:', err);
+        }}
+    }}
+    </script>
+    """
+    st.components.v1.html(button_html, height=38)
+
 # --- ADVANCED TIMELINE MATRICES ---
 def run_baselines_matrix(ops_df):
     st.markdown("<h4>Advanced Team Processing Baselines Matrix</h4>", unsafe_allow_html=True)
@@ -427,135 +469,6 @@ def run_baselines_matrix(ops_df):
 # --- MAIN BLOCK REPORT ENGINE ---
 def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
-    
-    # === BOSS TOOLS SECTION ===
-    st.header("💼 Boss Tools (Financials & Efficiency)")
-    
-    total_clocked = final_df['Total_Weekly_Clocked_Hrs'].sum()
-    total_job = final_df['Total_Weekly_Job_Hrs'].sum()
-    efficiency = (total_job / total_clocked * 100) if total_clocked > 0 else 0
-    
-    total_lsi = final_df.get('Simple_Installs_Hrs', pd.Series([0])).sum()
-    total_wh = final_df.get('Water_Heaters_Hrs', pd.Series([0])).sum()
-    
-    total_lsi_assumed = final_df.get('Assumed_LSI_Clocked', pd.Series([0])).sum()
-    total_wh_assumed = final_df.get('Assumed_WH_Clocked', pd.Series([0])).sum()
-    
-    lsi_eff = (total_lsi / total_lsi_assumed * 100) if total_lsi_assumed > 0 else 0
-    wh_eff = (total_wh / total_wh_assumed * 100) if total_wh_assumed > 0 else 0
-    
-    lost_hrs = final_df[final_df['Total_Weekly_Diff_Hrs'] > 0]['Total_Weekly_Diff_Hrs'].sum()
-    
-    b_col1, b_col2, b_col3, b_col4, b_col5, b_col6 = st.columns([1.3, 1, 1, 1, 1, 1])
-    with b_col1:
-        rate = st.number_input("Fallback Rate for Unmapped Techs ($)", value=25.0, step=1.0, key=f"rate_{tab_key}")
-        
-    def get_custom_loss(row, fallback):
-        nl = str(row['Name']).lower()
-        diff = row['Total_Weekly_Diff_Hrs']
-        if diff <= 0: return 0.0
-        if 'sean marble' in nl: return diff * 33.65
-        if 'michael owens' in nl: return diff * 31.25
-        if 'bryan' in nl or 'erik' in nl: return 0.0
-        if 'nate' in nl or 'nathan' in nl: return diff * 22.50
-        if any(n in nl for n in ['edward', 'matt', 'tanner']): return diff * 25.00
-        return diff * fallback
-
-    lost_money = final_df.apply(lambda r: get_custom_loss(r, rate), axis=1).sum()
-    
-    with b_col2: st.metric(label="Total Unaccounted", value=f"{lost_hrs:.1f} hrs")
-    with b_col3: st.metric(label="Financial Leakage", value=f"${lost_money:,.2f}")
-    with b_col4: st.metric(label="Overall Efficiency", value=f"{efficiency:.1f}%")
-    with b_col5: st.metric(label="LSI Efficiency", value=f"{lsi_eff:.1f}%", delta=f"{total_lsi:.1f} Job Hrs", delta_color="off")
-    with b_col6: st.metric(label="Water Heaters Eff", value=f"{wh_eff:.1f}%", delta=f"{total_wh:.1f} Job Hrs", delta_color="off")
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    trend_col, leaderboard_col = st.columns(2)
-    
-    with trend_col:
-        st.subheader("📈 Daily Division Health Trend")
-        st.markdown("*(Combined team efficiency analyzed day-by-day across all business units)*")
-        trend_data = []
-        for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
-            day_clocked = final_df[f'{d}_Clocked_Hrs'].sum()
-            day_job = final_df[f'{d}_Job_Hrs'].sum()
-            day_eff = (day_job / day_clocked * 100) if day_clocked > 0 else 0.0
-            trend_data.append({"Day": d, "Total Clocked": format_hm(day_clocked), "Job Status Time": format_hm(day_job), "Efficiency Score": f"{day_eff:.1f}%"})
-        trend_df = pd.DataFrame(trend_data)
-        st.dataframe(trend_df, use_container_width=True)
-        create_copy_button(trend_df, f"trend_{tab_key}")
-
-    with leaderboard_col:
-        st.subheader("🚨 Team Leaderboard")
-        st.markdown("*(Whole team sorted by highest unaccounted time after overrides)*")
-        leaderboard_df = final_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=False).copy()
-        if not leaderboard_df.empty:
-            leaderboard_df['Total Clocked'] = leaderboard_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
-            leaderboard_df['Total Job Time'] = leaderboard_df['Total_Weekly_Job_Hrs'].apply(format_hm)
-            leaderboard_df['Manual Adj'] = leaderboard_df['Adjustment_Hrs'].apply(format_hm)
-            leaderboard_df['Daily Avg Diff'] = leaderboard_df['Daily_Avg_Diff_Hrs'].apply(format_hm)
-            leaderboard_df['Total Diff'] = leaderboard_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
-            
-            show_leaderboard = leaderboard_df[['Name', 'Total Clocked', 'Total Job Time', 'Manual Adj', 'Daily Avg Diff', 'Total Diff']].copy()
-            def highlight_leaderboard(row):
-                styles = [''] * len(row)
-                if 'Daily Avg Diff' in row.index:
-                    val = parse_diff_to_hours(row['Daily Avg Diff'])
-                    if val >= 1.5:
-                        idx = row.index.get_loc('Daily Avg Diff')
-                        styles[idx] = 'background-color: #ffcccc; color: #990000; font-weight: bold;'
-                return styles
-            try: st.dataframe(show_leaderboard.reset_index(drop=True).style.apply(highlight_leaderboard, axis=1), use_container_width=True)
-            except Exception: st.dataframe(show_leaderboard.reset_index(drop=True), use_container_width=True)
-            create_copy_button(show_leaderboard.reset_index(drop=True), f"leaderboard_{tab_key}")
-
-    # === OVERTIME HORIZON PREDICTOR ===
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("🚨 Fleet Overtime Horizon Predictor")
-    st.markdown("*(Monitors pacing thresholds. Salaried under 35 hrs and Piece-Rate over 45 hrs flag red automatically)*")
-    ot_rows = []
-    for idx, row in final_df.iterrows():
-        tech_name = row['Name']
-        nl = tech_name.lower()
-        hrs = row['Total_Weekly_Clocked_Hrs']
-        job_hrs = row['Total_Weekly_Job_Hrs']
-        if "sean marble" in nl or "michael owens" in nl:
-            status = "⚠️ Low Volume Warning (Under 35 Hrs)" if hrs < 35.0 else "✅ Salary - Exempt"
-            ot_hrs = "-"
-        elif "bryan" in nl or "erik" in nl:
-            status = "🚨 High Burnout Risk (Over 45 Hrs)" if hrs > 45.0 else "Piece Rate - Exempt"
-            ot_hrs = "-"
-        else:
-            if hrs > 40:
-                status = "🚨 Overtime Incurred"
-                ot_hrs = format_hm(hrs - 40)
-            elif hrs > 35:
-                status = "⚠️ High Overtime Risk"
-                ot_hrs = "-"
-            else:
-                status = "✅ Safe Strategy"
-                ot_hrs = "-"
-        ot_rows.append({
-            "Name": tech_name,
-            "Weekly Clocked": format_hm(hrs),
-            "Total Job Time": format_hm(job_hrs),
-            "Pace Status": status,
-            "Overtime Hours": ot_hrs
-        })
-    if ot_rows:
-        ot_predictor_df = pd.DataFrame(ot_rows)
-        def style_ot_predictor(row):
-            st_val = row['Pace Status']
-            if "🚨" in st_val or "⚠️ Low Volume" in st_val: return ['background-color: #ffcccc; color: #990000;'] * len(row)
-            if "⚠️ High Overtime" in st_val: return ['background-color: #fff3cd; color: #856404;'] * len(row)
-            return [''] * len(row)
-        try: st.dataframe(ot_predictor_df.reset_index(drop=True).style.apply(style_ot_predictor, axis=1), use_container_width=True)
-        except Exception: st.dataframe(ot_predictor_df.reset_index(drop=True), use_container_width=True)
-        create_copy_button(ot_predictor_df.reset_index(drop=True), f"overtime_{tab_key}")
-            
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # === CONSOLIDATED MAIN VIEW BLOCKS ===
     st.header("📊 Ops Manager Tools (Benchmarking & Performance)")
     col_left, col_right = st.columns(2)
     
@@ -585,13 +498,12 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 lsi_cnt, wh_cnt = row['Simple_Installs_Count'], row['Water_Heaters_Count']
                 if lsi_cnt > 0 and wh_cnt > 0: 
                     if row['Eff Gap'] > 15.0: return "⚠️ WH Ride-Along Required" if row['LSI_Eff_Raw'] > row['WH_Eff_Raw'] else "⚠️ LSI Ride-Along Required"
-                    return "Balanced Execution"
+                    return "✅ Balanced Execution"
                 if lsi_cnt > 0: return "ℹ️ Only LSI Jobs Assigned"
                 if wh_cnt > 0: return "ℹ️ Only WH Jobs Assigned"
                 return "ℹ️ No BU Jobs Assigned"
             skill_df['Action Required'] = skill_df.apply(assign_skill_flag, axis=1)
             
-            # CRITICAL WARNING SORT ENGINE IMPLEMENTATION
             skill_df['sort_action'] = skill_df['Action Required'].apply(lambda x: 0 if '⚠️' in str(x) else (1 if 'ℹ️' in str(x) else 2))
             skill_df = skill_df.sort_values(by='sort_action', ascending=True)
             
@@ -601,7 +513,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             except Exception: st.dataframe(show_skill.reset_index(drop=True), use_container_width=True)
             create_copy_button(show_skill.reset_index(drop=True), f"skills_{tab_key}")
 
-    # ⭐ Restored the missing dashboard sections inside function block scope
+    # ⭐ RESTORED DENSITY SECTIONS BOUND TIGHTLY INSIDE INNER FUNCTION SCOPES FOR PERFORMANCE STABILITY
     st.markdown("<br><h4>🗺️ Route Optimization Flags</h4>", unsafe_allow_html=True)
     st.markdown("*(Identifies service days where a technician spent over 40% of their billable shift driving to audit route density)*")
     poor_routes = daily_route[daily_route['Drive %'] > 40.0].copy()
@@ -613,8 +525,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
         route_df_export = poor_routes[['Assigned Team Members', 'Short_Date', 'Job_Count', 'Drive Time', 'Work Time', 'Drive %']].rename(columns={'Assigned Team Members': 'Name', 'Short_Date': 'Date', 'Job_Count': 'Jobs'}).reset_index(drop=True)
         st.dataframe(route_df_export, use_container_width=True)
         create_copy_button(route_df_export, f"routes_{tab_key}")
-    else:
-        st.success("✅ Great density alignment! No single transport lane routing fell below benchmark efficiency requirements.")
+    else: st.success("✅ Great density alignment! No single transport lane routing fell below benchmark efficiency requirements.")
 
     st.markdown("<br>", unsafe_allow_html=True)
     launch_col, launch_empty_col = st.columns(2)
@@ -626,8 +537,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             try: st.dataframe(launch_counts.reset_index(drop=True).style.set_properties(**{'background-color': '#fff3cd', 'color': '#856404;'}, subset=['Total Late Days']), use_container_width=True)
             except Exception: st.dataframe(launch_counts.reset_index(drop=True), use_container_width=True)
             create_copy_button(launch_counts.reset_index(drop=True).rename(columns={'Assigned Team Members': 'Name'}), f"late_score_{tab_key}")
-        else:
-            st.success("✅ Zero morning momentum delays recorded for core internal dispatches.")
+        else: st.success("✅ Zero morning momentum delays recorded for core internal dispatches.")
 
     with launch_empty_col:
         st.markdown("<h4>🚗 Delayed Launch Alert</h4>", unsafe_allow_html=True)
@@ -645,8 +555,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 try: st.dataframe(show_launches.style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'}), use_container_width=True)
                 except Exception: st.dataframe(show_launches, use_container_width=True)
                 create_copy_button(show_launches, f"late_alert_{tab_key}")
-        else:
-            st.info("No timeline momentum compliance delays located inside current operational data streams.")
+        else: st.info("No timeline momentum compliance delays located inside current operational data streams.")
 
 # --- THE MAIN TOP-LEVEL BASE EXECUTION PIPELINE LAYER BLOCK ---
 st.sidebar.header("📂 Data Loading Pipeline")
@@ -789,6 +698,7 @@ if time_file and ops_file:
             for member in core_members_on_job:
                 new_row = row.copy()
                 new_row['Assigned Team Members'] = member
+                # Crew dispatch targets inherit un-split full invoice metrics fully credited to both technicians
                 new_row['Total Invoice Amount'] = row['Total Invoice Amount']
                 exploded_rows.append(new_row)
                 
@@ -848,7 +758,7 @@ if time_file and ops_file:
         final_df['Rev_Per_Clocked_Hr'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, final_df['Total_Assigned_Revenue'] / final_df['Total_Weekly_Clocked_Hrs'], 0.0)
 
         # =========================================================================================
-        # 🧪 SEAN MARBLE TIME-SHEET ATTENDANCE ABSENCE EVALUATION CHECK LOOP (GLOBAL SYNCHRONIZATION)
+        # 🧪 SEAN MARBLE TIME-SHEET ATTENDANCE ABSENCE EVALUATION CHECK LOOP (GLOBAL STABILIZATION)
         # =========================================================================================
         sean_timecard = final_df[final_df['Name'] == 'Sean Marble']
         if not sean_timecard.empty:
@@ -863,7 +773,7 @@ if time_file and ops_file:
 
         st.session_state['sean_absence_penalty_global'] = sean_penalty_value
 
-        # Fuel computational row pay updates safely across mapped dict paths
+        # ⭐ SEAN MARBLE TRUE LIVE PAY SYNC PATTERN IMPLEMENTATION FOR BASE VALUE TABLE OVERRIDES
         rev_per_hour_df_calc = final_df.copy()
         rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(get_adjusted_table_pay, axis=1)
 
@@ -977,6 +887,7 @@ if time_file and ops_file:
         bu_summary_df['Total Unallocated Hours'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
         display_dfs['Weekly'] = bu_summary_df
 
+        # Secure total summaries layout mapping metrics securely inside parameters bounds
         total_assumed_pay_adjusted = max(0.0, df_macro_pay['Assumed_Labor_Payload'].sum() - sean_penalty_value)
         pay_ratio_pct_adjusted = (total_assumed_pay_adjusted / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
 
@@ -1220,7 +1131,7 @@ if time_file and ops_file:
                 route_eff['Total Assigned Revenue'] = route_eff['Total_Revenue'].apply(lambda x: f"${x:,.2f}")
                 route_eff['Total Drive Hours'] = route_eff['Total_Drive_Hrs'].apply(lambda x: f"{x:.1f} hrs")
                 route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"{x:.1f}/hr")
-                st.dataframe(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True), use_container_width=True)
+                st.dataframe(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Travel Hour']].rename(columns={'Revenue per Travel Hour': 'Revenue per Drive Hour'}).reset_index(drop=True), use_container_width=True)
 
             if "🦺 Multi-Tech Labor Yield vs. Solo Runs" in test_choices:
                 st.markdown("### **🦺 Multi-Tech Labor Yield vs. Solo Runs (Co-Efficiency Analysis)**")
