@@ -471,6 +471,11 @@ def run_baselines_matrix(ops_df):
 def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     st.header("📊 Ops Manager Tools (Benchmarking & Performance)")
+    
+    # BRINGING THE UNCALLED MATRICES BLOCK INTUITIVELY INSIDE BUSINESS SUITE HEADERS
+    run_baselines_matrix(ops_df)
+    st.markdown("<br>", unsafe_allow_html=True)
+    
     col_left, col_right = st.columns(2)
     
     with col_left:
