@@ -684,14 +684,6 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 except Exception: st.dataframe(show_launches, use_container_width=True)
                 create_copy_button(show_launches, f"late_alert_{tab_key}")
 
-# --- GLOBAL WRAPPER SYNCHRONIZATION LANE HOOK ---
-def get_adjusted_table_pay(row):
-    nl = str(row['Name']).lower()
-    base_pay = get_assumed_pay(row)
-    if 'sean marble' in nl:
-        return max(0.0, base_pay - st.session_state.get('sean_absence_penalty_global', 0.0))
-    return base_pay
-
 # --- THE MAIN TOP-LEVEL BASE EXECUTION PIPELINE LAYER BLOCK ---
 st.sidebar.header("📂 Data Loading Pipeline")
 time_file = st.sidebar.file_uploader("Upload Time Sheet (CSV)", type=['csv'])
@@ -892,7 +884,7 @@ if time_file and ops_file:
         final_df['Rev_Per_Clocked_Hr'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, final_df['Total_Assigned_Revenue'] / final_df['Total_Weekly_Clocked_Hrs'], 0.0)
 
         # =========================================================================================
-        # 🧪 SEAN MARBLE TIME-SHEET ATTENDANCE ABSENCE EVALUATION CHECK LOOP (GLOBAL SYNCHRONIZATION)
+        # 🧪 SEAN MARBLE TIME-SHEET ATTENDANCE ABSENCE EVALUATION CHECK LOOP (GLOBAL STABILIZATION ROUTED)
         # =========================================================================================
         sean_timecard = final_df[final_df['Name'] == 'Sean Marble']
         if not sean_timecard.empty:
