@@ -513,7 +513,6 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             except Exception: st.dataframe(show_skill.reset_index(drop=True), use_container_width=True)
             create_copy_button(show_skill.reset_index(drop=True), f"skills_{tab_key}")
 
-    # ⭐ Enforce function block alignment to lock visibility parameters smoothly
     st.markdown("<br><h4>🗺️ Route Optimization Flags</h4>", unsafe_allow_html=True)
     st.markdown("*(Identifies service days where a technician spent over 40% of their billable shift driving to audit route density)*")
     poor_routes = daily_route[daily_route['Drive %'] > 40.0].copy()
@@ -757,7 +756,7 @@ if time_file and ops_file:
         final_df['Rev_Per_Clocked_Hr'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, final_df['Total_Assigned_Revenue'] / final_df['Total_Weekly_Clocked_Hrs'], 0.0)
 
         # =========================================================================================
-        # 🧪 SEAN MARBLE TIME-SHEET ATTENDANCE ABSENCE EVALUATION CHECK LOOP (GLOBAL STABILIZATION)
+        # 🧪 SEAN MARBLE TIME-SHEET ATTENDANCE ABSENCE EVALUATION CHECK LOOP (GLOBAL SYNCHRONIZATION)
         # =========================================================================================
         sean_timecard = final_df[final_df['Name'] == 'Sean Marble']
         if not sean_timecard.empty:
@@ -766,12 +765,18 @@ if time_file and ops_file:
             for d in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']:
                 if sean_row[f'{d}_Clocked_Hrs'] <= 0:
                     unworked_clocked_days += 1
-            # Standard standard weekly baseline = $1,346.15. Backing out 2 missing days ($269 x 2) yields $808.15.
             sean_penalty_value = unworked_clocked_days * 269.0
         else:
             sean_penalty_value = 0.0
 
         st.session_state['sean_absence_penalty_global'] = sean_penalty_value
+
+        # ⭐ CRITICAL LANE REALIGNMENT WORKED OUT HERE: Compute performance metrics *BEFORE* running split tables to prevent KeyErrors
+        final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
+        final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * 3.5
+        final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
+        final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
+        final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
 
         # Fuel computational row pay updates safely across mapped dict paths using ZIP directly
         rev_per_hour_df_calc = final_df.copy()
@@ -831,7 +836,7 @@ if time_file and ops_file:
             
         final_df['Adjustment_Hrs'] = final_df['Name'].map(adjustments).fillna(0.0)
         final_df['Total_Weekly_Job_Hrs'] = final_df['Total_Weekly_Job_Hrs'] + final_df['Adjustment_Hrs']
-        
+
         display_dfs = {}
         for day in days:
             final_df[day + '_Diff_Hrs'] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
@@ -1124,7 +1129,7 @@ if time_file and ops_file:
                 route_eff = route_eff.sort_values(by='Rev per Drive Hour Raw', ascending=False)
                 route_eff['Total Assigned Revenue'] = route_eff['Total_Revenue'].apply(lambda x: f"${x:,.2f}")
                 route_eff['Total Drive Hours'] = route_eff['Total_Drive_Hrs'].apply(lambda x: f"{x:.1f} hrs")
-                route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"{x:.1f}/hr")
+                route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"${x:.1f}/hr")
                 st.dataframe(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Travel Hour']].rename(columns={'Revenue per Travel Hour': 'Revenue per Drive Hour'}).reset_index(drop=True), use_container_width=True)
 
             if "🦺 Multi-Tech Labor Yield vs. Solo Runs" in test_choices:
@@ -1264,7 +1269,7 @@ if time_file and ops_file:
                     
                     if selected_bu_filter in ["All Sectors", "Lowes - Water Heaters", "Lowes - Simple Installs"]:
                         if 'sean marble' in [tech.lower() for tech in ops_df['Name'].unique()]:
-                            labor_payload_sum = max(0.0, labor_payload_sum - sean_penalty_value)
+                            labor_payload_sum = max(0.0, labor_payload_sum - sean_penalty)
                     
                     net_profit_sum = gross_revenue_sum - combined_cost_sum - labor_payload_sum
                     
