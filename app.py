@@ -1009,7 +1009,7 @@ if time_file and ops_file:
         bu_summary_df['Total Unallocated Hours'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
         display_dfs['Weekly'] = bu_summary_df
 
-        # Formulate macro totals structures safely with guaranteed chronological scoping parameters
+        # Secure total summaries layout mapping metrics securely inside parameters bounds
         total_assumed_pay_adjusted = max(0.0, df_macro_pay['Assumed_Labor_Payload'].sum() - sean_penalty)
         pay_ratio_pct_adjusted = (total_assumed_pay_adjusted / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
 
@@ -1347,7 +1347,7 @@ if time_file and ops_file:
                     st.dataframe(ot_audit_df, use_container_width=True)
                     create_copy_button(ot_audit_df, "overtime_roi_auditor")
                 else:
-                    st.success("% Hourly technicians worked zero premium overtime thresholds during this session cycle.")
+                    st.success("✅ Zero hourly technicians incurred premium overtime thresholds during this invoice cycle.")
 
             if "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard" in test_choices:
                 st.markdown("### **🏆 Single-Job \"Whale Alert\" Revenue Leaderboard**")
@@ -1466,7 +1466,7 @@ if time_file and ops_file:
                 cc_matrix['Cost Ratio % vs Rev'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Combined_Cost_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
                 cc_matrix['Cost Ratio % vs Rev'] = cc_matrix['Cost Ratio % vs Rev'].apply(lambda x: f"{x:.1f}%")
                 cc_matrix['Net Profit (%)'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Net_Profit_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
-                cc_matrix['Net Profit (%)'] = cc_matrix['Net_Profit (%)'].apply(lambda x: f"{x:.1f}%")
+                cc_matrix['Net Profit (%)'] = cc_matrix['Net Profit (%)'].apply(lambda x: f"{x:.1f}%")
                 cc_matrix['Gross Invoiced Revenue'] = cc_matrix['Gross_Invoiced_Raw'].apply(lambda x: f"${x:,.2f}")
                 cc_matrix['Total Combined Cost'] = cc_matrix['Combined_Cost_Total_Raw'].apply(lambda x: f"${x:,.2f}")
                 cc_matrix['Tech Wage Burden'] = cc_matrix['Assumed_Labor_Payload_Raw'].apply(lambda x: f"${x:,.2f}")
