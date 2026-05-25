@@ -1012,7 +1012,8 @@ if time_file and ops_file:
                     "Net Profit (%)": f"{(net_profit_sum / gross_revenue_sum * 100):.1f}%" if gross_revenue_sum > 0 else "0.0%"
                 }])
                 
-                st.dataframe(totals_summary_df, use_container_width=True)
+                # REMOVED SCROLLBAR FOR FULL DISCLOSURE DISPLAY
+                st.table(totals_summary_df)
                 create_copy_button(totals_summary_df, "profitability_summary_totals")
                 
                 df_prof_filtered = df_macro_pay.copy()
@@ -1046,11 +1047,13 @@ if time_file and ops_file:
                         "Job ID", "Line of Business", "Crew Assigned", "Gross Invoice", 
                         "Total Combined Cost", "Tech Wage Burden", "Net Profit ($)", "Margin %"
                     ])
+                    
+                    # REMOVED SCROLLBAR FOR FULL DISCLOSURE DISPLAY
                     try:
                         styled_reg = prof_register_df.style.apply(highlight_low_margins, axis=1)
-                        st.dataframe(styled_reg, use_container_width=True)
+                        st.table(styled_reg)
                     except Exception:
-                        st.dataframe(prof_register_df, use_container_width=True)
+                        st.table(prof_register_df)
                     create_copy_button(prof_register_df, "sortable_job_margins_register")
 
             # ⭐ MIGRATED VIEW MODULE 2 MOUNTED DIRECTLY TO THE BOTTOM METRIC SUB-GRID SMOOTHLY
