@@ -819,6 +819,7 @@ if time_file and ops_file:
             for member in core_members_on_job:
                 new_row = row.copy()
                 new_row['Assigned Team Members'] = member
+                # ⭐ CRITICAL UPDATE UNIFICATION: If multiple techs exist, full job attributes are duplicated entirely
                 if member == first_core_tech:
                     new_row['Total Invoice Amount'] = row['Total Invoice Amount']
                 else:
@@ -946,7 +947,7 @@ if time_file and ops_file:
         display_dfs['Weekly'] = bu_summary_df
 
         # =========================================================================================
-        # 🧪 GLOBAL PIPELINE ARITHMETIC CORE ASSIGNMENT PANEL (RESOLVES INTER-TAB SCOPING ERRORS)
+        # 🧪 GLOBAL PIPELINE ARITHMETIC CORE ASSIGNMENT PANEL
         # =========================================================================================
         rev_per_hour_df_calc = final_df.copy()
         rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(get_assumed_pay, axis=1)
@@ -994,10 +995,17 @@ if time_file and ops_file:
         )
         df_macro_pay['Net_Profit_Raw'] = df_macro_pay['Total Invoice Amount'] - df_macro_pay['Combined_Lowe_Costs'] - df_macro_pay['Assumed_Labor_Payload']
         
-        # Pull and parse Sean Marble attendance absence burden allocations globally
-        sean_ops = ops_df[ops_df['Name'] == 'Sean Marble']
-        worked_days = sean_ops['Day_of_Week'].unique() if not sean_ops.empty else []
-        sean_penalty = len([d for d in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] if d not in worked_days]) * 269.0
+        # ⭐ SEAN MARBLE BURDEN ATTENDANCE PENALTY: Calculated precisely from timecard clocked days metrics
+        sean_timecard = final_df[final_df['Name'] == 'Sean Marble']
+        if not sean_timecard.empty:
+            sean_row = sean_timecard.iloc[0]
+            unworked_clocked_days = 0
+            for d in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']:
+                if sean_row[f'{d}_Clocked_Hrs'] <= 0:
+                    unworked_clocked_days += 1
+            sean_penalty = unworked_clocked_days * 269.0
+        else:
+            sean_penalty = 0.0
 
         # Formulate macro totals structures globally to completely eliminate Tab 10 KeyErrors
         total_assumed_pay_adjusted = max(0.0, df_macro_pay['Assumed_Labor_Payload'].sum() - sean_penalty)
@@ -1076,7 +1084,7 @@ if time_file and ops_file:
                 rev_per_hour_df['Total Jobs'] = rev_per_hour_df['Total_Weekly_Job_Count'].astype(int)
                 rev_per_hour_df['Total Assigned Value'] = rev_per_hour_df['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
                 
-                # ⭐ SEAN MARBLE ABSENCE BURDEN RULE IMPLEMENTATION IN CURRENT ANALYSIS LANE
+                # ⭐ SEAN MARBLE ABSENCE BURDEN RULE RECALCULATION LOOP FOR MAIN TAB REGISTER
                 def get_adjusted_table_pay(row):
                     pay = get_assumed_pay(row)
                     if 'sean marble' in str(row['Name']).lower():
@@ -1225,7 +1233,7 @@ if time_file and ops_file:
                     rev_per_hour_df['Total Clocked'] = rev_per_hour_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
                     rev_per_hour_df['Total Assigned Value'] = rev_per_hour_df['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
                     
-                    # ⭐ SEAN MARBLE ABSENCE BURDEN RULE IMPLEMENTATION IN MODULAR TEST PANEL LANE
+                    # ⭐ SEAN MARBLE ABSENCE BURDEN RECALCULATION LOOP FOR MODULAR TEST SECTION PANEL
                     rev_per_hour_df['Assumed Pay Amount'] = rev_per_hour_df.apply(lambda r: max(0.0, get_assumed_pay(r) - sean_penalty) if 'sean marble' in str(r['Name']).lower() else get_assumed_pay(r), axis=1)
                     rev_per_hour_df['Assumed Pay'] = rev_per_hour_df['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
                     rev_per_hour_df['Pay Pct'] = np.where(rev_per_hour_df['Total_Assigned_Revenue'] > 0, (rev_per_hour_df['Assumed Pay Amount'] / rev_per_hour_df['Total_Assigned_Revenue']) * 100, 0.0)
@@ -1281,7 +1289,7 @@ if time_file and ops_file:
                 st.dataframe(show_yield[['Type', 'Job_Count', 'Total Revenue', 'Total Field Hours', 'Total Man-Hours', 'Added Helper Cost', 'Avg Revenue per Job', 'Revenue per Man-Hour']].rename(columns={'Job_Count': 'Jobs Assigned'}), use_container_width=True)
                 create_copy_button(show_yield, "multi_tech_yield")
                 
-                st.markdown("#### 🖨️ Granular Team Dispatch Review Log")
+                st.markdown("#### 🦺 Granular Team Dispatch Review Log")
                 team_jobs = df_m[df_m['Tech_Count'] > 1].copy()
                 if not team_jobs.empty:
                     team_jobs['Total Revenue'] = team_jobs['Total Invoice Amount'].apply(lambda x: f"${x:,.2f}")
