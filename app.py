@@ -46,10 +46,6 @@ st.markdown("""
         padding: 0 !important;
         box-shadow: none !important;
         page-break-inside: avoid !important;
-        margin: 0 0 15px 0 !important;
-        padding: 0 !important;
-        box-shadow: none !important;
-        page-break-inside: avoid !important;
     }
     
     h2, h3, h4 {
@@ -210,31 +206,6 @@ def parse_az_city(addr):
             return c.title()
     return "Phoenix Region"
 
-def get_assumed_pay(row):
-    nl = str(row['Name']).lower()
-    clocked = row['Total_Weekly_Clocked_Hrs']
-    rev = row['Total_Assigned_Revenue']
-    
-    if 'sean marble' in nl:
-        return 70000.0 / 52.0
-    if 'michael owens' in nl:
-        return 65000.0 / 52.0
-    if 'bryan' in nl or 'erik' in nl:
-        return rev * 0.33
-        
-    rate = 0.0
-    if 'nate' in nl or 'nathan' in nl:
-        rate = 22.50
-    elif any(n in nl for n in ['edward', 'matt', 'tanner']):
-        rate = 25.00
-        
-    if rate > 0:
-        if clocked > 40.0:
-            return (40.0 * rate) + ((clocked - 40.0) * rate * 1.5)  
-        else:
-            return clocked * rate
-    return 0.0
-
 def highlight_matrix_overhead(s):
     styles = []
     for val in s:
@@ -260,6 +231,31 @@ def highlight_over_hour_row(row):
             if hrs > 1.0:
                 return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row)
     return styles
+
+def get_assumed_pay(row):
+    nl = str(row['Name']).lower()
+    clocked = row['Total_Weekly_Clocked_Hrs']
+    rev = row['Total_Assigned_Revenue']
+    
+    if 'sean marble' in nl:
+        return 70000.0 / 52.0
+    if 'michael owens' in nl:
+        return 65000.0 / 52.0
+    if 'bryan' in nl or 'erik' in nl:
+        return rev * 0.33
+        
+    rate = 0.0
+    if 'nate' in nl or 'nathan' in nl:
+        rate = 22.50
+    elif any(n in nl for n in ['edward', 'matt', 'tanner']):
+        rate = 25.00
+        
+    if rate > 0:
+        if clocked > 40.0:
+            return (40.0 * rate) + ((clocked - 40.0) * rate * 1.5)  
+        else:
+            return clocked * rate
+    return 0.0
 
 def highlight_pay_pct_row(row):
     styles = [''] * len(row)
@@ -298,7 +294,50 @@ def highlight_low_margins(row):
             pass
     return styles
 
-# --- CORE ADVANCED BASELINE REPORT GENERATOR PANEL ---
+# NATIVE SYSTEM CLIPBOARD DATA EXPORTER (DEFINED AT GLOBAL SCOPE LEVEL)
+def create_copy_button(df, raw_key):
+    safe_key = "".join([c if c.isalnum() else "_" for c in raw_key])
+    tsv_str = df.to_csv(sep='\t', index=False)
+    safe_tsv = tsv_str.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+    
+    button_html = f"""
+    <div class="hide-on-print" style="text-align: left; margin-top: 5px; margin-bottom: 8px;">
+        <textarea id="tsv_{safe_key}" style="position: absolute; left: -9999px;">{safe_tsv}</textarea>
+        <button id="btn_{safe_key}" onclick="copyTSV_{safe_key}()" style="background-color: #ffffff; color: #3c4043; padding: 6px 14px; border: 1px solid #dadce0; border-radius: 4px; cursor: pointer; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: background-color 0.2s;">
+            📋 Copy Table Data (For Email/Sheets/Docs)
+        </button>
+    </div>
+    <script>
+    function copyTSV_{safe_key}() {{
+        var copyText = document.getElementById("tsv_{safe_key}");
+        copyText.select();
+        copyText.setSelectionRange(0, 999999);
+        try {{
+            var successful = document.execCommand('copy');
+            var btn = document.getElementById("btn_{safe_key}");
+            if (successful) {{
+                btn.innerHTML = "✅ Copied table to clipboard!";
+                btn.style.backgroundColor = "#e6f4ea";
+                btn.style.color = "#137333";
+                btn.style.borderColor = "#137333";
+                setTimeout(function() {{
+                    btn.innerHTML = "📋 Copy Table Data (For Email/Sheets/Docs)";
+                    btn.style.backgroundColor = "#ffffff";
+                    btn.style.color = "#3c4043";
+                    btn.style.borderColor = "#dadce0";
+                }}, 2000);
+                }} else {{
+                btn.innerHTML = "❌ Copy failed";
+            }}
+        }} catch (err) {{
+            console.error('Execution fallback error:', err);
+        }}
+    }}
+    </script>
+    """
+    st.components.v1.html(button_html, height=38)
+
+# --- ADVANCED TIMELINE MATRICES ---
 def run_baselines_matrix(ops_df):
     st.markdown("<h4>Advanced Team Processing Baselines Matrix</h4>", unsafe_allow_html=True)
     st.markdown("*(Technician tracking averages sorted by highest un-blended weekly duration totals. Store times ignore direct-to-site jobs)*")
@@ -903,7 +942,7 @@ if time_file and ops_file:
         display_dfs['Weekly'] = bu_summary_df
 
         # =========================================================================================
-        # 🧪 GLOBAL PIPELINE ARITHMETIC CORE ASSIGNMENT PANEL (RESOLVES INTER-TAB SCOPING ERRORS)
+        # 🧪 GLOBAL PIPELINE ARITHMETIC CORE ASSIGNMENT PANEL
         # =========================================================================================
         rev_per_hour_df_calc = final_df.copy()
         rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(get_assumed_pay, axis=1)
@@ -1258,7 +1297,7 @@ if time_file and ops_file:
                     st.dataframe(show_staging[['Day_of_Week', 'Total_Visits', 'Total Hours Delayed', 'Avg Delay per Visit']].rename(columns={'Day_of_Week': 'Day', 'Total_Visits': 'Store Pickups'}), use_container_width=True)
                     create_copy_button(show_staging[['Day_of_Week', 'Total_Visits', 'Total Hours Delayed', 'Avg Delay per Visit']], "store_staging_by_day")
                 else:
-                    st.info("No material store staging records discovered inside logged field parameters.")
+                    st.info("No material store staging records discovered inside loaded field parameters.")
 
             if "📊 Overtime ROI Cost-Benefit Auditor" in test_choices:
                 st.markdown("### **📊 Overtime ROI Cost-Benefit Auditor**")
@@ -1293,7 +1332,7 @@ if time_file and ops_file:
                     st.dataframe(ot_audit_df, use_container_width=True)
                     create_copy_button(ot_audit_df, "overtime_roi_auditor")
                 else:
-                    st.success("¼ Hourly technicians worked zero premium overtime thresholds during this session cycle.")
+                    st.success("✅ Zero hourly technicians incurred premium overtime thresholds during this invoice cycle.")
 
             if "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard" in test_choices:
                 st.markdown("### **🏆 Single-Job \"Whale Alert\" Revenue Leaderboard**")
@@ -1426,7 +1465,6 @@ if time_file and ops_file:
                 st.markdown("### **🗺️ Interactive Territory Density and Hotspot Mapping**")
                 st.markdown("*(Applies custom AZ coordinate positioning metrics to visually analyze geographic dispatch cluster density)*")
                 
-                # Jitter-mapping algorithm to cleanly handle layout data vectors
                 AZ_COORDS = {
                     "Phoenix": [33.4484, -112.0740], "Scottsdale": [33.4942, -111.9261], "Chandler": [33.3062, -111.8413],
                     "Goodyear": [33.4353, -112.3582], "Prescott": [34.5400, -112.4685], "Mesa": [33.4152, -111.8315],
@@ -1440,7 +1478,6 @@ if time_file and ops_file:
                     map_points = []
                     for idx, r in df_map.iterrows():
                         base_coords = AZ_COORDS.get(r['Parsed_City'], [33.4484, -112.0740])
-                        # Apply deterministic jitter offset parameters so overlay markers stay readable
                         np.random.seed(int(r['#ID']) if pd.notna(r['#ID']) else idx)
                         lat_jit = base_coords[0] + np.random.uniform(-0.025, 0.025)
                         lon_jit = base_coords[1] + np.random.uniform(-0.025, 0.025)
