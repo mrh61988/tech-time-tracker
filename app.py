@@ -962,22 +962,18 @@ if time_file and ops_file:
             </div>
             """, height=45)
 
-            # === NEW HEADERS: DIVISION HEALTH & OPERATIONAL HEALTH METRICS SCORECARD ===
+            # === HEADERS: ADJUSTED OPERATIONAL METRICS EXECUTIVE SCORECARD ===
             st.markdown("### 🏢 Division Operational Health & Productivity Scorecard")
-            total_div_clocked = final_df['Total_Weekly_Clocked_Hrs'].sum()
-            total_div_job_hrs = final_df['Total_Weekly_Job_Hrs'].sum()
-            total_div_unallocated = final_df['Total_Weekly_Diff_Hrs'].sum()
-            blended_div_eff = (total_div_job_hrs / total_div_clocked * 100) if total_div_clocked > 0 else 0.0
             
             div_health_col1, div_health_col2, div_health_col3, div_health_col4 = st.columns(4)
             with div_health_col1:
-                st.metric(label="Total Division Clocked Hours", value=format_hm(total_div_clocked))
+                st.metric(label="Total Division Unallocated Hours", value=format_hm(total_diff_hrs_sum))
             with div_health_col2:
-                st.metric(label="Total Division Tracked Job Hours", value=format_hm(total_div_job_hrs))
+                st.metric(label="Division LSI Efficiency", value=f"{blended_lsi_eff:.1f}%")
             with div_health_col3:
-                st.metric(label="Total Division Unallocated Hours", value=format_hm(total_div_unallocated))
+                st.metric(label="Division Water Heater Efficiency", value=f"{blended_wh_eff:.1f}%")
             with div_health_col4:
-                st.metric(label="Blended Division Efficiency", value=f"{blended_div_eff:.1f}%")
+                st.metric(label="Blended Division Efficiency", value=f"{blended_total_eff:.1f}%")
             st.markdown("<br>", unsafe_allow_html=True)
 
             st.markdown("💡 **Operational Baselines Tasks / Goals per Business Unit:** `Water Heaters Goal = 3:30 hrs` &nbsp;&nbsp;|&nbsp;&nbsp; `Simple Installs Goal = 2:00 hrs` *(Table automatically sorted by highest WH Efficiency)*")
@@ -1164,8 +1160,8 @@ if time_file and ops_file:
                 st.dataframe(manager_day_df, use_container_width=True)
                 create_copy_button(manager_day_df, f"manager_overview_{tech}")
                 
-            st.markdown("<br><hr>", unsafe_allow_html=True)
-            show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key="manager_tab")
+                st.markdown("<br><hr>", unsafe_allow_html=True)
+                show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key="manager_tab")
             
         with tabs[2]:
             st.markdown('<h3>Printable Individual Report</h3>', unsafe_allow_html=True)
