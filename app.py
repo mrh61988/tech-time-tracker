@@ -625,7 +625,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 lsi_cnt, wh_cnt = row['Simple_Installs_Count'], row['Water_Heaters_Count']
                 if lsi_cnt > 0 and wh_cnt > 0: 
                     if row['Eff Gap'] > 15.0: return "⚠️ WH Ride-Along Required" if row['LSI_Eff_Raw'] > row['WH_Eff_Raw'] else "⚠️ LSI Ride-Along Required"
-                    return "Balanced Execution"
+                    return "✅ Balanced Execution"
                 if lsi_cnt > 0: return "ℹ️ Only LSI Jobs Assigned"
                 if wh_cnt > 0: return "ℹ️ Only WH Jobs Assigned"
                 return "ℹ️ No BU Jobs Assigned"
@@ -1467,7 +1467,7 @@ if time_file and ops_file:
                 
                 for idx, r in cc_matrix.iterrows():
                     if r['Business Unit'] == 'Lowes - Simple Installs':
-                        cc_matrix.loc[idx, 'Assumed_Labor_Payload_Raw'] = max(0.0, cc_matrix.loc[idx, 'Assumed_Labor_Payload_Raw'] - sean_penalty)
+                        cc_matrix.loc[idx, 'Assumed_Labor_Payload_Raw'] = max(0.0, cc_matrix.loc[idx, 'Assumed_Labor_Payload_Raw'] - sean_penalty_value)
                         cc_matrix.loc[idx, 'Net_Profit_Total_Raw'] = cc_matrix.loc[idx, 'Gross_Invoiced_Raw'] - cc_matrix.loc[idx, 'Combined_Cost_Total_Raw'] - cc_matrix.loc[idx, 'Assumed_Labor_Payload_Raw']
                 
                 cc_matrix['Cost Ratio % vs Rev'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Combined_Cost_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
