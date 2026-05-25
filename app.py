@@ -555,7 +555,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             status = "⚠️ Low Volume Warning (Under 35 Hrs)" if hrs < 35.0 else "✅ Salary - Exempt"
             ot_hrs = "-"
         elif "bryan" in nl or "erik" in nl:
-            status = "🚨 High Burnout Risk (Over 45 Hrs)" if hrs > 45.0 else "Piece Rate - Exempt"
+            status = "🚨 High Burnout Risk (Over 45 Hrs)" if hrs > 45.0 else "✅ Piece Rate - Exempt"
             ot_hrs = "-"
         else:
             if hrs > 40:
@@ -817,7 +817,7 @@ if time_file and ops_file:
             for member in core_members_on_job:
                 new_row = row.copy()
                 new_row['Assigned Team Members'] = member
-                # ⭐ FIXED JOINT DUPLICATION RULE: Credit entire metrics parameters fully to all paired fleet units
+                # ⭐ CO-ASSIGNMENT RE-ENGINEERING: Crew dispatch targets inherit un-split full invoice metrics 
                 new_row['Total Invoice Amount'] = row['Total Invoice Amount']
                 exploded_rows.append(new_row)
                 
@@ -942,8 +942,56 @@ if time_file and ops_file:
         display_dfs['Weekly'] = bu_summary_df
 
         # =========================================================================================
-        # 🧪 SEAN MARBLE ABSENCE REGISTRATION (CALCULATED FROM TIMECARD PUNCH ATTENDANCE METRICS)
+        # 🧪 GLOBAL PIPELINE ARITHMETIC CORE ASSIGNMENT PANEL (RESOLVES INTER-TAB SCOPING ERRORS)
         # =========================================================================================
+        rev_per_hour_df_calc = final_df.copy()
+        rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(get_assumed_pay, axis=1)
+
+        ops_df['Computed_Row_Pay'] = ops_df['Name'].map(rev_per_hour_df_calc.set_index('Name')['Assumed Pay Amount'].to_dict()).fillna(0.0)
+        tech_total_field_hrs = ops_df.groupby('Name')['Total_Job_Time_Hours'].sum().reset_index().rename(columns={'Total_Job_Time_Hours': 'Tech_Total_Work_Hrs'})
+        
+        if 'Tech_Total_Work_Hrs' in ops_df.columns: 
+            ops_df = ops_df.drop(columns=['Tech_Total_Work_Hrs'])
+        ops_df = pd.merge(ops_df, tech_total_field_hrs, on='Name', how='left')
+        
+        ops_df['Job_Time_Weight'] = np.where(ops_df['Tech_Total_Work_Hrs'] > 0, ops_df['Total_Job_Time_Hours'] / ops_df['Tech_Total_Work_Hrs'], 0.0)
+        ops_df['Allocated_Job_Pay'] = ops_df['Computed_Row_Pay'] * ops_df['Job_Time_Weight']
+        ops_df['Allocated_Job_Pay'] = np.where(
+            ops_df['Name'].str.lower().str.contains('bryan') | ops_df['Name'].str.lower().str.contains('erik'),
+            ops_df['Total Invoice Amount'] * 0.33,
+            ops_df['Allocated_Job_Pay']
+        )
+
+        # 🚀 CHRONOLOGICAL CORRECTION HOOK: df_macro_pay instantiated *before* computing summaries
+        df_macro_pay = unexploded_ops.copy()
+        df_macro_pay['Tech_Count'] = df_macro_pay['Assigned Team Members'].apply(lambda x: len([m.strip() for m in str(x).split(',') if m.strip()]))
+        df_macro_pay['Is_Contractor'] = df_macro_pay['Assigned Team Members'].apply(check_contractor)
+        
+        df_macro_pay['Cost_Burden_Sub'] = np.where(
+            df_macro_pay['Business Unit'] == 'Lowes - Water Heaters',
+            np.where(df_macro_pay['Tech_Count'] > 1, 175.0, 100.0),
+            0.0
+        )
+        
+        df_macro_pay['Prod_Cost'] = pd.to_numeric(df_macro_pay.get('Total Product Cost [tax inc]', pd.Series([0]*len(df_macro_pay))), errors='coerce').fillna(0.0)
+        df_macro_pay['Serv_Cost'] = pd.to_numeric(df_macro_pay.get('Invoice - Total Service Cost', pd.Series([0]*len(df_macro_pay))), errors='coerce').fillna(0.0)
+        df_macro_pay['Combined_Lowe_Costs'] = np.maximum(0.0, (df_macro_pay['Prod_Cost'] + df_macro_pay['Serv_Cost']) - df_macro_pay['Cost_Burden_Sub'])
+        
+        df_macro_pay['Flat_Rate_Labor'] = np.where(
+            df_macro_pay['Business Unit'] == 'Lowes - Water Heaters',
+            np.where(df_macro_pay['Tech_Count'] > 1, 175.0, 100.0),
+            0.0
+        )
+        df_macro_pay['Logged_Time_Pay'] = df_macro_pay['#ID'].map(ops_df.groupby('#ID')['Allocated_Job_Pay'].sum().to_dict()).fillna(0.0)
+        
+        df_macro_pay['Assumed_Labor_Payload'] = np.where(
+            (df_macro_pay['Business Unit'] == 'Lowes - Simple Installs') & df_macro_pay['Is_Contractor'],
+            df_macro_pay['Total Invoice Amount'],
+            np.maximum(df_macro_pay['Flat_Rate_Labor'], df_macro_pay['Logged_Time_Pay'])
+        )
+        df_macro_pay['Net_Profit_Raw'] = df_macro_pay['Total Invoice Amount'] - df_macro_pay['Combined_Lowe_Costs'] - df_macro_pay['Assumed_Labor_Payload']
+        
+        # ⭐ SEAN MARBLE TIME-SHEET ATTENDANCE ABSENCE EVALUATION CHECK LOOP
         sean_timecard = final_df[final_df['Name'] == 'Sean Marble']
         if not sean_timecard.empty:
             sean_row = sean_timecard.iloc[0]
@@ -955,7 +1003,7 @@ if time_file and ops_file:
         else:
             sean_penalty = 0.0
 
-        # Formulate macro totals structures globally to completely eliminate Tab 10 KeyErrors
+        # Formulate macro totals structures safely with guaranteed chronological scoping parameters
         total_assumed_pay_adjusted = max(0.0, df_macro_pay['Assumed_Labor_Payload'].sum() - sean_penalty)
         pay_ratio_pct_adjusted = (total_assumed_pay_adjusted / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
 
@@ -1032,7 +1080,7 @@ if time_file and ops_file:
                 rev_per_hour_df['Total Jobs'] = rev_per_hour_df['Total_Weekly_Job_Count'].astype(int)
                 rev_per_hour_df['Total Assigned Value'] = rev_per_hour_df['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
                 
-                # ⭐ SEAN MARBLE PAY SYNC HOOK DEPLOYED WITH TIME SHEET DEDUCTION PATTERNS
+                # ⭐ SEAN MARBLE PAY SYNC RECALCULATION DEPLOYED OVER CURRENT HOURLY ACTIVE LANE VIEW
                 def get_adjusted_table_pay(row):
                     pay = get_assumed_pay(row)
                     if 'sean marble' in str(row['Name']).lower():
