@@ -891,6 +891,38 @@ if time_file and ops_file:
         bu_summary_df['Total Efficiency'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, (final_df['Total_Weekly_Job_Hrs'] / final_df['Total_Weekly_Clocked_Hrs']) * 100, 0.0)
         bu_summary_df['Total Efficiency'] = bu_summary_df['Total Efficiency'].apply(lambda x: f"{x:.1f}%")
         bu_summary_df['Total Unallocated Hours'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
+        
+        # --- CALCULATE & APPEND DETAILED TOTAL DIVISION ROW ---
+        total_clocked_sum = final_df['Total_Weekly_Clocked_Hrs'].sum()
+        total_jobs_sum = final_df['Total_Weekly_Job_Count'].sum()
+        total_lsi_jobs_sum = final_df['Simple_Installs_Count'].sum()
+        total_lsi_hrs_sum = final_df['Simple_Installs_Hrs'].sum()
+        total_wh_jobs_sum = final_df['Water_Heaters_Count'].sum()
+        total_wh_hrs_sum = final_df['Water_Heaters_Hrs'].sum()
+        total_job_hrs_sum = final_df['Total_Weekly_Job_Hrs'].sum()
+        total_diff_hrs_sum = final_df['Total_Weekly_Diff_Hrs'].sum()
+        
+        total_lsi_goal_hrs = final_df['Assumed_LSI_Clocked'].sum()
+        total_wh_goal_hrs = final_df['Assumed_WH_Clocked'].sum()
+        
+        blended_lsi_eff = (total_lsi_hrs_sum / total_lsi_goal_hrs * 100) if total_lsi_goal_hrs > 0 else 0.0
+        blended_wh_eff = (total_wh_hrs_sum / total_wh_goal_hrs * 100) if total_wh_goal_hrs > 0 else 0.0
+        blended_total_eff = (total_job_hrs_sum / total_clocked_sum * 100) if total_clocked_sum > 0 else 0.0
+        
+        total_row = pd.DataFrame([{
+            'Name': 'TOTAL DIVISION',
+            'Total Clocked': format_hm(total_clocked_sum),
+            'Total Jobs': int(total_jobs_sum),
+            'LSI Jobs': int(total_lsi_jobs_sum),
+            'LSI Tracked Hours': format_hm(total_lsi_hrs_sum),
+            'LSI Efficiency': f"{blended_lsi_eff:.1f}%",
+            'WH Jobs': int(total_wh_jobs_sum),
+            'WH Tracked Hours': format_hm(total_wh_hrs_sum),
+            'WH Efficiency': f"{blended_wh_eff:.1f}%",
+            'Total Efficiency': f"{blended_total_eff:.1f}%",
+            'Total Unallocated Hours': format_hm(total_diff_hrs_sum)
+        }])
+        bu_summary_df = pd.concat([bu_summary_df, total_row], ignore_index=True)
         display_dfs['Weekly'] = bu_summary_df
 
         # Secure total summaries layout mapping metrics securely inside parameters bounds
@@ -917,7 +949,6 @@ if time_file and ops_file:
         bu_financial_matrix['Pay % of Revenue'] = bu_financial_matrix['Pay % of Revenue'].apply(lambda x: f"{x:.1f}%")
         bu_financial_matrix['Gross Invoiced Revenue'] = bu_financial_matrix['Gross Invoiced Revenue Raw'].apply(lambda x: f"${x:,.2f}")
 
-        # RESTORED STANDARD ROBUST TAB LIST ASSIGNMENTS
         tab_names = ["Weekly Summary", "Manager Overview", "Individual Tech Report", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "🧪 Test Section"]
         tabs = st.tabs(tab_names)
         
@@ -930,10 +961,37 @@ if time_file and ops_file:
                 </button>
             </div>
             """, height=45)
+
+            # === NEW HEADERS: DIVISION HEALTH & OPERATIONAL HEALTH METRICS SCORECARD ===
+            st.markdown("### 🏢 Division Operational Health & Productivity Scorecard")
+            total_div_clocked = final_df['Total_Weekly_Clocked_Hrs'].sum()
+            total_div_job_hrs = final_df['Total_Weekly_Job_Hrs'].sum()
+            total_div_unallocated = final_df['Total_Weekly_Diff_Hrs'].sum()
+            blended_div_eff = (total_div_job_hrs / total_div_clocked * 100) if total_div_clocked > 0 else 0.0
+            
+            div_health_col1, div_health_col2, div_health_col3, div_health_col4 = st.columns(4)
+            with div_health_col1:
+                st.metric(label="Total Division Clocked Hours", value=format_hm(total_div_clocked))
+            with div_health_col2:
+                st.metric(label="Total Division Tracked Job Hours", value=format_hm(total_div_job_hrs))
+            with div_health_col3:
+                st.metric(label="Total Division Unallocated Hours", value=format_hm(total_div_unallocated))
+            with div_health_col4:
+                st.metric(label="Blended Division Efficiency", value=f"{blended_div_eff:.1f}%")
+            st.markdown("<br>", unsafe_allow_html=True)
+
             st.markdown("💡 **Operational Baselines Tasks / Goals per Business Unit:** `Water Heaters Goal = 3:30 hrs` &nbsp;&nbsp;|&nbsp;&nbsp; `Simple Installs Goal = 2:00 hrs` *(Table automatically sorted by highest WH Efficiency)*")
             
             try:
-                styled_weekly = display_dfs['Weekly'].reset_index(drop=True).style.set_properties(**{'background-color': '#fff3cd', 'font-weight': 'bold', 'color': '#856404;'}, subset=['WH Efficiency'])
+                def highlight_weekly_rows(row):
+                    if row['Name'] == 'TOTAL DIVISION':
+                        return ['background-color: #e2e3e5; font-weight: bold; color: #383d41;'] * len(row)
+                    styles = [''] * len(row)
+                    idx = row.index.get_loc('WH Efficiency')
+                    styles[idx] = 'background-color: #fff3cd; font-weight: bold; color: #856404;'
+                    return styles
+                
+                styled_weekly = display_dfs['Weekly'].reset_index(drop=True).style.apply(highlight_weekly_rows, axis=1)
                 st.dataframe(styled_weekly, use_container_width=True) 
             except Exception:
                 st.dataframe(display_dfs['Weekly'].reset_index(drop=True), use_container_width=True)
@@ -1089,7 +1147,7 @@ if time_file and ops_file:
             st.dataframe(show_cc, use_container_width=True)
             create_copy_button(show_cc, "product_vs_service_cost_breakdown")
             
-            # THE WHOLE OPS DISPATCH AND BENCHMARK ENGINE RESTORED DIRECTLY DOWN THE WEEKLY SUMMARY CANVAS FOR SINGLE PAGE SAVES
+            # --- RENDER DISPATCH METRICS & SCORECARDS IN THE WEEKLY SUMMARY CANVAS ---
             st.markdown("<br><hr>", unsafe_allow_html=True)
             show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key="summary_tab")
             
@@ -1337,9 +1395,8 @@ if time_file and ops_file:
                             "Revenue Yield per OT Pay Dollar": f"${roi_ratio:,.2f}/$"
                         })
                 if ot_audit_rows:
-                    ot_audit_df = pd.DataFrame(ot_audit_rows)
-                    st.dataframe(ot_audit_df, use_container_width=True)
-                    create_copy_button(ot_audit_df, "overtime_roi_auditor")
+                    st.dataframe(pd.DataFrame(ot_audit_rows), use_container_width=True)
+                    create_copy_button(pd.DataFrame(ot_audit_rows), "overtime_roi_auditor")
                 else:
                     st.success("✅ Zero hourly technicians incurred premium overtime thresholds during this invoice cycle.")
 
