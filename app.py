@@ -301,6 +301,49 @@ def get_adjusted_table_pay(row):
         return max(0.0, base_pay - st.session_state.get('sean_absence_penalty_global', 0.0))
     return base_pay
 
+# NATIVE SYSTEM CLIPBOARD DATA EXPORTER (DEFINED AT GLOBAL SCOPE LEVEL)
+def create_copy_button(df, raw_key):
+    safe_key = "".join([c if c.isalnum() else "_" for c in raw_key])
+    tsv_str = df.to_csv(sep='\t', index=False)
+    safe_tsv = tsv_str.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+    
+    button_html = f"""
+    <div class="hide-on-print" style="text-align: left; margin-top: 5px; margin-bottom: 8px;">
+        <textarea id="tsv_{safe_key}" style="position: absolute; left: -9999px;">{safe_tsv}</textarea>
+        <button id="btn_{safe_key}" onclick="copyTSV_{safe_key}()" style="background-color: #ffffff; color: #3c4043; padding: 6px 14px; border: 1px solid #dadce0; border-radius: 4px; cursor: pointer; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: background-color 0.2s;">
+            📋 Copy Table Data (For Email/Sheets/Docs)
+        </button>
+    </div>
+    <script>
+    function copyTSV_{safe_key}() {{
+        var copyText = document.getElementById("tsv_{safe_key}");
+        copyText.select();
+        copyText.setSelectionRange(0, 999999);
+        try {{
+            var successful = document.execCommand('copy');
+            var btn = document.getElementById("btn_{safe_key}");
+            if (successful) {{
+                btn.innerHTML = "✅ Copied table to clipboard!";
+                btn.style.backgroundColor = "#e6f4ea";
+                btn.style.color = "#137333";
+                btn.style.borderColor = "#137333";
+                setTimeout(function() {{
+                    btn.innerHTML = "📋 Copy Table Data (For Email/Sheets/Docs)";
+                    btn.style.backgroundColor = "#ffffff";
+                    btn.style.color = "#3c4043";
+                    btn.style.borderColor = "#dadce0";
+                }}, 2000);
+                }} else {{
+                btn.innerHTML = "❌ Copy failed";
+            }}
+        }} catch (err) {{
+            console.error('Execution fallback error:', err);
+        }}
+    }}
+    </script>
+    """
+    st.components.v1.html(button_html, height=38)
+
 # --- ADVANCED TIMELINE MATRICES ---
 def run_baselines_matrix(ops_df):
     st.markdown("<h4>Advanced Team Processing Baselines Matrix</h4>", unsafe_allow_html=True)
@@ -641,6 +684,14 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 except Exception: st.dataframe(show_launches, use_container_width=True)
                 create_copy_button(show_launches, f"late_alert_{tab_key}")
 
+# --- GLOBAL WRAPPER SYNCHRONIZATION LANE HOOK ---
+def get_adjusted_table_pay(row):
+    nl = str(row['Name']).lower()
+    base_pay = get_assumed_pay(row)
+    if 'sean marble' in nl:
+        return max(0.0, base_pay - st.session_state.get('sean_absence_penalty_global', 0.0))
+    return base_pay
+
 # --- THE MAIN TOP-LEVEL BASE EXECUTION PIPELINE LAYER BLOCK ---
 st.sidebar.header("📂 Data Loading Pipeline")
 time_file = st.sidebar.file_uploader("Upload Time Sheet (CSV)", type=['csv'])
@@ -917,7 +968,7 @@ if time_file and ops_file:
         final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
         final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
 
-        # 🚀 RE-INTEGRATED CONSOLIDATED SPLITS INITIALIZATION LAYER (FIXES THE NAMEERROR COMPLETELY)
+        # 🚀 RE-INTEGRATED CONSOLIDATED SPLITS INITIALIZATION LAYER (FIXES THE KEYERROR DISMISSAL)
         display_dfs = {}
         for day in days:
             final_df[day + '_Diff_Hrs'] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
