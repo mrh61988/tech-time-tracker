@@ -295,7 +295,7 @@ def highlight_low_margins(row):
             pass
     return styles
 
-# PROTERLY ANALYSIS PAY DELEGATOR LAYER SECURED
+# PROTECTED HOURLY ANALYSIS PAY DELEGATOR LAYER SECURED
 def get_adjusted_table_pay(row):
     if isinstance(row, bool) or 'Name' not in row: return 0.0
     nl = str(row['Name']).lower()
@@ -469,6 +469,7 @@ def run_baselines_matrix(ops_df):
 
 # --- MAIN BLOCK REPORT ENGINE ---
 def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
+    st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     st.header("📊 Ops Manager Tools (Benchmarking & Performance)")
     
     # Render baseline execution trackers natively at the head of the manager panel
@@ -916,8 +917,8 @@ if time_file and ops_file:
         bu_financial_matrix['Pay % of Revenue'] = bu_financial_matrix['Pay % of Revenue'].apply(lambda x: f"{x:.1f}%")
         bu_financial_matrix['Gross Invoiced Revenue'] = bu_financial_matrix['Gross Invoiced Revenue Raw'].apply(lambda x: f"${x:,.2f}")
 
-        # PROMOTED '📊 Ops Manager Tools' INTO ITS OWN EXCLUSIVE MAIN LEVEL TAB SHEET WORKSPACE
-        tab_names = ["Weekly Summary", "Manager Overview", "📊 Ops Manager Tools", "Individual Tech Report", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "🧪 Test Section"]
+        # RESTORED STANDARD ROBUST TAB LIST ASSIGNMENTS
+        tab_names = ["Weekly Summary", "Manager Overview", "Individual Tech Report", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "🧪 Test Section"]
         tabs = st.tabs(tab_names)
         
         with tabs[0]:
@@ -983,7 +984,7 @@ if time_file and ops_file:
                 st.dataframe(show_rev_per_hour_sorted.reset_index(drop=True), use_container_width=True)
                 create_copy_button(show_rev_per_hour_sorted.reset_index(drop=True), "pay_ratio_per_clocked")
                 
-            # ⭐ MIGRATED VIEW MODULE 1 MOUNTED DIRECTLY TO THE BOTTOM SUMMARY LANES SLOTS SMOOTHLY
+            # ⭐ Division True Net Profitability Margin Auditor
             st.markdown("<br><hr><h3>💵 Division True Net Profitability Margin Auditor</h3>", unsafe_allow_html=True)
             st.markdown("*(Evaluates net profitability metrics across selected sectors factoring contract structures, costs backouts and non-negative thresholds)*")
             
@@ -1059,7 +1060,7 @@ if time_file and ops_file:
                         st.table(prof_register_df)
                     create_copy_button(prof_register_df, "sortable_job_margins_register")
 
-            # ⭐ MIGRATED VIEW MODULE 2 MOUNTED DIRECTLY TO THE BOTTOM METRIC SUB-GRID SMOOTHLY
+            # ⭐ Lowe's Combined Cost Performance Matrix
             st.markdown("<br><hr><h3>📦 Lowe's Combined Cost Performance Matrix</h3>", unsafe_allow_html=True)
             st.markdown("*(Isolates combined material and service expenses metrics and maps accurate Net Profit thresholds by sector inclusive of contractor fields)*")
             cc_matrix = df_macro_pay.groupby('Business Unit').agg(
@@ -1088,6 +1089,10 @@ if time_file and ops_file:
             st.dataframe(show_cc, use_container_width=True)
             create_copy_button(show_cc, "product_vs_service_cost_breakdown")
             
+            # THE WHOLE OPS DISPATCH AND BENCHMARK ENGINE RESTORED DIRECTLY DOWN THE WEEKLY SUMMARY CANVAS FOR SINGLE PAGE SAVES
+            st.markdown("<br><hr>", unsafe_allow_html=True)
+            show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key="summary_tab")
+            
         with tabs[1]:
             st.markdown('<h3>Manager Overview - All Techs</h3>', unsafe_allow_html=True)
             for tech in final_df['Name'].unique():
@@ -1100,12 +1105,11 @@ if time_file and ops_file:
                 manager_day_df = pd.DataFrame(report_data)
                 st.dataframe(manager_day_df, use_container_width=True)
                 create_copy_button(manager_day_df, f"manager_overview_{tech}")
-
-        # EXCLUSIVE DEDICATED NEW HOUSING TAB ASSIGNED FOR ADVANCED MANAGER METRICS
-        with tabs[2]:
-            show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key="manager_tools_tab")
+                
+            st.markdown("<br><hr>", unsafe_allow_html=True)
+            show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key="manager_tab")
             
-        with tabs[3]:
+        with tabs[2]:
             st.markdown('<h3>Printable Individual Report</h3>', unsafe_allow_html=True)
             selected_tech = st.selectbox("Select a Technician:", final_df['Name'].unique())
             if selected_tech:
@@ -1119,13 +1123,13 @@ if time_file and ops_file:
                 create_copy_button(indiv_day_df, f"printable_indiv_{selected_tech}")
 
         day_mapping = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
-        for i, full_day in enumerate(tab_names[4:11]): 
-            with tabs[i+4]:
+        for i, full_day in enumerate(list(day_mapping.keys())): 
+            with tabs[i+3]:
                 short_day = day_mapping[full_day]
                 st.dataframe(display_dfs[short_day].reset_index(drop=True), use_container_width=True)
                 create_copy_button(display_dfs[short_day].reset_index(drop=True), f"day_tab_{short_day}")
 
-        with tabs[11]:
+        with tabs[10]:
             test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "¼ The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)", "🗺️ Route Optimization Flags", "🦺 Multi-Tech Labor Yield vs. Solo Runs", "📅 Lowe's Store Staging Delays by Day of the Week", "📊 Overtime ROI Cost-Benefit Auditor", "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard", "🗺️ Interactive Territory Density and Hotspot Mapping", "🗺️ Geographic Revenue Yield per Drive Hour"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
             
             if "🏆 The Golden Ratio Margin Predictor" in test_choices:
