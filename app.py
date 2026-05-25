@@ -45,7 +45,6 @@ st.markdown("""
         margin: 0 0 15px 0 !important;
         padding: 0 !important;
         box-shadow: none !important;
-        page-break-inside: avoid !important;
     }
     
     h2, h3, h4 {
@@ -530,9 +529,15 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             leaderboard_df['Total Diff'] = leaderboard_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
             
             show_leaderboard = leaderboard_df[['Name', 'Total Clocked', 'Total Job Time', 'Manual Adj', 'Daily Avg Diff', 'Total Diff']].copy()
+            # ⭐ CRITICAL OPERATIONAL HIGHLIGHT UPGRADE: Highlight *only* the specific cell grid if threshold baseline >= 1:30
             def highlight_leaderboard(row):
-                val = parse_diff_to_hours(row['Total Diff'])
-                return ['background-color: #ffcccc; color: #990000;'] * len(row) if val > 0 else [''] * len(row)
+                styles = [''] * len(row)
+                if 'Daily Avg Diff' in row.index:
+                    val = parse_diff_to_hours(row['Daily Avg Diff'])
+                    if val >= 1.5:
+                        idx = row.index.get_loc('Daily Avg Diff')
+                        styles[idx] = 'background-color: #ffcccc; color: #990000; font-weight: bold;'
+                return styles
             try: st.dataframe(show_leaderboard.reset_index(drop=True).style.apply(highlight_leaderboard, axis=1), use_container_width=True)
             except Exception: st.dataframe(show_leaderboard.reset_index(drop=True), use_container_width=True)
             create_copy_button(show_leaderboard.reset_index(drop=True), f"leaderboard_{tab_key}")
@@ -1263,7 +1268,7 @@ if time_file and ops_file:
                 show_yield['Total Man-Hours'] = show_yield['Total_Man_Hours'].apply(format_hm)
                 show_yield['Added Helper Cost'] = show_yield['Total_Helper_Cost'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
                 show_yield['Avg Revenue per Job'] = show_yield['Avg Revenue per Job'].apply(lambda x: f"${x:,.2f}")
-                show_yield['Revenue per Man-Hour'] = summary_yield['Revenue per Man-Hour'].apply(lambda x: f"${x:.1f}/hr")
+                show_yield['Revenue per Man-Hour'] = show_yield['Revenue per Man-Hour'].apply(lambda x: f"${x:.1f}/hr")
                 st.dataframe(show_yield[['Type', 'Job_Count', 'Total Revenue', 'Total Field Hours', 'Total Man-Hours', 'Added Helper Cost', 'Avg Revenue per Job', 'Revenue per Man-Hour']].rename(columns={'Job_Count': 'Jobs Assigned'}), use_container_width=True)
                 create_copy_button(show_yield, "multi_tech_yield")
                 
@@ -1297,7 +1302,7 @@ if time_file and ops_file:
                     st.dataframe(show_staging[['Day_of_Week', 'Total_Visits', 'Total Hours Delayed', 'Avg Delay per Visit']].rename(columns={'Day_of_Week': 'Day', 'Total_Visits': 'Store Pickups'}), use_container_width=True)
                     create_copy_button(show_staging[['Day_of_Week', 'Total_Visits', 'Total Hours Delayed', 'Avg Delay per Visit']], "store_staging_by_day")
                 else:
-                    st.info("No material store staging records discovered inside loaded field parameters.")
+                    st.info("No material store staging records discovered inside logged field parameters.")
 
             if "📊 Overtime ROI Cost-Benefit Auditor" in test_choices:
                 st.markdown("### **📊 Overtime ROI Cost-Benefit Auditor**")
