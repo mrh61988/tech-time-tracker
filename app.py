@@ -555,7 +555,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
             status = "⚠️ Low Volume Warning (Under 35 Hrs)" if hrs < 35.0 else "✅ Salary - Exempt"
             ot_hrs = "-"
         elif "bryan" in nl or "erik" in nl:
-            status = "🚨 High Burnout Risk (Over 45 Hrs)" if hrs > 45.0 else "✅ Piece Rate - Exempt"
+            status = "🚨 High Burnout Risk (Over 45 Hrs)" if hrs > 45.0 else "Piece Rate - Exempt"
             ot_hrs = "-"
         else:
             if hrs > 40:
@@ -814,12 +814,10 @@ if time_file and ops_file:
             if not core_members_on_job:
                 continue
                 
-            first_core_tech = core_members_on_job[0]
-            
             for member in core_members_on_job:
                 new_row = row.copy()
                 new_row['Assigned Team Members'] = member
-                # ⭐ COMBINED CO-ASSIGNMENT WORKFLOW UPGRADE: Core metrics are duplicated across all paired fleet units
+                # ⭐ FIXED JOINT DUPLICATION RULE: Credit entire metrics parameters fully to all paired fleet units
                 new_row['Total Invoice Amount'] = row['Total Invoice Amount']
                 exploded_rows.append(new_row)
                 
@@ -944,7 +942,7 @@ if time_file and ops_file:
         display_dfs['Weekly'] = bu_summary_df
 
         # =========================================================================================
-        # 🧪 SEAN MARBLE TRUE ABSENCE PENALTY TRACKER ENGINE
+        # 🧪 SEAN MARBLE ABSENCE REGISTRATION (CALCULATED FROM TIMECARD PUNCH ATTENDANCE METRICS)
         # =========================================================================================
         sean_timecard = final_df[final_df['Name'] == 'Sean Marble']
         if not sean_timecard.empty:
@@ -1034,7 +1032,7 @@ if time_file and ops_file:
                 rev_per_hour_df['Total Jobs'] = rev_per_hour_df['Total_Weekly_Job_Count'].astype(int)
                 rev_per_hour_df['Total Assigned Value'] = rev_per_hour_df['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
                 
-                # ⭐ SEAN MARBLE ATTENDANCE ABSENCE RULE INJECTED FOR ACCURATE ROW Payload SUMMATION
+                # ⭐ SEAN MARBLE PAY SYNC HOOK DEPLOYED WITH TIME SHEET DEDUCTION PATTERNS
                 def get_adjusted_table_pay(row):
                     pay = get_assumed_pay(row)
                     if 'sean marble' in str(row['Name']).lower():
@@ -1183,7 +1181,7 @@ if time_file and ops_file:
                     rev_per_hour_df['Total Clocked'] = rev_per_hour_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
                     rev_per_hour_df['Total Assigned Value'] = rev_per_hour_df['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
                     
-                    # ⭐ SEAN MARBLE ABSENCE BURDEN RECALCULATION WITH FIXED AND STABILIZED DATA INDEX HOOK
+                    # ⭐ SEAN MARBLE ABSENCE BURDEN RECALCULATION LOOP SYNCED TIGHTLY TO CLOCKED TIMECARDS
                     rev_per_hour_df['Assumed Pay Amount'] = rev_per_hour_df.apply(lambda r: max(0.0, get_assumed_pay(r) - sean_penalty) if 'sean marble' in str(r['Name']).lower() else get_assumed_pay(r), axis=1)
                     rev_per_hour_df['Assumed Pay'] = rev_per_hour_df['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
                     rev_per_hour_df['Pay Pct'] = np.where(rev_per_hour_df['Total_Assigned_Revenue'] > 0, (rev_per_hour_df['Assumed Pay Amount'] / rev_per_hour_df['Total_Assigned_Revenue']) * 100, 0.0)
