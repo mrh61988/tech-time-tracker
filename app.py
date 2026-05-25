@@ -46,6 +46,10 @@ st.markdown("""
         padding: 0 !important;
         box-shadow: none !important;
         page-break-inside: avoid !important;
+        margin: 0 0 15px 0 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+        page-break-inside: avoid !important;
     }
     
     h2, h3, h4 {
@@ -199,31 +203,12 @@ def get_first_core_tech(tech_str):
         return core_members_on_job[0]
     return None
 
-def highlight_matrix_overhead(s):
-    styles = []
-    for val in s:
-        try:
-            if ' (Div: ' in str(val):
-                tech_str, div_str = val.split(' (Div: ')
-                t_h = parse_hm(tech_str)
-                d_h = parse_hm(div_str.replace(')', ''))
-                if t_h > d_h * 1.25 and t_h > 0:
-                    styles.append('background-color: #ffcccc; color: #990000;')
-                    continue
-            styles.append('')
-        except:
-            styles.append('')
-    return styles
-
-def highlight_over_hour_row(row):
-    styles = [''] * len(row)
-    if 'Over Division Average By' in row.index:
-        val = row['Over Division Average By']
-        if '+' in str(val):
-            hrs = parse_hm(str(val).replace('+', ''))
-            if hrs > 1.0:
-                return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row)
-    return styles
+def parse_az_city(addr):
+    s = str(addr).lower()
+    for c in ["prescott", "chandler", "scottsdale", "phoenix", "goodyear", "mesa", "glendale", "gilbert", "tempe", "peoria", "surprise", "buckeye", "avondale"]:
+        if c in s:
+            return c.title()
+    return "Phoenix Region"
 
 def get_assumed_pay(row):
     nl = str(row['Name']).lower()
@@ -249,6 +234,32 @@ def get_assumed_pay(row):
         else:
             return clocked * rate
     return 0.0
+
+def highlight_matrix_overhead(s):
+    styles = []
+    for val in s:
+        try:
+            if ' (Div: ' in str(val):
+                tech_str, div_str = val.split(' (Div: ')
+                t_h = parse_hm(tech_str)
+                d_h = parse_hm(div_str.replace(')', ''))
+                if t_h > d_h * 1.25 and t_h > 0:
+                    styles.append('background-color: #ffcccc; color: #990000;')
+                    continue
+            styles.append('')
+        except:
+            styles.append('')
+    return styles
+
+def highlight_over_hour_row(row):
+    styles = [''] * len(row)
+    if 'Over Division Average By' in row.index:
+        val = row['Over Division Average By']
+        if '+' in str(val):
+            hrs = parse_hm(str(val).replace('+', ''))
+            if hrs > 1.0:
+                return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row)
+    return styles
 
 def highlight_pay_pct_row(row):
     styles = [''] * len(row)
@@ -286,49 +297,6 @@ def highlight_low_margins(row):
         except:
             pass
     return styles
-
-# NATIVE SYSTEM CLIPBOARD DATA EXPORTER (DEFINED AT GLOBAL SCOPE LEVEL)
-def create_copy_button(df, raw_key):
-    safe_key = "".join([c if c.isalnum() else "_" for c in raw_key])
-    tsv_str = df.to_csv(sep='\t', index=False)
-    safe_tsv = tsv_str.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
-    
-    button_html = f"""
-    <div class="hide-on-print" style="text-align: left; margin-top: 5px; margin-bottom: 8px;">
-        <textarea id="tsv_{safe_key}" style="position: absolute; left: -9999px;">{safe_tsv}</textarea>
-        <button id="btn_{safe_key}" onclick="copyTSV_{safe_key}()" style="background-color: #ffffff; color: #3c4043; padding: 6px 14px; border: 1px solid #dadce0; border-radius: 4px; cursor: pointer; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: background-color 0.2s;">
-            📋 Copy Table Data (For Email/Sheets/Docs)
-        </button>
-    </div>
-    <script>
-    function copyTSV_{safe_key}() {{
-        var copyText = document.getElementById("tsv_{safe_key}");
-        copyText.select();
-        copyText.setSelectionRange(0, 999999);
-        try {{
-            var successful = document.execCommand('copy');
-            var btn = document.getElementById("btn_{safe_key}");
-            if (successful) {{
-                btn.innerHTML = "✅ Copied table to clipboard!";
-                btn.style.backgroundColor = "#e6f4ea";
-                btn.style.color = "#137333";
-                btn.style.borderColor = "#137333";
-                setTimeout(function() {{
-                    btn.innerHTML = "📋 Copy Table Data (For Email/Sheets/Docs)";
-                    btn.style.backgroundColor = "#ffffff";
-                    btn.style.color = "#3c4043";
-                    btn.style.borderColor = "#dadce0";
-                }}, 2000);
-                }} else {{
-                btn.innerHTML = "❌ Copy failed";
-            }}
-        }} catch (err) {{
-            console.error('Execution fallback error:', err);
-        }}
-    }}
-    </script>
-    """
-    st.components.v1.html(button_html, height=38)
 
 # --- CORE ADVANCED BASELINE REPORT GENERATOR PANEL ---
 def run_baselines_matrix(ops_df):
@@ -935,7 +903,7 @@ if time_file and ops_file:
         display_dfs['Weekly'] = bu_summary_df
 
         # =========================================================================================
-        # 🧪 GLOBAL PIPELINE ARITHMETIC CORE ASSIGNMENT PANEL
+        # 🧪 GLOBAL PIPELINE ARITHMETIC CORE ASSIGNMENT PANEL (RESOLVES INTER-TAB SCOPING ERRORS)
         # =========================================================================================
         rev_per_hour_df_calc = final_df.copy()
         rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(get_assumed_pay, axis=1)
@@ -1057,7 +1025,7 @@ if time_file and ops_file:
                 bu_avg_ticket.columns = ['Business Unit', 'Average Ticket Size Raw']
                 bu_avg_ticket['Average Ticket Size'] = bu_avg_ticket['Average Ticket Size Raw'].apply(lambda x: f"${x:,.2f}")
                 st.dataframe(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True), use_container_width=True)
-                create_copy_button(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True), "bu_avg_ticket")
+                create_copy_button(bu_avg_ticket[['Business Unit', 'Average Ticket Size']], "bu_avg_ticket")
             with m_col2:
                 st.markdown("**📈 Pay Ratio per Clocked Hour**", unsafe_allow_html=True)
                 rev_per_hour_df = final_df.copy()
@@ -1118,7 +1086,7 @@ if time_file and ops_file:
                 create_copy_button(display_dfs[short_day].reset_index(drop=True), f"day_tab_{short_day}")
 
         with tabs[10]:
-            test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "¼ The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)", "🗺️ Route Optimization Flags", "🦺 Multi-Tech Labor Yield vs. Solo Runs", "📅 Lowe's Store Staging Delays by Day of the Week", "📊 Overtime ROI Cost-Benefit Auditor", "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard", "💵 Division True Net Profitability Margin Auditor", "📦 Lowe's Combined Cost Performance Matrix"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
+            test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "¼ The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)", "🗺️ Route Optimization Flags", "🦺 Multi-Tech Labor Yield vs. Solo Runs", "📅 Lowe's Store Staging Delays by Day of the Week", "📊 Overtime ROI Cost-Benefit Auditor", "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard", "💵 Division True Net Profitability Margin Auditor", "📦 Lowe's Combined Cost Performance Matrix", "🗺️ Interactive Territory Density and Hotspot Mapping", "🗺️ Geographic Revenue Yield per Drive Hour"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
             
             if "🏆 The Golden Ratio Margin Predictor" in test_choices:
                 st.markdown("### **🏆 The Golden Ratio Margin Predictor**")
@@ -1325,7 +1293,7 @@ if time_file and ops_file:
                     st.dataframe(ot_audit_df, use_container_width=True)
                     create_copy_button(ot_audit_df, "overtime_roi_auditor")
                 else:
-                    st.success("✅ Zero hourly technicians incurred premium overtime thresholds during this invoice cycle.")
+                    st.success("¼ Hourly technicians worked zero premium overtime thresholds during this session cycle.")
 
             if "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard" in test_choices:
                 st.markdown("### **🏆 Single-Job \"Whale Alert\" Revenue Leaderboard**")
@@ -1444,7 +1412,7 @@ if time_file and ops_file:
                 cc_matrix['Cost Ratio % vs Rev'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Combined_Cost_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
                 cc_matrix['Cost Ratio % vs Rev'] = cc_matrix['Cost Ratio % vs Rev'].apply(lambda x: f"{x:.1f}%")
                 cc_matrix['Net Profit (%)'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Net_Profit_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
-                cc_matrix['Net Profit (%)'] = cc_matrix['Net Profit (%)'].apply(lambda x: f"{x:.1f}%")
+                cc_matrix['Net Profit (%)'] = cc_matrix['Net_Profit (%)'].apply(lambda x: f"{x:.1f}%")
                 cc_matrix['Gross Invoiced Revenue'] = cc_matrix['Gross_Invoiced_Raw'].apply(lambda x: f"${x:,.2f}")
                 cc_matrix['Total Combined Cost'] = cc_matrix['Combined_Cost_Total_Raw'].apply(lambda x: f"${x:,.2f}")
                 cc_matrix['Tech Wage Burden'] = cc_matrix['Assumed_Labor_Payload_Raw'].apply(lambda x: f"${x:,.2f}")
@@ -1454,5 +1422,62 @@ if time_file and ops_file:
                 st.dataframe(show_cc, use_container_width=True)
                 create_copy_button(show_cc, "product_vs_service_cost_breakdown")
 
+            if "🗺️ Interactive Territory Density and Hotspot Mapping" in test_choices:
+                st.markdown("### **🗺️ Interactive Territory Density and Hotspot Mapping**")
+                st.markdown("*(Applies custom AZ coordinate positioning metrics to visually analyze geographic dispatch cluster density)*")
+                
+                # Jitter-mapping algorithm to cleanly handle layout data vectors
+                AZ_COORDS = {
+                    "Phoenix": [33.4484, -112.0740], "Scottsdale": [33.4942, -111.9261], "Chandler": [33.3062, -111.8413],
+                    "Goodyear": [33.4353, -112.3582], "Prescott": [34.5400, -112.4685], "Mesa": [33.4152, -111.8315],
+                    "Glendale": [33.5387, -112.1860], "Gilbert": [33.3528, -111.7890], "Tempe": [33.4255, -111.9400],
+                    "Peoria": [33.5806, -112.2374], "Surprise": [33.6292, -112.3679], "Avondale": [33.4356, -112.3496]
+                }
+                
+                df_map = ops_df.copy()
+                if 'Location Address' in df_map.columns:
+                    df_map['Parsed_City'] = df_map['Location Address'].apply(parse_az_city)
+                    map_points = []
+                    for idx, r in df_map.iterrows():
+                        base_coords = AZ_COORDS.get(r['Parsed_City'], [33.4484, -112.0740])
+                        # Apply deterministic jitter offset parameters so overlay markers stay readable
+                        np.random.seed(int(r['#ID']) if pd.notna(r['#ID']) else idx)
+                        lat_jit = base_coords[0] + np.random.uniform(-0.025, 0.025)
+                        lon_jit = base_coords[1] + np.random.uniform(-0.025, 0.025)
+                        map_points.append({"latitude": lat_jit, "longitude": lon_jit})
+                        
+                    if map_points:
+                        st.map(pd.DataFrame(map_points), use_container_width=True)
+                        st.success(f"Successfully mapped {len(map_points)} active field work dispatches across Arizona sub-territories.")
+                    else: st.info("Unable to identify locations inside loaded variables.")
+                else: st.info("Location Address column header field parameter missing from raw ops data sheets.")
+
+            if "🗺️ Geographic Revenue Yield per Drive Hour" in test_choices:
+                st.markdown("### **🗺️ Geographic Revenue Yield per Drive Hour**")
+                st.markdown("*(Measures the true invoice revenue generated per drive hour across different destination regions to isolate high-leakage transport lanes)*")
+                
+                df_yield = ops_df.copy()
+                if 'Location Address' in df_yield.columns:
+                    df_yield['City Location Sector'] = df_yield['Location Address'].apply(parse_az_city)
+                    
+                    geo_yield = df_yield.groupby('City Location Sector').agg(
+                        Jobs_Assigned=('#ID', 'count'),
+                        Gross_Invoiced_Volume=('Total Invoice Amount', 'sum'),
+                        Total_Travel_Time=('Drive_Time_Hrs', 'sum')
+                    ).reset_index()
+                    
+                    geo_yield['Yield per Travel Hour Raw'] = np.where(geo_yield['Total_Travel_Time'] > 0, geo_yield['Gross_Invoiced_Volume'] / geo_yield['Total_Travel_Time'], 0.0)
+                    geo_yield = geo_yield.sort_values(by='Yield per Travel Hour Raw', ascending=False)
+                    
+                    show_geo_yield = geo_yield.copy()
+                    show_geo_yield['Gross Invoiced Volume'] = show_geo_yield['Gross_Invoiced_Volume'].apply(lambda x: f"${x:,.2f}")
+                    show_geo_yield['Total Travel Time'] = show_geo_yield['Total_Travel_Time'].apply(lambda x: f"{x:.2f} hrs")
+                    show_geo_yield['Revenue per Travel Hour'] = show_geo_yield['Yield per Travel Hour Raw'].apply(lambda x: f"${x:,.2f}/hr" if x > 0 else "-")
+                    
+                    final_yield_df = show_geo_yield[['City Location Sector', 'Jobs_Assigned', 'Gross Invoiced Volume', 'Total Travel Time', 'Revenue per Travel Hour']].rename(columns={'City Location Sector': 'Territory City', 'Jobs_Assigned': 'Jobs Closed'})
+                    st.dataframe(final_yield_df, use_container_width=True)
+                    create_copy_button(final_yield_df, "geographic_revenue_yield_drive_hour")
+                else: st.info("Location Address column missing from raw ops datasets.")
+                
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
