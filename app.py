@@ -884,7 +884,7 @@ if time_file and ops_file:
         final_df['Rev_Per_Clocked_Hr'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, final_df['Total_Assigned_Revenue'] / final_df['Total_Weekly_Clocked_Hrs'], 0.0)
 
         # =========================================================================================
-        # 🧪 SEAN MARBLE TIME-SHEET ATTENDANCE ABSENCE EVALUATION CHECK LOOP (GLOBAL STABILIZATION)
+        # 🧪 SEAN MARBLE TIME-SHEET ATTENDANCE ABSENCE EVALUATION CHECK LOOP (GLOBAL STABILIZATION ROUTED)
         # =========================================================================================
         sean_timecard = final_df[final_df['Name'] == 'Sean Marble']
         if not sean_timecard.empty:
@@ -899,12 +899,12 @@ if time_file and ops_file:
 
         st.session_state['sean_absence_penalty_global'] = sean_penalty_value
 
-        # Fuel computational row pay updates safely across mapped dict paths using ZIP directly
+        # ⭐ STABILIZED MAPPING LAYER DESIGN: Direct column creation maps array metrics safely with NO index drops
         rev_per_hour_df_calc = final_df.copy()
         rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(get_adjusted_table_pay, axis=1)
 
         pay_mapping_dict = dict(zip(rev_per_hour_df_calc['Name'], rev_per_hour_df_calc['Assumed Pay Amount']))
-        ops_df['Computed_Row_Pay'] = ops_df['Name'].map(pay_dict).fillna(0.0)
+        ops_df['Computed_Row_Pay'] = ops_df['Name'].map(pay_mapping_dict).fillna(0.0)
         tech_total_field_hrs = ops_df.groupby('Name')['Total_Job_Time_Hours'].sum().reset_index().rename(columns={'Total_Job_Time_Hours': 'Tech_Total_Work_Hrs'})
         
         if 'Tech_Total_Work_Hrs' in ops_df.columns: 
@@ -964,7 +964,7 @@ if time_file and ops_file:
         final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
         final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
 
-        # 🚀 RE-INTEGRATED CONSOLIDATED SPLITS INITIALIZATION LAYER (FIXES THE KEYERROR DISMISSAL)
+        # 🚀 RE-INTEGRATED CONSOLIDATED SPLITS INITIALIZATION LAYER
         display_dfs = {}
         for day in days:
             final_df[day + '_Diff_Hrs'] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
@@ -1319,7 +1319,7 @@ if time_file and ops_file:
                     st.dataframe(show_staging[['Day_of_Week', 'Total_Visits', 'Total Hours Delayed', 'Avg Delay per Visit']].rename(columns={'Day_of_Week': 'Day', 'Total_Visits': 'Store Pickups'}), use_container_width=True)
                     create_copy_button(show_staging[['Day_of_Week', 'Total_Visits', 'Total Hours Delayed', 'Avg Delay per Visit']], "store_staging_by_day")
                 else:
-                    st.info("No material store staging records discovered inside logged field parameters.")
+                    st.info("No material store staging records discovered inside loaded field parameters.")
 
             if "📊 Overtime ROI Cost-Benefit Auditor" in test_choices:
                 st.markdown("### **📊 Overtime ROI Cost-Benefit Auditor**")
@@ -1397,7 +1397,7 @@ if time_file and ops_file:
                     
                     if selected_bu_filter in ["All Sectors", "Lowes - Water Heaters", "Lowes - Simple Installs"]:
                         if 'sean marble' in [tech.lower() for tech in ops_df['Name'].unique()]:
-                            labor_payload_sum = max(0.0, labor_payload_sum - sean_penalty_value)
+                            labor_payload_sum = max(0.0, labor_payload_sum - sean_penalty)
                     
                     net_profit_sum = gross_revenue_sum - combined_cost_sum - labor_payload_sum
                     
@@ -1467,13 +1467,13 @@ if time_file and ops_file:
                 
                 for idx, r in cc_matrix.iterrows():
                     if r['Business Unit'] == 'Lowes - Simple Installs':
-                        cc_matrix.loc[idx, 'Assumed_Labor_Payload_Raw'] = max(0.0, cc_matrix.loc[idx, 'Assumed_Labor_Payload_Raw'] - sean_penalty_value)
+                        cc_matrix.loc[idx, 'Assumed_Labor_Payload_Raw'] = max(0.0, cc_matrix.loc[idx, 'Assumed_Labor_Payload_Raw'] - sean_penalty)
                         cc_matrix.loc[idx, 'Net_Profit_Total_Raw'] = cc_matrix.loc[idx, 'Gross_Invoiced_Raw'] - cc_matrix.loc[idx, 'Combined_Cost_Total_Raw'] - cc_matrix.loc[idx, 'Assumed_Labor_Payload_Raw']
                 
                 cc_matrix['Cost Ratio % vs Rev'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Combined_Cost_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
                 cc_matrix['Cost Ratio % vs Rev'] = cc_matrix['Cost Ratio % vs Rev'].apply(lambda x: f"{x:.1f}%")
                 cc_matrix['Net Profit (%)'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Net_Profit_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
-                cc_matrix['Net Profit (%)'] = cc_matrix['Net Profit (%)'].apply(lambda x: f"{x:.1f}%")
+                cc_matrix['Net Profit (%)'] = cc_matrix['Net_Profit (%)'].apply(lambda x: f"{x:.1f}%")
                 cc_matrix['Gross Invoiced Revenue'] = cc_matrix['Gross_Invoiced_Raw'].apply(lambda x: f"${x:,.2f}")
                 cc_matrix['Total Combined Cost'] = cc_matrix['Combined_Cost_Total_Raw'].apply(lambda x: f"${x:,.2f}")
                 cc_matrix['Tech Wage Burden'] = cc_matrix['Assumed_Labor_Payload_Raw'].apply(lambda x: f"${x:,.2f}")
