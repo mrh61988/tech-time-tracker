@@ -27,10 +27,7 @@ st.markdown("""
     div[class*="stExpander"] { display: none !important; }
     
     /* Flatten flex and grid containers to standard sequential blocks to block overlapping */
-    div[class*="stVerticalBlock"], 
-    div[data-testid="element-container"],
-    div[data-testid="stHorizontalBlock"],
-    div[data-testid="column"] {
+    div[class*="stVerticalBlock"], \n    div[data-testid="element-container"],\n    div[data-testid="stHorizontalBlock"],\n    div[data-testid="column"] {
         display: block !important;
         position: static !important;
         float: none !important;
@@ -174,6 +171,7 @@ def parse_diff_to_hours(val):
     return 0.0
 
 def check_late(row):
+    if 'First_Punch' not in row or 'First_Status' not in row: return False
     fp = row['First_Punch']
     status = row['First_Status']
     if pd.isna(fp): return False
@@ -230,9 +228,10 @@ def highlight_over_hour_row(row):
     return styles
 
 def get_assumed_pay(row):
+    if 'Name' not in row or isinstance(row, bool): return 0.0
     nl = str(row['Name']).lower()
-    clocked = row['Total_Weekly_Clocked_Hrs']
-    rev = row['Total_Assigned_Revenue']
+    clocked = row.get('Total_Weekly_Clocked_Hrs', 0.0)
+    rev = row.get('Total_Assigned_Revenue', 0.0)
     
     if 'sean marble' in nl:
         base_salary = 70000.0 / 52.0
@@ -293,13 +292,57 @@ def highlight_low_margins(row):
             pass
     return styles
 
-# GLOBAL HOURLY ANALYSIS PAY DELEGATOR LAYER SECURED
+# PROTECTED HOURLY ANALYSIS PAY DELEGATOR LAYER SECURED
 def get_adjusted_table_pay(row):
+    if isinstance(row, bool) or 'Name' not in row: return 0.0
     nl = str(row['Name']).lower()
     base_pay = get_assumed_pay(row)
     if 'sean marble' in nl:
         return max(0.0, base_pay)
     return base_pay
+
+# NATIVE SYSTEM CLIPBOARD DATA EXPORTER (DEFINED AT GLOBAL SCOPE LEVEL)
+def create_copy_button(df, raw_key):
+    safe_key = "".join([c if c.isalnum() else "_" for c in raw_key])
+    tsv_str = df.to_csv(sep='\t', index=False)
+    safe_tsv = tsv_str.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+    
+    button_html = f"""
+    <div class="hide-on-print" style="text-align: left; margin-top: 5px; margin-bottom: 8px;">
+        <textarea id="tsv_{safe_key}" style="position: absolute; left: -9999px;">{safe_tsv}</textarea>
+        <button id="btn_{safe_key}" onclick="copyTSV_{safe_key}()" style="background-color: #ffffff; color: #3c4043; padding: 6px 14px; border: 1px solid #dadce0; border-radius: 4px; cursor: pointer; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: background-color 0.2s;">
+            📋 Copy Table Data (For Email/Sheets/Docs)
+        </button>
+    </div>
+    <script>
+    function copyTSV_{safe_key}() {{
+        var copyText = document.getElementById("tsv_{safe_key}");
+        copyText.select();
+        copyText.setSelectionRange(0, 999999);
+        try {{
+            var successful = document.execCommand('copy');
+            var btn = document.getElementById("btn_{safe_key}");
+            if (successful) {{
+                btn.innerHTML = "✅ Copied table to clipboard!";
+                btn.style.backgroundColor = "#e6f4ea";
+                btn.style.color = "#137333";
+                btn.style.borderColor = "#137333";
+                setTimeout(function() {{
+                    btn.innerHTML = "📋 Copy Table Data (For Email/Sheets/Docs)";
+                    btn.style.backgroundColor = "#ffffff";
+                    btn.style.color = "#3c4043";
+                    btn.style.borderColor = "#dadce0";
+                }}, 2000);
+                }} else {{
+                btn.innerHTML = "❌ Copy failed";
+            }}
+        }} catch (err) {{
+            console.error('Execution fallback error:', err);
+        }}
+    }}
+    </script>
+    """
+    st.components.v1.html(button_html, height=38)
 
 # --- ADVANCED TIMELINE MATRICES ---
 def run_baselines_matrix(ops_df):
@@ -726,7 +769,7 @@ if time_file and ops_file:
 
         st.session_state['sean_absence_penalty_global'] = sean_penalty_value
 
-        # PERFORMANCE MATRICES GENERATION POSITIONED SAFELY ON TOP PIPELINE LAYER TO SHIELD LABELS FROM CONFLICTS
+        # ⭐ PERFORMANCE MATRICES GENERATION POSITIONED SAFELY ON TOP PIPELINE LAYER TO SHIELD WEEKLY LABELS FROM CONFLICTS
         final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
         final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * 3.5
         final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
@@ -841,7 +884,7 @@ if time_file and ops_file:
         bu_summary_df['Total Unallocated Hours'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
         display_dfs['Weekly'] = bu_summary_df
 
-        # ⭐ MACRO DEF SUMMARY REGISTERS LOADED SAFELY OUTSIDE RENDER NAVIGATION LOOPS
+        # ⭐ MACRO DEF SUMMARY REGISTERS LOADED SAFELY OUTSIDE RENDER TAB LOOPS
         total_assumed_pay_adjusted = max(0.0, df_macro_pay['Assumed_Labor_Payload'].sum() - sean_penalty_value)
         pay_ratio_pct_adjusted = (total_assumed_pay_adjusted / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
 
@@ -931,7 +974,7 @@ if time_file and ops_file:
                 st.dataframe(show_rev_per_hour_sorted.reset_index(drop=True), use_container_width=True)
                 create_copy_button(show_rev_per_hour_sorted.reset_index(drop=True), "pay_ratio_per_clocked")
             
-            st.markdown("<br><hr>", unsafe_allow_html=True)
+            st.sidebar.markdown("---")
             run_baselines_matrix(ops_df)
             
             show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key="summary_tab")
@@ -943,7 +986,7 @@ if time_file and ops_file:
                 tech_data = final_df[final_df['Name'] == tech].iloc[0]
                 report_data = []
                 for full_day, short_day in {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}.items():
-                    report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(tech_data[tech_data['Name'] == tech].iloc[0][short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])})
+                    report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(final_df[final_df['Name'] == tech].iloc[0][short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])})
                 report_data.append({"Day": "TOTAL WEEKLY", "Jobs": int(tech_data['Total_Weekly_Job_Count']), "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']), "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']), "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])})
                 manager_day_df = pd.DataFrame(report_data)
                 st.dataframe(manager_day_df, use_container_width=True)
@@ -1085,7 +1128,7 @@ if time_file and ops_file:
                 route_eff['Total Assigned Revenue'] = route_eff['Total_Revenue'].apply(lambda x: f"${x:,.2f}")
                 route_eff['Total Drive Hours'] = route_eff['Total_Drive_Hrs'].apply(lambda x: f"{x:.1f} hrs")
                 route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"{x:.1f}/hr")
-                st.dataframe(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Travel Hour']].rename(columns={'Revenue per Travel Hour': 'Revenue per Drive Hour'}).reset_index(drop=True), use_container_width=True)
+                st.dataframe(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True), use_container_width=True)
 
             if "🦺 Multi-Tech Labor Yield vs. Solo Runs" in test_choices:
                 st.markdown("### **🦺 Multi-Tech Labor Yield vs. Solo Runs (Co-Efficiency Analysis)**")
@@ -1300,7 +1343,7 @@ if time_file and ops_file:
                 cc_matrix['Cost Ratio % vs Rev'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Combined_Cost_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
                 cc_matrix['Cost Ratio % vs Rev'] = cc_matrix['Cost Ratio % vs Rev'].apply(lambda x: f"{x:.1f}%")
                 cc_matrix['Net Profit (%)'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Net_Profit_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
-                cc_matrix['Net Profit (%)'] = cc_matrix['Net_Profit (%)'].apply(lambda x: f"{x:.1f}%")
+                cc_matrix['Net Profit (%)'] = cc_matrix['Net Profit (%)'].apply(lambda x: f"{x:.1f}%")
                 cc_matrix['Gross Invoiced Revenue'] = cc_matrix['Gross_Invoiced_Raw'].apply(lambda x: f"${x:,.2f}")
                 cc_matrix['Total Combined Cost'] = cc_matrix['Combined_Cost_Total_Raw'].apply(lambda x: f"${x:,.2f}")
                 cc_matrix['Tech Wage Burden'] = cc_matrix['Assumed_Labor_Payload_Raw'].apply(lambda x: f"${x:,.2f}")
