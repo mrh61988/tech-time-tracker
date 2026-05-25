@@ -765,13 +765,13 @@ if time_file and ops_file:
             for d in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']:
                 if sean_row[f'{d}_Clocked_Hrs'] <= 0:
                     unworked_clocked_days += 1
-            sean_penalty_value = unworked_clocked_days * (1346.154 / 5.0)
+            sean_penalty_value = unworked_clocked_days * 269.23
         else:
             sean_penalty_value = 0.0
 
         st.session_state['sean_absence_penalty_global'] = sean_penalty_value
 
-        # ⭐ CRITICAL LANE REALIGNMENT WORKED OUT HERE: Compute performance metrics *BEFORE* running split tables to prevent KeyErrors
+        # ⭐ PERFORMANCE MATRICES GENERATION POSITIONED SAFELY ON TOP PIPELINE LAYER TO SHIELD WEEKLY LABELS FROM CONFLICTS
         final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
         final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * 3.5
         final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
@@ -886,7 +886,6 @@ if time_file and ops_file:
         bu_summary_df['Total Unallocated Hours'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
         display_dfs['Weekly'] = bu_summary_df
 
-        # Secure total summaries layout mapping metrics securely inside parameters bounds
         total_assumed_pay_adjusted = max(0.0, df_macro_pay['Assumed_Labor_Payload'].sum() - sean_penalty_value)
         pay_ratio_pct_adjusted = (total_assumed_pay_adjusted / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
 
@@ -988,7 +987,7 @@ if time_file and ops_file:
                 tech_data = final_df[final_df['Name'] == tech].iloc[0]
                 report_data = []
                 for full_day, short_day in {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}.items():
-                    report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(tech_data[short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[tech_data['Name'] == tech].iloc[0][short_day + '_Diff_Hrs'])})
+                    report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(tech_data[tech_data['Name'] == tech].iloc[0][short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])})
                 report_data.append({"Day": "TOTAL WEEKLY", "Jobs": int(tech_data['Total_Weekly_Job_Count']), "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']), "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']), "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])})
                 manager_day_df = pd.DataFrame(report_data)
                 st.dataframe(manager_day_df, use_container_width=True)
