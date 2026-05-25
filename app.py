@@ -617,7 +617,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 lsi_cnt, wh_cnt = row['Simple_Installs_Count'], row['Water_Heaters_Count']
                 if lsi_cnt > 0 and wh_cnt > 0: 
                     if row['Eff Gap'] > 15.0: return "⚠️ WH Ride-Along Required" if row['LSI_Eff_Raw'] > row['WH_Eff_Raw'] else "⚠️ LSI Ride-Along Required"
-                    return "✅ Balanced Execution"
+                    return "Balanced Execution"
                 if lsi_cnt > 0: return "ℹ️ Only LSI Jobs Assigned"
                 if wh_cnt > 0: return "ℹ️ Only WH Jobs Assigned"
                 return "ℹ️ No BU Jobs Assigned"
@@ -675,6 +675,16 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
                 try: st.dataframe(show_launches.style.set_properties(**{'background-color': '#ffcccc', 'color': '#990000;'}), use_container_width=True)
                 except Exception: st.dataframe(show_launches, use_container_width=True)
                 create_copy_button(show_launches, f"late_alert_{tab_key}")
+
+# --- GLOBAL WRAPPER SYNCHRONIZATION LANE HOOK ---
+def get_adjusted_table_pay(row):
+    # This explicit definition handles global mapping safety across layout blocks securely
+    nl = str(row['Name']).lower()
+    base_pay = get_assumed_pay(row)
+    if 'sean marble' in nl:
+        # Deduct unworked clocked days directly inside tabular data loops
+        return max(0.0, base_pay - st.session_state.get('sean_absence_penalty_global', 0.0))
+    return base_pay
 
 # --- THE MAIN TOP-LEVEL BASE EXECUTION PIPELINE LAYER BLOCK ---
 st.sidebar.header("📂 Data Loading Pipeline")
@@ -875,7 +885,7 @@ if time_file and ops_file:
         final_df['Rev_Per_Clocked_Hr'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, final_df['Total_Assigned_Revenue'] / final_df['Total_Weekly_Clocked_Hrs'], 0.0)
 
         # =========================================================================================
-        # 🧪 SEAN MARBLE TIME-SHEET ATTENDANCE ABSENCE EVALUATION CHECK LOOP (GLOBAL SYNCHRONIZATION)
+        # 🧪 SEAN MARBLE TIME-SHEET ATTENDANCE ABSENCE EVALUATION CHECK LOOP (GLOBAL STABILIZATION ROUTED)
         # =========================================================================================
         sean_timecard = final_df[final_df['Name'] == 'Sean Marble']
         if not sean_timecard.empty:
@@ -884,22 +894,15 @@ if time_file and ops_file:
             for d in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']:
                 if sean_row[f'{d}_Clocked_Hrs'] <= 0:
                     unworked_clocked_days += 1
-            sean_penalty = unworked_clocked_days * 269.0
+            sean_penalty_value = unworked_clocked_days * 269.0
         else:
-            sean_penalty = 0.0
+            sean_penalty_value = 0.0
 
-        # Global layout analytical function mapping safely across all views indices layout parameters
-        def get_adjusted_table_pay(row):
-            pay = get_assumed_pay(row)
-            if 'sean marble' in str(row['Name']).lower():
-                pay = max(0.0, pay - sean_penalty)
-            return pay
+        # Save into session state layer to lock global execution thread
+        st.session_state['sean_absence_penalty_global'] = sean_penalty_value
 
         # Fuel computational row pay updates safely across mapped dict paths
-        rev_per_hour_df_calc = final_df.copy()
-        rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(get_adjusted_table_pay, axis=1)
-
-        ops_df['Computed_Row_Pay'] = ops_df['Name'].map(rev_per_hour_df_calc.set_index('Name')['Assumed Pay Amount'].to_dict()).fillna(0.0)
+        ops_df['Computed_Row_Pay'] = ops_df['Name'].map(final_df.set_index('Name').apply(get_adjusted_table_pay, axis=1).to_dict()).fillna(0.0)
         tech_total_field_hrs = ops_df.groupby('Name')['Total_Job_Time_Hours'].sum().reset_index().rename(columns={'Total_Job_Time_Hours': 'Tech_Total_Work_Hrs'})
         
         if 'Tech_Total_Work_Hrs' in ops_df.columns: 
@@ -1010,7 +1013,7 @@ if time_file and ops_file:
         display_dfs['Weekly'] = bu_summary_df
 
         # Secure total summaries layout mapping metrics securely inside parameters bounds
-        total_assumed_pay_adjusted = max(0.0, df_macro_pay['Assumed_Labor_Payload'].sum() - sean_penalty)
+        total_assumed_pay_adjusted = max(0.0, df_macro_pay['Assumed_Labor_Payload'].sum() - sean_penalty_value)
         pay_ratio_pct_adjusted = (total_assumed_pay_adjusted / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
 
         bu_gross_rev = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].sum().reset_index()
@@ -1021,7 +1024,7 @@ if time_file and ops_file:
         bu_pay_split = df_macro_pay.groupby('Business Unit')['Assumed_Labor_Payload'].sum().reset_index().rename(columns={'Assumed_Labor_Payload': 'Assumed Pay Raw'})
         for idx, r in bu_pay_split.iterrows():
             if r['Business Unit'] == 'Lowes - Simple Installs':
-                bu_pay_split.loc[idx, 'Assumed Pay Raw'] = max(0.0, bu_pay_split.loc[idx, 'Assumed Pay Raw'] - sean_penalty)
+                bu_pay_split.loc[idx, 'Assumed Pay Raw'] = max(0.0, bu_pay_split.loc[idx, 'Assumed Pay Raw'] - sean_penalty_value)
                 
         bu_financial_matrix = pd.merge(bu_gross_rev, bu_pay_split, on='Business Unit', how='left').fillna(0.0)
         bu_financial_matrix['Assumed Pay'] = bu_financial_matrix['Assumed Pay Raw'].apply(lambda x: f"${x:,.2f}")
@@ -1466,7 +1469,7 @@ if time_file and ops_file:
                 cc_matrix['Cost Ratio % vs Rev'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Combined_Cost_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
                 cc_matrix['Cost Ratio % vs Rev'] = cc_matrix['Cost Ratio % vs Rev'].apply(lambda x: f"{x:.1f}%")
                 cc_matrix['Net Profit (%)'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Net_Profit_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
-                cc_matrix['Net Profit (%)'] = cc_matrix['Net Profit (%)'].apply(lambda x: f"{x:.1f}%")
+                cc_matrix['Net Profit (%)'] = cc_matrix['Net_Profit (%)'].apply(lambda x: f"{x:.1f}%")
                 cc_matrix['Gross Invoiced Revenue'] = cc_matrix['Gross_Invoiced_Raw'].apply(lambda x: f"${x:,.2f}")
                 cc_matrix['Total Combined Cost'] = cc_matrix['Combined_Cost_Total_Raw'].apply(lambda x: f"${x:,.2f}")
                 cc_matrix['Tech Wage Burden'] = cc_matrix['Assumed_Labor_Payload_Raw'].apply(lambda x: f"${x:,.2f}")
