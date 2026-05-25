@@ -819,11 +819,8 @@ if time_file and ops_file:
             for member in core_members_on_job:
                 new_row = row.copy()
                 new_row['Assigned Team Members'] = member
-                # ⭐ CRITICAL UPDATE UNIFICATION: If multiple techs exist, full job attributes are duplicated entirely
-                if member == first_core_tech:
-                    new_row['Total Invoice Amount'] = row['Total Invoice Amount']
-                else:
-                    new_row['Total Invoice Amount'] = 0.0
+                # ⭐ COMBINED CO-ASSIGNMENT WORKFLOW UPGRADE: Core metrics are duplicated across all paired fleet units
+                new_row['Total Invoice Amount'] = row['Total Invoice Amount']
                 exploded_rows.append(new_row)
                 
         if exploded_rows:
@@ -947,55 +944,8 @@ if time_file and ops_file:
         display_dfs['Weekly'] = bu_summary_df
 
         # =========================================================================================
-        # 🧪 GLOBAL PIPELINE ARITHMETIC CORE ASSIGNMENT PANEL
+        # 🧪 SEAN MARBLE TRUE ABSENCE PENALTY TRACKER ENGINE
         # =========================================================================================
-        rev_per_hour_df_calc = final_df.copy()
-        rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(get_assumed_pay, axis=1)
-
-        ops_df['Computed_Row_Pay'] = ops_df['Name'].map(rev_per_hour_df_calc.set_index('Name')['Assumed Pay Amount'].to_dict()).fillna(0.0)
-        tech_total_field_hrs = ops_df.groupby('Name')['Total_Job_Time_Hours'].sum().reset_index().rename(columns={'Total_Job_Time_Hours': 'Tech_Total_Work_Hrs'})
-        
-        if 'Tech_Total_Work_Hrs' in ops_df.columns: 
-            ops_df = ops_df.drop(columns=['Tech_Total_Work_Hrs'])
-        ops_df = pd.merge(ops_df, tech_total_field_hrs, on='Name', how='left')
-        
-        ops_df['Job_Time_Weight'] = np.where(ops_df['Tech_Total_Work_Hrs'] > 0, ops_df['Total_Job_Time_Hours'] / ops_df['Tech_Total_Work_Hrs'], 0.0)
-        ops_df['Allocated_Job_Pay'] = ops_df['Computed_Row_Pay'] * ops_df['Job_Time_Weight']
-        ops_df['Allocated_Job_Pay'] = np.where(
-            ops_df['Name'].str.lower().str.contains('bryan') | ops_df['Name'].str.lower().str.contains('erik'),
-            ops_df['Total Invoice Amount'] * 0.33,
-            ops_df['Allocated_Job_Pay']
-        )
-
-        df_macro_pay = unexploded_ops.copy()
-        df_macro_pay['Tech_Count'] = df_macro_pay['Assigned Team Members'].apply(lambda x: len([m.strip() for m in str(x).split(',') if m.strip()]))
-        df_macro_pay['Is_Contractor'] = df_macro_pay['Assigned Team Members'].apply(check_contractor)
-        
-        df_macro_pay['Cost_Burden_Sub'] = np.where(
-            df_macro_pay['Business Unit'] == 'Lowes - Water Heaters',
-            np.where(df_macro_pay['Tech_Count'] > 1, 175.0, 100.0),
-            0.0
-        )
-        
-        df_macro_pay['Prod_Cost'] = pd.to_numeric(df_macro_pay.get('Total Product Cost [tax inc]', pd.Series([0]*len(df_macro_pay))), errors='coerce').fillna(0.0)
-        df_macro_pay['Serv_Cost'] = pd.to_numeric(df_macro_pay.get('Invoice - Total Service Cost', pd.Series([0]*len(df_macro_pay))), errors='coerce').fillna(0.0)
-        df_macro_pay['Combined_Lowe_Costs'] = np.maximum(0.0, (df_macro_pay['Prod_Cost'] + df_macro_pay['Serv_Cost']) - df_macro_pay['Cost_Burden_Sub'])
-        
-        df_macro_pay['Flat_Rate_Labor'] = np.where(
-            df_macro_pay['Business Unit'] == 'Lowes - Water Heaters',
-            np.where(df_macro_pay['Tech_Count'] > 1, 175.0, 100.0),
-            0.0
-        )
-        df_macro_pay['Logged_Time_Pay'] = df_macro_pay['#ID'].map(ops_df.groupby('#ID')['Allocated_Job_Pay'].sum().to_dict()).fillna(0.0)
-        
-        df_macro_pay['Assumed_Labor_Payload'] = np.where(
-            (df_macro_pay['Business Unit'] == 'Lowes - Simple Installs') & df_macro_pay['Is_Contractor'],
-            df_macro_pay['Total Invoice Amount'],
-            np.maximum(df_macro_pay['Flat_Rate_Labor'], df_macro_pay['Logged_Time_Pay'])
-        )
-        df_macro_pay['Net_Profit_Raw'] = df_macro_pay['Total Invoice Amount'] - df_macro_pay['Combined_Lowe_Costs'] - df_macro_pay['Assumed_Labor_Payload']
-        
-        # ⭐ SEAN MARBLE BURDEN ATTENDANCE PENALTY: Calculated precisely from timecard clocked days metrics
         sean_timecard = final_df[final_df['Name'] == 'Sean Marble']
         if not sean_timecard.empty:
             sean_row = sean_timecard.iloc[0]
@@ -1084,7 +1034,7 @@ if time_file and ops_file:
                 rev_per_hour_df['Total Jobs'] = rev_per_hour_df['Total_Weekly_Job_Count'].astype(int)
                 rev_per_hour_df['Total Assigned Value'] = rev_per_hour_df['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
                 
-                # ⭐ SEAN MARBLE ABSENCE BURDEN RULE RECALCULATION LOOP FOR MAIN TAB REGISTER
+                # ⭐ SEAN MARBLE ATTENDANCE ABSENCE RULE INJECTED FOR ACCURATE ROW Payload SUMMATION
                 def get_adjusted_table_pay(row):
                     pay = get_assumed_pay(row)
                     if 'sean marble' in str(row['Name']).lower():
@@ -1233,7 +1183,7 @@ if time_file and ops_file:
                     rev_per_hour_df['Total Clocked'] = rev_per_hour_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
                     rev_per_hour_df['Total Assigned Value'] = rev_per_hour_df['Total_Assigned_Revenue'].apply(lambda x: f"${x:,.2f}")
                     
-                    # ⭐ SEAN MARBLE ABSENCE BURDEN RECALCULATION LOOP FOR MODULAR TEST SECTION PANEL
+                    # ⭐ SEAN MARBLE ABSENCE BURDEN RECALCULATION WITH FIXED AND STABILIZED DATA INDEX HOOK
                     rev_per_hour_df['Assumed Pay Amount'] = rev_per_hour_df.apply(lambda r: max(0.0, get_assumed_pay(r) - sean_penalty) if 'sean marble' in str(r['Name']).lower() else get_assumed_pay(r), axis=1)
                     rev_per_hour_df['Assumed Pay'] = rev_per_hour_df['Assumed Pay Amount'].apply(lambda x: f"${x:,.2f}" if x > 0 else "-")
                     rev_per_hour_df['Pay Pct'] = np.where(rev_per_hour_df['Total_Assigned_Revenue'] > 0, (rev_per_hour_df['Assumed Pay Amount'] / rev_per_hour_df['Total_Assigned_Revenue']) * 100, 0.0)
