@@ -861,6 +861,11 @@ if time_file and ops_file:
         final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
         final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
 
+        # ----- BUG FIX: CALCULATE THE RAW EFFICIENCIES BEFORE FORMATTING STRINGS -----
+        final_df['LSI_Eff_Raw'] = np.where(final_df['Assumed_LSI_Clocked'] > 0, (final_df['Simple_Installs_Hrs'] / final_df['Assumed_LSI_Clocked']) * 100, 0.0)
+        final_df['WH_Eff_Raw'] = np.where(final_df['Assumed_WH_Clocked'] > 0, (final_df['Water_Heaters_Hrs'] / final_df['Assumed_WH_Clocked']) * 100, 0.0)
+        # -------------------------------------------------------------------------------
+
         rev_per_hour_df_calc = final_df.copy()
         rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(get_adjusted_table_pay, axis=1)
 
@@ -934,7 +939,7 @@ if time_file and ops_file:
         final_df['Simple Installs'] = final_df['Simple_Installs_Hrs'].apply(format_hm)
         final_df['Water Heaters'] = final_df['Water_Heaters_Hrs'].apply(format_hm)
         
-        # FIX BUG 2: Avoid misleading 0% efficiency flags by explicitly masking non-assigned vectors with N/A strings
+        # Avoid misleading 0% efficiency flags by explicitly masking non-assigned vectors with N/A strings
         final_df['Simple Installs Eff'] = np.where(final_df['Simple_Installs_Count'] > 0, final_df['LSI_Eff_Raw'].map(lambda x: f"{x:.1f}%"), "-")
         final_df['Water Heaters Eff'] = np.where(final_df['Water_Heaters_Count'] > 0, final_df['WH_Eff_Raw'].map(lambda x: f"{x:.1f}%"), "-")
         
@@ -961,7 +966,6 @@ if time_file and ops_file:
         total_job_hrs_sum = final_df['Total_Weekly_Job_Hrs'].sum()
         total_diff_hrs_sum = final_df['Total_Weekly_Diff_Hrs'].sum()
         
-        # FIX BUG 1: Force absolute mathematical sum total tracking alignment
         total_jobs_sum = total_lsi_jobs_sum + total_wh_jobs_sum
         
         total_lsi_goal_hrs = final_df['Assumed_LSI_Clocked'].sum()
