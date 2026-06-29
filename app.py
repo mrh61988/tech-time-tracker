@@ -649,6 +649,18 @@ if time_file and ops_file:
     try:
         CORE_TECHS = ['Bryan Pickett', 'Edward Lopez', 'Erik Tange', 'Matt Hodges', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
         
+        # --- NEW SIDEBAR TIME ADJUSTMENT UI ---
+        st.sidebar.header("⏱️ Manual Time Adjustments")
+        st.sidebar.markdown("*(Adjust weekly clocked hours. Use formats like `+1:30`, `-0:45`, or `1.5`)*")
+        time_adjustments = {}
+        
+        with st.sidebar.expander("Expand to Adjust Timecards"):
+            for tech in CORE_TECHS:
+                adj_val = st.text_input(tech, key=f"adj_input_{tech}", placeholder="e.g. +1:30 or -0.5")
+                if adj_val:
+                    time_adjustments[tech] = parse_adj_hm(adj_val)
+        # ----------------------------------------
+        
         # --- 1. Parser Engine for Time Sheets ---
         time_bytes = time_file.getvalue()
         try:
@@ -694,6 +706,13 @@ if time_file and ops_file:
             time_df['Days_Worked'] = (time_df[[f'{d}_Clocked_Hrs' for d in days_order]] > 0).sum(axis=1)
         
         time_df = time_df[time_df['Name'].isin(CORE_TECHS)]
+        
+        # --- APPLY SIDEBAR ADJUSTMENTS TO TIMECARDS ---
+        for tech, adj in time_adjustments.items():
+            if tech in time_df['Name'].values:
+                time_df.loc[time_df['Name'] == tech, 'Total_Weekly_Clocked_Hrs'] += adj
+        # ----------------------------------------------
+        
         days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
         
         # --- 2. Parse Ops Sheet Resiliently ---
