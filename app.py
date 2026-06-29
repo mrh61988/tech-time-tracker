@@ -6,7 +6,7 @@ import io
 # Set up the page layout
 st.set_page_config(page_title="Tech Time Tracker", layout="wide")
 
-# --- SUGGESTION 2: PERFORMANCE CACHING PIPELINE FUNCTIONS ---
+# --- PERFORMANCE CACHING PIPELINE FUNCTIONS ---
 @st.cache_data
 def load_and_parse_timesheet(time_bytes):
     """Caches and parses raw timesheet CSV data to prevent slow re-computations."""
@@ -531,7 +531,8 @@ def run_baselines_matrix(ops_df):
             wh_matrix_df = pd.DataFrame(wh_over_baseline_rows).sort_values(by='sort_key', ascending=False).drop(columns=['sort_key']).reset_index(drop=True)
             try: st.dataframe(wh_matrix_df.style.apply(highlight_over_hour_row, axis=1), use_container_width=True)
             except Exception: st.dataframe(wh_matrix_df, use_container_width=True)
-            create_copy_button(wh_matrix_df, "wh_over_baseline")
+            copy_key = f"wh_over_baseline_{int(pd.Timestamp.now().timestamp())}"
+            create_copy_button(wh_matrix_df, copy_key)
         else: st.success("✅ Zero individual Water Heater jobs exceeded the division baseline average.")
             
     with split_col2:
@@ -540,7 +541,8 @@ def run_baselines_matrix(ops_df):
             lsi_matrix_df = pd.DataFrame(lsi_over_baseline_rows).sort_values(by='sort_key', ascending=False).drop(columns=['sort_key']).reset_index(drop=True)
             try: st.dataframe(lsi_matrix_df.style.apply(highlight_over_hour_row, axis=1), use_container_width=True)
             except Exception: st.dataframe(lsi_matrix_df, use_container_width=True)
-            create_copy_button(lsi_matrix_df, "lsi_over_baseline")
+            copy_key = f"lsi_over_baseline_{int(pd.Timestamp.now().timestamp())}"
+            create_copy_button(lsi_matrix_df, copy_key)
         else: st.success("✅ Zero individual Simple Install jobs exceeded the division baseline average.")
 
 # --- MAIN BLOCK REPORT ENGINE ---
@@ -646,16 +648,59 @@ ops_file = st.sidebar.file_uploader("Upload Lowes Ops Export (CSV)", type=['csv'
 if time_file and ops_file:
     try:
         CORE_TECHS = ['Bryan Pickett', 'Edward Lopez', 'Erik Tange', 'Matt Hodges', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
-        time_cols = ['Lowes Store - Completed Total Time in Status', 'On The Way - Completed Total Time in Status', 'In Progress - Completed Total Time in Status', 'On The Way - Completed Total Time in Status.1', 'In Progress - Completed Total Time in Status.1']
         
-        # Trigger Caching Functions
-        time_df, sample_df = load_and_parse_timesheet(time_file.getvalue())
-        ops_df = load_and_parse_ops(ops_file.getvalue(), time_cols)
+        # --- 1. Parser Engine for Time Sheets ---
+        time_bytes = time_file.getvalue()
+        try:
+            sample_df = pd.read_csv(io.BytesIO(time_bytes))
+            if 'User' in sample_df.columns:
+                sample_df['Clock_In_dt'] = pd.to_datetime(sample_df['Clock In Date/Time'], errors='coerce')
+                sample_df['Clock_Out_dt'] = pd.to_datetime(sample_df['Clock Out Date/Time'], errors='coerce') 
+                sample_df['Duration_Hrs'] = (sample_df['Clock_Out_dt'] - sample_df['Clock_In_dt']).dt.total_seconds() / 3600.0
+                sample_df['Day_of_Week'] = sample_df['Clock_In_dt'].dt.day_name().str[:3]
+                
+                pivot_df = sample_df.groupby(['User', 'Day_of_Week'])['Duration_Hrs'].sum().unstack(fill_value=0.0).reset_index()
+                days_order = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+                for d in days_order:
+                    if d not in pivot_df.columns:
+                        pivot_df[d] = 0.0
+                pivot_df = pivot_df[['User'] + days_order]
+                pivot_df.columns = ['Name'] + [d + '_Clocked_Hrs' for d in days_order]
+                pivot_df['Total_Weekly_Clocked_Hrs'] = pivot_df[[d + '_Clocked_Hrs' for d in days_order]].sum(axis=1)
+                pivot_df['Days_Worked'] = (pivot_df[[f'{d}_Clocked_Hrs' for d in days_order]] > 0).sum(axis=1)
+                time_df = pivot_df
+            else:
+                raise ValueError("fallback")
+        except:
+            time_content = time_bytes.decode("utf-8").splitlines()
+            time_lines = time_content[1:] 
+            data = []
+            for i in range(0, len(time_lines), 9):
+                if i + 8 < len(time_lines):
+                    name = time_lines[i].strip().rstrip(',').strip('"')
+                    sun = time_lines[i+1].strip()
+                    mon = time_lines[i+2].strip()
+                    tue = time_lines[i+3].strip()
+                    wed = time_lines[i+4].strip()
+                    thu = time_lines[i+5].strip()
+                    fri = time_lines[i+6].strip()
+                    sat = time_lines[i+7].strip()
+                    total = time_lines[i+8].strip()
+                    data.append([name, sun, mon, tue, wed, thu, fri, sat, total])
+            
+            time_df = pd.DataFrame(data, columns=['Name', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Total_Weekly'])
+            days_order = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+            for col in days_order + ['Total_Weekly']: time_df[col + '_Clocked_Hrs'] = time_df[col].apply(parse_hm)
+            time_df['Days_Worked'] = (time_df[[f'{d}_Clocked_Hrs' for d in days_order]] > 0).sum(axis=1)
         
-        # Clean down filtered employee alignments
         time_df = time_df[time_df['Name'].isin(CORE_TECHS)]
         days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-                
+        
+        # --- 2. Parse Ops Sheet Resiliently ---
+        ops_bytes = ops_file.getvalue()
+        time_cols = ['Lowes Store - Completed Total Time in Status', 'On The Way - Completed Total Time in Status', 'In Progress - Completed Total Time in Status', 'On The Way - Completed Total Time in Status.1', 'In Progress - Completed Total Time in Status.1']
+        ops_df = load_and_parse_ops(ops_bytes, time_cols)
+            
         ops_df['Total Invoice Amount'] = pd.to_numeric(ops_df.get('Total Invoice Amount', pd.Series([0])), errors='coerce').fillna(0.0)
         
         ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
@@ -666,7 +711,10 @@ if time_file and ops_file:
         # TIMESTAMPS CRITICAL LIFECYCLE DISPATCH HOOK DEFINED ON LAUNCH BASE FOR BOTH PIPELINES
         ts_cols = ['Lowes Store - Start Timestamp', 'On The Way - Start Timestamp', 'In Progress - Start Timestamp', 'On The Way - Start Timestamp.1', 'In Progress - Start Timestamp.1']
         available_ts_cols = [c for c in ts_cols if c in ops_df.columns]
-        ops_df['Job_Date'] = ops_df[available_ts_cols].bfill(axis=1).iloc[:, 0]
+        
+        # INTERCEPT AND REPLACE STRING HYPHENS WITH REAL NAT/NAN VALUES SO DIRECT-TO-SITE RUNS DONT FAIL BFILL
+        ops_df['Job_Date'] = ops_df[available_ts_cols].replace('-', np.nan).bfill(axis=1).iloc[:, 0]
+        
         for c in available_ts_cols: ops_df[c + '_dt'] = pd.to_datetime(ops_df[c].astype(str).str.split(' GMT').str[0], errors='coerce')
         available_ts_dt_cols = [c + '_dt' for c in available_ts_cols]
         ops_df['Earliest_Start'] = ops_df[available_ts_dt_cols].min(axis=1)
@@ -699,11 +747,10 @@ if time_file and ops_file:
         validation_warnings = []
         for _, r in unexploded_ops.iterrows():
             raw_members = [m.strip() for m in str(r['Assigned Team Members']).split(',') if m.strip()]
-            for m in raw_members:
-                if m == 'Sean Marble' and 'Water Heaters' in str(r['Business Unit']):
-                    validation_warnings.append(f"🔍 **Upstream Discrepancy Log on Job #{int(r['#ID'])}**: *Sean Marble* (Salaried/Simple Installs Focus) was logged on a *Water Heaters* dispatch run.")
-                if m in ['Bryan Pickett', 'Erik Tange'] and 'Water Heaters' in str(r['Business Unit']):
-                    validation_warnings.append(f"🔍 **Upstream Discrepancy Log on Job #{int(r['#ID'])}**: *{m}* (Piece Rate/Simple Installs Focus) was logged on a *Water Heaters* dispatch run.")
+            core_members_on_job = [m for m in raw_members if m in CORE_TECHS]
+            for member in core_members_on_job:
+                if member in ['Bryan Pickett', 'Sean Marble', 'Erik Tange'] and r['Business Unit'] == 'Lowes - Water Heaters':
+                    validation_warnings.append(f"⚠️ **Upstream Discrepancy Warning:** {member} is listed on Water Heater job ID **#{int(r['#ID'])}** (${r['Total Invoice Amount']:,.2f}) which impacts individual lines of business metric splits.")
         
         # Calculate morning deployment timelines mapped tightly to the first internal employee listed
         ops_for_bounds = ops_df.copy()
@@ -772,8 +819,13 @@ if time_file and ops_file:
         for day in days:
             if day not in job_count_pivot.columns: job_count_pivot[day] = 0
         job_count_pivot = job_count_pivot.rename(columns={d: d + '_Job_Count' for d in days})
+        job_count_pivot['Total_Weekly_Job_Count'] = job_count_pivot[[d + '_Job_Count' for d in days]].sum(axis=1)
         
-        # FIX BUG 1: Calculate Total Weekly Jobs as direct sum of tracked product lines
+        daily_route = ops_df.groupby(['Assigned Team Members', 'Short_Date']).agg(Drive_Time_Hrs=('Drive_Time_Hrs', 'sum'), In_Progress_Time_Hrs=('In_Progress_Time_Hrs', 'sum'), Total_Job_Time_Hours=('Total_Job_Time_Hours', 'sum'), Job_Count=('Total_Job_Time_Hours', 'size')).reset_index()
+        daily_route = daily_route[daily_route['Total_Job_Time_Hours'] > 0].copy()
+        daily_route['Drive %'] = (daily_route['Drive_Time_Hrs'] / daily_route['Total_Job_Time_Hours']) * 100
+        daily_route['Name'] = daily_route['Assigned Team Members']
+        
         final_df = pd.merge(time_df, job_time_pivot, on='Name', how='left').fillna(0)
         if not bu_pivot.empty: final_df = pd.merge(final_df, bu_pivot[['Name', 'Simple_Installs_Hrs', 'Water_Heaters_Hrs', 'Simple_Installs_Count', 'Water_Heaters_Count']], on='Name', how='left').fillna(0)
         else:
@@ -788,9 +840,7 @@ if time_file and ops_file:
         final_df = pd.merge(final_df, tech_rev_agg, on='Name', how='left').fillna(0.0)
         final_df['Rev_Per_Clocked_Hr'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, final_df['Total_Assigned_Revenue'] / final_df['Total_Weekly_Clocked_Hrs'], 0.0)
 
-        # =========================================================================================
-        # 🧪 SEAN MARBLE TIME-SHEET ATTENDANCE ABSENCE EVALUATION CHECK LOOP (GLOBAL SYNCHRONIZATION)
-        # =========================================================================================
+        # Evaluate absences / burden rules dynamically
         sean_timecard = final_df[final_df['Name'] == 'Sean Marble']
         if not sean_timecard.empty:
             sean_row = sean_timecard.iloc[0]
@@ -804,7 +854,6 @@ if time_file and ops_file:
 
         st.session_state['sean_absence_penalty_global'] = sean_penalty_value
 
-        # PERFORMANCE MATRICES GENERATION LAYER
         final_df['LSI_Goal_Hrs'] = final_df['Simple_Installs_Count'] * 2.0
         final_df['WH_Goal_Hrs'] = final_df['Water_Heaters_Count'] * 3.5
         final_df['Total_Goal_Hrs'] = final_df['LSI_Goal_Hrs'] + final_df['WH_Goal_Hrs']
@@ -858,22 +907,10 @@ if time_file and ops_file:
         )
         df_macro_pay['Net_Profit_Raw'] = df_macro_pay['Total Invoice Amount'] - df_macro_pay['Combined_Lowe_Costs'] - df_macro_pay['Assumed_Labor_Payload']
             
-        st.sidebar.header("🔧 Job Status Time Adjustments")
-        global_adj_mins = st.sidebar.number_input("🌍 Global Adj (Minutes)", value=0, step=15, key="global_adj")
-        global_adj_hrs = global_adj_mins / 60.0
-        adjustments = {}
-        for tech in sorted(final_df['Name'].unique()):
-            tech_adj_mins = st.sidebar.number_input(f"{tech} Adj (Minutes)", value=0, step=15, key=f"adj_{tech}")
-            adjustments[tech] = (tech_adj_mins / 60.0) + global_adj_hrs
-            
-        final_df['Adjustment_Hrs'] = final_df['Name'].map(adjustments).fillna(0.0)
         final_df['Total_Weekly_Job_Hrs'] = final_df['Total_Weekly_Job_Hrs'] + final_df['Adjustment_Hrs']
 
         display_dfs = {}
         for day in days:
-            day_ops_df = ops_df[ops_df['Day_of_Week'] == day]
-            day_counts = day_ops_df.groupby('Name').size().to_dict() if not day_ops_df.empty else {}
-            final_df[day + '_Job_Count'] = final_df['Name'].map(day_counts).fillna(0).astype(int)
             final_df[day + '_Diff_Hrs'] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
             final_df[f'{day} Jobs'] = final_df[day + '_Job_Count'].astype(int)
             final_df[f'{day} Clocked'] = final_df[day + '_Clocked_Hrs'].apply(format_hm)
@@ -898,10 +935,7 @@ if time_file and ops_file:
         final_df['Simple Installs'] = final_df['Simple_Installs_Hrs'].apply(format_hm)
         final_df['Water Heaters'] = final_df['Water_Heaters_Hrs'].apply(format_hm)
         
-        final_df['LSI_Eff_Raw'] = np.where(final_df['Assumed_LSI_Clocked'] > 0, (final_df['Simple_Installs_Hrs'] / final_df['Assumed_LSI_Clocked']) * 100, 0.0)
-        final_df['WH_Eff_Raw'] = np.where(final_df['Assumed_WH_Clocked'] > 0, (final_df['Water_Heaters_Hrs'] / final_df['Assumed_WH_Clocked']) * 100, 0.0)
-        
-        # FIX BUG 2: Dynamic condition tracking formatting string arrays as N/A or '-' for clean visibility
+        # FIX BUG 2: Avoid misleading 0% efficiency flags by explicitly masking non-assigned vectors with N/A strings
         final_df['Simple Installs Eff'] = np.where(final_df['Simple_Installs_Count'] > 0, final_df['LSI_Eff_Raw'].map(lambda x: f"{x:.1f}%"), "-")
         final_df['Water Heaters Eff'] = np.where(final_df['Water_Heaters_Count'] > 0, final_df['WH_Eff_Raw'].map(lambda x: f"{x:.1f}%"), "-")
         
@@ -928,7 +962,7 @@ if time_file and ops_file:
         total_job_hrs_sum = final_df['Total_Weekly_Job_Hrs'].sum()
         total_diff_hrs_sum = final_df['Total_Weekly_Diff_Hrs'].sum()
         
-        # FIX BUG 1: Total Jobs cleanly sums LSI Jobs + WH Jobs directly
+        # FIX BUG 1: Force absolute mathematical sum total tracking alignment
         total_jobs_sum = total_lsi_jobs_sum + total_wh_jobs_sum
         
         total_lsi_goal_hrs = final_df['Assumed_LSI_Clocked'].sum()
@@ -954,7 +988,7 @@ if time_file and ops_file:
         bu_summary_df = pd.concat([bu_summary_df, total_row], ignore_index=True)
         display_dfs['Weekly'] = bu_summary_df
 
-        # Secure total summaries layout mapping metrics securely inside parameters bounds
+        # Secure financial and pay summary details
         total_assumed_pay_adjusted = max(0.0, df_macro_pay['Assumed_Labor_Payload'].sum() - sean_penalty_value)
         pay_ratio_pct_adjusted = (total_assumed_pay_adjusted / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
 
@@ -984,7 +1018,7 @@ if time_file and ops_file:
         with tabs[0]:
             st.markdown('<h3>Weekly Efficiency Summary</h3>', unsafe_allow_html=True)
             
-            # --- SUGGESTION 1: DISPLAY INTEGRITY ALERTS CANVAS ---
+            # Render Upstream Integrity Warning Banner if clerical logging slips occur
             if validation_warnings:
                 with st.expander("⚠️ Upstream Data Integrity Notices", expanded=True):
                     for warning in validation_warnings:
@@ -1020,7 +1054,8 @@ if time_file and ops_file:
                         return ['background-color: #e2e3e5; font-weight: bold; color: #383d41;'] * len(row)
                     styles = [''] * len(row)
                     idx = row.index.get_loc('WH Efficiency')
-                    styles[idx] = 'background-color: #fff3cd; font-weight: bold; color: #856404;'
+                    if row[idx] != '-':
+                        styles[idx] = 'background-color: #fff3cd; font-weight: bold; color: #856404;'
                     return styles
                 
                 styled_weekly = display_dfs['Weekly'].reset_index(drop=True).style.apply(highlight_weekly_rows, axis=1)
