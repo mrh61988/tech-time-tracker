@@ -37,28 +37,73 @@ def clean_duration_value(val):
 
 @st.cache_data
 def load_and_parse_timesheet(time_bytes):
-    """Caches and parses raw timesheet CSV data safely handling manual entries and dynamic schemas."""
+    """Caches and parses raw timesheet CSV data safely handling manual entries and dynamic schemas without greedy overrides."""
     try:
         sample_df = pd.read_csv(io.BytesIO(time_bytes))
+        columns_lower = [str(c).lower().strip() for c in sample_df.columns]
         
-        # --- DYNAMIC SCHEMA NORMALIZATION FOR TIMESHEETS ---
+        # --- NON-GREEDY SCHEMA SELECTION ---
+        # 1. Identify User Column Precisely
+        user_col = None
+        for target in ['user', 'employee', 'technician', 'employee name', 'tech name', 'username', 'name']:
+            if target in columns_lower:
+                user_col = sample_df.columns[columns_lower.index(target)]
+                break
+        if not user_col:
+            for c in sample_df.columns:
+                if 'user' in str(c).lower() or 'employee' in str(c).lower() or 'tech' in str(c).lower():
+                    user_col = c
+                    break
+                    
+        # 2. Identify Clock In Column Precisely
+        in_col = None
+        for target in ['clock in date/time', 'clock in', 'punch in', 'start time', 'clock-in']:
+            if target in columns_lower:
+                in_col = sample_df.columns[columns_lower.index(target)]
+                break
+        if not in_col:
+            for c in sample_df.columns:
+                if 'clock in' in str(c).lower() or 'punch in' in str(c).lower():
+                    in_col = c
+                    break
+
+        # 3. Identify Clock Out Column Precisely
+        out_col = None
+        for target in ['clock out date/time', 'clock out', 'punch out', 'end time', 'clock-out']:
+            if target in columns_lower:
+                out_col = sample_df.columns[columns_lower.index(target)]
+                break
+        if not out_col:
+            for c in sample_df.columns:
+                if 'clock out' in str(c).lower() or 'punch out' in str(c).lower():
+                    out_col = c
+                    break
+
+        # 4. Identify Duration Column Precisely
+        duration_col = None
+        for target in ['hours', 'duration', 'total hours', 'logged hours', 'pay hours', 'calculated hours', 'duration hrs', 'duration_hrs']:
+            if target in columns_lower:
+                duration_col = sample_df.columns[columns_lower.index(target)]
+                break
+        if not duration_col:
+            for c in sample_df.columns:
+                cl = str(c).lower()
+                if 'hour' in cl or 'hrs' in cl or 'duration' in cl:
+                    duration_col = c
+                    break
+                    
+        # Apply strict renames
         rename_map = {}
-        for c in sample_df.columns:
-            cl = str(c).lower()
-            if 'user' in cl or 'employee' in cl or 'tech' in cl:
-                rename_map[c] = 'User'
-            elif 'clock in' in cl or 'punch in' in cl or 'start time' in cl:
-                rename_map[c] = 'Clock In Date/Time'
-            elif 'clock out' in cl or 'punch out' in cl or 'end time' in cl:
-                rename_map[c] = 'Clock Out Date/Time'
-            elif cl in ['hours', 'duration', 'total hours', 'logged hours', 'pay hours', 'calculated hours']:
-                rename_map[c] = 'Native_Duration'
-                
+        if user_col: rename_map[user_col] = 'User'
+        if in_col: rename_map[in_col] = 'Clock In Date/Time'
+        if out_col: rename_map[out_col] = 'Clock Out Date/Time'
+        if duration_col: rename_map[duration_col] = 'Native_Duration'
+        
         sample_df = sample_df.rename(columns=rename_map)
         
         if 'User' in sample_df.columns:
             # Extract standard dates and days of the week
-            if 'Clock In Date/Time' in sample_df.columns:
+            if 'Clock In Date/Time' in sample_df.columns and sample_df['Clock In Date/Time'].notna().any():
                 sample_df['Clock_In_dt'] = pd.to_datetime(sample_df['Clock In Date/Time'], errors='coerce')
                 sample_df['Day_of_Week'] = sample_df['Clock_In_dt'].dt.day_name().str[:3]
                 sample_df['Date_Group'] = sample_df['Clock_In_dt'].dt.date
@@ -67,20 +112,18 @@ def load_and_parse_timesheet(time_bytes):
                 sample_df['Date_Group'] = None
                 
             # Fallback date scanning for manual entries missing punch-in timestamps
+            if 'Date_Group' not in sample_df.columns or sample_df['Date_Group'].isna().all():
+                sample_df['Date_Group'] = np.nan
+            if 'Day_of_Week' not in sample_df.columns or sample_df['Day_of_Week'].isna().all():
+                sample_df['Day_of_Week'] = np.nan
+                
             for c in sample_df.columns:
-                if 'date' in str(c).lower() and c != 'Date_Group':
+                if 'date' in str(c).lower() and c not in ['Date_Group', 'Clock In Date/Time', 'Clock Out Date/Time']:
                     parsed_dates = pd.to_datetime(sample_df[c], errors='coerce')
-                    if sample_df['Date_Group'] is None:
-                        sample_df['Date_Group'] = parsed_dates.dt.date
-                    else:
-                        sample_df['Date_Group'] = sample_df['Date_Group'].fillna(parsed_dates.dt.date)
-                    if sample_df['Day_of_Week'] is None:
-                        sample_df['Day_of_Week'] = parsed_dates.dt.day_name().str[:3]
-                    else:
-                        sample_df['Day_of_Week'] = sample_df['Day_of_Week'].fillna(parsed_dates.dt.day_name().str[:3])
+                    sample_df['Date_Group'] = sample_df['Date_Group'].fillna(parsed_dates.dt.date)
+                    sample_df['Day_of_Week'] = sample_df['Day_of_Week'].fillna(parsed_dates.dt.day_name().str[:3])
             
             # --- STEP 1: CALCULATE DURATION ---
-            # Prioritize the file's native pre-calculated column if it exists to catch manual sheet blocks
             if 'Native_Duration' in sample_df.columns:
                 sample_df['Duration_Hrs'] = sample_df['Native_Duration'].apply(clean_duration_value)
             else:
@@ -92,7 +135,6 @@ def load_and_parse_timesheet(time_bytes):
             sample_df['Day_of_Week'] = sample_df['Day_of_Week'].fillna('Thu')
             
             # --- STEP 2: AUTOMATIC OVERRIDE DEDUREPLICATION ---
-            # If a day contains an explicit manual adjustment AND a generic automated stamp, drop the error
             if 'Clock In Date/Time' in sample_df.columns and 'Native_Duration' in sample_df.columns:
                 sample_df['Is_Manual_Edit'] = (
                     sample_df['Clock In Date/Time'].isna() | 
@@ -100,17 +142,15 @@ def load_and_parse_timesheet(time_bytes):
                     sample_df['Native_Duration'].astype(str).str.contains('hour|min|h|m', case=False, na=False)
                 )
                 
-                # Identify specific user-days containing a manual sheet edit row
                 manual_edits = sample_df[sample_df['Is_Manual_Edit'] & sample_df['Date_Group'].notna()]
                 days_with_manuals = set(zip(manual_edits['User'], manual_edits['Date_Group']))
                 
                 if days_with_manuals:
-                    # Filter function to drop automated duplicates if a manual override is present
                     def drop_ghost_punches(row):
                         if pd.isna(row['Date_Group']):
                             return True
                         if (row['User'], row['Date_Group']) in days_with_manuals and not row['Is_Manual_Edit']:
-                            return False # Discard the automated tracking row
+                            return False 
                         return True
                         
                     sample_df = sample_df[sample_df.apply(drop_ghost_punches, axis=1)]
@@ -127,7 +167,7 @@ def load_and_parse_timesheet(time_bytes):
             return pivot_df, sample_df
             
     except Exception as e:
-        pass
+        st.sidebar.error(f"Timesheet structural parse alert: {e}")
     
     # Fallback to manual line parser for custom CSV output text streams
     time_content = time_bytes.decode("utf-8").splitlines()
@@ -495,7 +535,7 @@ def create_copy_button(df, raw_key):
     button_html = f"""
     <div class="hide-on-print" style="text-align: left; margin-top: 5px; margin-bottom: 8px;">
         <textarea id="tsv_{safe_key}" style="position: absolute; left: -9999px;">{safe_tsv}</textarea>
-        <button id="btn_{safe_key}" onclick="copyTSV_{safe_key}()" style="background-color: #ffffff; color: #3c4043; padding: 6px 14px; border: 1px solid #dadce0; border-radius: 4px; cursor: pointer; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: background-color 0.2s;">
+        <button id="btn_{safe_key}" onclick="copyTSV_{safe_key}()" style="background-color: #ffffff; color: #3c4043; padding: 6px 14px; border: 1px solid #dadce0; border-radius: 4px; cursor: pointer; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); transition: background-color 0.2s;">
             📋 Copy Table Data (For Email/Sheets/Docs)
         </button>
     </div>
@@ -1475,7 +1515,7 @@ if time_file and ops_file:
                 route_eff = route_eff.sort_values(by='Rev per Drive Hour Raw', ascending=False)
                 route_eff['Total Assigned Revenue'] = route_eff['Total_Revenue'].apply(lambda x: f"${x:,.2f}")
                 route_eff['Total Drive Hours'] = route_eff['Total_Drive_Hrs'].apply(lambda x: f"{x:.1f} hrs")
-                route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"${x:.1f}/hr")
+                route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"{x:.1f}/hr")
                 
                 st.dataframe(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True), use_container_width=True)
 
@@ -1662,7 +1702,7 @@ if time_file and ops_file:
                 
                 st.dataframe(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True), use_container_width=True)
 
-            if "QN End-of-Day (EOD) Payroll Slippage Auditor" in test_choices:
+            if "🚛 End-of-Day (EOD) Payroll Slippage Auditor" in test_choices:
                 st.markdown("### **🚛 End-of-Day (EOD) Payroll Slippage Auditor**")
                 st.markdown("*(Flags instances where a technician remained clocked in for more than 90 minutes after completing their final job order)*")
                 
