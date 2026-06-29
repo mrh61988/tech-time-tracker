@@ -2,22 +2,120 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
+import re
 
 # Set up the page layout
 st.set_page_config(page_title="Tech Time Tracker", layout="wide")
 
 # --- PERFORMANCE CACHING PIPELINE FUNCTIONS ---
+def clean_duration_value(val):
+    """Helper function to translate string durations like '9 hours 22 mins' or '9:22' into decimal hours."""
+    if pd.isna(val) or str(val).strip() in ['-', '', '0', '0:00']:
+        return 0.0
+    s = str(val).lower().strip()
+    try:
+        # Handle HH:MM formats
+        if ':' in s:
+            parts = s.split(':')
+            h = int(parts[0])
+            m = int(parts[1]) if len(parts) > 1 else 0
+            return h + (m / 60.0)
+        
+        # Handle text formats like "9 hours 22 mins" or "9h 22m"
+        h_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:hour|hr|h)', s)
+        m_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:min|m)', s)
+        
+        hours = float(h_match.group(1)) if h_match else 0.0
+        minutes = float(m_match.group(1)) if m_match else 0.0
+        
+        if not h_match and not m_match:
+            return float(s)
+            
+        return hours + (minutes / 60.0)
+    except:
+        return 0.0
+
 @st.cache_data
 def load_and_parse_timesheet(time_bytes):
-    """Caches and parses raw timesheet CSV data to prevent slow re-computations."""
+    """Caches and parses raw timesheet CSV data safely handling manual entries and dynamic schemas."""
     try:
         sample_df = pd.read_csv(io.BytesIO(time_bytes))
+        
+        # --- DYNAMIC SCHEMA NORMALIZATION FOR TIMESHEETS ---
+        rename_map = {}
+        for c in sample_df.columns:
+            cl = str(c).lower()
+            if 'user' in cl or 'employee' in cl or 'tech' in cl:
+                rename_map[c] = 'User'
+            elif 'clock in' in cl or 'punch in' in cl or 'start time' in cl:
+                rename_map[c] = 'Clock In Date/Time'
+            elif 'clock out' in cl or 'punch out' in cl or 'end time' in cl:
+                rename_map[c] = 'Clock Out Date/Time'
+            elif cl in ['hours', 'duration', 'total hours', 'logged hours', 'pay hours', 'calculated hours']:
+                rename_map[c] = 'Native_Duration'
+                
+        sample_df = sample_df.rename(columns=rename_map)
+        
         if 'User' in sample_df.columns:
-            sample_df['Clock_In_dt'] = pd.to_datetime(sample_df['Clock In Date/Time'], errors='coerce')
-            sample_df['Clock_Out_dt'] = pd.to_datetime(sample_df['Clock Out Date/Time'], errors='coerce') 
-            sample_df['Duration_Hrs'] = (sample_df['Clock_Out_dt'] - sample_df['Clock_In_dt']).dt.total_seconds() / 3600.0
-            sample_df['Day_of_Week'] = sample_df['Clock_In_dt'].dt.day_name().str[:3]
+            # Extract standard dates and days of the week
+            if 'Clock In Date/Time' in sample_df.columns:
+                sample_df['Clock_In_dt'] = pd.to_datetime(sample_df['Clock In Date/Time'], errors='coerce')
+                sample_df['Day_of_Week'] = sample_df['Clock_In_dt'].dt.day_name().str[:3]
+                sample_df['Date_Group'] = sample_df['Clock_In_dt'].dt.date
+            else:
+                sample_df['Day_of_Week'] = None
+                sample_df['Date_Group'] = None
+                
+            # Fallback date scanning for manual entries missing punch-in timestamps
+            for c in sample_df.columns:
+                if 'date' in str(c).lower() and c != 'Date_Group':
+                    parsed_dates = pd.to_datetime(sample_df[c], errors='coerce')
+                    if sample_df['Date_Group'] is None:
+                        sample_df['Date_Group'] = parsed_dates.dt.date
+                    else:
+                        sample_df['Date_Group'] = sample_df['Date_Group'].fillna(parsed_dates.dt.date)
+                    if sample_df['Day_of_Week'] is None:
+                        sample_df['Day_of_Week'] = parsed_dates.dt.day_name().str[:3]
+                    else:
+                        sample_df['Day_of_Week'] = sample_df['Day_of_Week'].fillna(parsed_dates.dt.day_name().str[:3])
             
+            # --- STEP 1: CALCULATE DURATION ---
+            # Prioritize the file's native pre-calculated column if it exists to catch manual sheet blocks
+            if 'Native_Duration' in sample_df.columns:
+                sample_df['Duration_Hrs'] = sample_df['Native_Duration'].apply(clean_duration_value)
+            else:
+                sample_df['Clock_In_dt'] = pd.to_datetime(sample_df['Clock In Date/Time'], errors='coerce')
+                sample_df['Clock_Out_dt'] = pd.to_datetime(sample_df['Clock Out Date/Time'], errors='coerce') 
+                sample_df['Duration_Hrs'] = (sample_df['Clock_Out_dt'] - sample_df['Clock_In_dt']).dt.total_seconds() / 3600.0
+            
+            sample_df['Duration_Hrs'] = sample_df['Duration_Hrs'].fillna(0.0)
+            sample_df['Day_of_Week'] = sample_df['Day_of_Week'].fillna('Thu')
+            
+            # --- STEP 2: AUTOMATIC OVERRIDE DEDUPLICATION ---
+            # If a day contains an explicit manual adjustment AND a generic automated stamp, drop the error
+            if 'Clock In Date/Time' in sample_df.columns and 'Native_Duration' in sample_df.columns:
+                sample_df['Is_Manual_Edit'] = (
+                    sample_df['Clock In Date/Time'].isna() | 
+                    sample_df['Clock Out Date/Time'].isna() | 
+                    sample_df['Native_Duration'].astype(str).str.contains('hour|min|h|m', case=False, na=False)
+                )
+                
+                # Identify specific user-days containing a manual sheet edit row
+                manual_edits = sample_df[sample_df['Is_Manual_Edit'] & sample_df['Date_Group'].notna()]
+                days_with_manuals = set(zip(manual_edits['User'], manual_edits['Date_Group']))
+                
+                if days_with_manuals:
+                    # Filter function to drop automated duplicates if a manual override is present
+                    def drop_ghost_punches(row):
+                        if pd.isna(row['Date_Group']):
+                            return True
+                        if (row['User'], row['Date_Group']) in days_with_manuals and not row['Is_Manual_Edit']:
+                            return False # Discard the automated tracking row
+                        return True
+                        
+                    sample_df = sample_df[sample_df.apply(drop_ghost_punches, axis=1)]
+
+            # --- STEP 3: CONSTRUCT DOWNSTREAM MATRIX ---
             pivot_df = sample_df.groupby(['User', 'Day_of_Week'])['Duration_Hrs'].sum().unstack(fill_value=0.0).reset_index()
             days_order = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
             for d in days_order:
@@ -27,7 +125,8 @@ def load_and_parse_timesheet(time_bytes):
             pivot_df.columns = ['Name'] + [d + '_Clocked_Hrs' for d in days_order]
             pivot_df['Total_Weekly_Clocked_Hrs'] = pivot_df[[d + '_Clocked_Hrs' for d in days_order]].sum(axis=1)
             return pivot_df, sample_df
-    except:
+            
+    except Exception as e:
         pass
     
     # Fallback to manual line parser for custom CSV output text streams
@@ -58,7 +157,6 @@ def load_and_parse_ops(ops_bytes):
     """Caches and executes precision timedelta parsing utilizing dynamic schema mapping to prevent header changes from breaking the app."""
     try:
         ops_df = pd.read_csv(io.BytesIO(ops_bytes), header=0)
-        # Scan to see if standard identifier rows exist, otherwise assume header offset
         if not any('assigned' in str(c).lower() and 'team' in str(c).lower() for c in ops_df.columns):
             ops_df = pd.read_csv(io.BytesIO(ops_bytes), header=1)
     except:
@@ -67,7 +165,6 @@ def load_and_parse_ops(ops_bytes):
     # --- DYNAMIC SCHEMA NORMALIZATION (SCHEMA PROTECTION) ---
     cols = ops_df.columns.astype(str).tolist()
     
-    # 1. Normalize Core Functional Columns
     rename_map = {}
     for c in cols:
         cl = c.lower()
@@ -80,13 +177,11 @@ def load_and_parse_ops(ops_bytes):
         
     ops_df = ops_df.rename(columns=rename_map)
     
-    # Safety fallback if utterly unidentifiable
     if 'Assigned Team Members' not in ops_df.columns:
         ops_df['Assigned Team Members'] = None
         
     ops_df = ops_df.dropna(subset=['Assigned Team Members'])
     
-    # 2. Identify Duration Columns Dynamically
     cols = ops_df.columns.astype(str).tolist()
     store_time_cols = [c for c in cols if 'store' in c.lower() and 'time' in c.lower() and 'timestamp' not in c.lower()]
     drive_time_cols = [c for c in cols if 'way' in c.lower() and 'time' in c.lower() and 'timestamp' not in c.lower()]
@@ -98,7 +193,6 @@ def load_and_parse_ops(ops_bytes):
         clean_times = ops_df[col].astype(str).replace('-', '00:00:00')
         ops_df[col] = pd.to_timedelta(clean_times, errors='coerce').dt.total_seconds().fillna(0)
         
-    # 3. Identify Timestamp Status Columns Dynamically
     store_ts_cols = [c for c in cols if 'store' in c.lower() and 'timestamp' in c.lower()]
     drive_ts_cols = [c for c in cols if 'way' in c.lower() and 'timestamp' in c.lower()]
     prog_ts_cols = [c for c in cols if 'progress' in c.lower() and 'timestamp' in c.lower()]
@@ -670,47 +764,7 @@ if time_file and ops_file:
         
         # --- 1. Parser Engine for Time Sheets ---
         time_bytes = time_file.getvalue()
-        try:
-            sample_df = pd.read_csv(io.BytesIO(time_bytes))
-            if 'User' in sample_df.columns:
-                sample_df['Clock_In_dt'] = pd.to_datetime(sample_df['Clock In Date/Time'], errors='coerce')
-                sample_df['Clock_Out_dt'] = pd.to_datetime(sample_df['Clock Out Date/Time'], errors='coerce') 
-                sample_df['Duration_Hrs'] = (sample_df['Clock_Out_dt'] - sample_df['Clock_In_dt']).dt.total_seconds() / 3600.0
-                sample_df['Day_of_Week'] = sample_df['Clock_In_dt'].dt.day_name().str[:3]
-                
-                pivot_df = sample_df.groupby(['User', 'Day_of_Week'])['Duration_Hrs'].sum().unstack(fill_value=0.0).reset_index()
-                days_order = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-                for d in days_order:
-                    if d not in pivot_df.columns:
-                        pivot_df[d] = 0.0
-                pivot_df = pivot_df[['User'] + days_order]
-                pivot_df.columns = ['Name'] + [d + '_Clocked_Hrs' for d in days_order]
-                pivot_df['Total_Weekly_Clocked_Hrs'] = pivot_df[[d + '_Clocked_Hrs' for d in days_order]].sum(axis=1)
-                pivot_df['Days_Worked'] = (pivot_df[[f'{d}_Clocked_Hrs' for d in days_order]] > 0).sum(axis=1)
-                time_df = pivot_df
-            else:
-                raise ValueError("fallback")
-        except:
-            time_content = time_bytes.decode("utf-8").splitlines()
-            time_lines = time_content[1:] 
-            data = []
-            for i in range(0, len(time_lines), 9):
-                if i + 8 < len(time_lines):
-                    name = time_lines[i].strip().rstrip(',').strip('"')
-                    sun = time_lines[i+1].strip()
-                    mon = time_lines[i+2].strip()
-                    tue = time_lines[i+3].strip()
-                    wed = time_lines[i+4].strip()
-                    thu = time_lines[i+5].strip()
-                    fri = time_lines[i+6].strip()
-                    sat = time_lines[i+7].strip()
-                    total = time_lines[i+8].strip()
-                    data.append([name, sun, mon, tue, wed, thu, fri, sat, total])
-            
-            time_df = pd.DataFrame(data, columns=['Name', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Total_Weekly'])
-            days_order = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-            for col in days_order + ['Total_Weekly']: time_df[col + '_Clocked_Hrs'] = time_df[col].apply(parse_hm)
-            time_df['Days_Worked'] = (time_df[[f'{d}_Clocked_Hrs' for d in days_order]] > 0).sum(axis=1)
+        time_df, sample_df = load_and_parse_timesheet(time_bytes)
         
         time_df = time_df[time_df['Name'].isin(CORE_TECHS)]
         
@@ -719,6 +773,7 @@ if time_file and ops_file:
                 time_df.loc[time_df['Name'] == tech, 'Total_Weekly_Clocked_Hrs'] += adj
         
         days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+        time_df['Days_Worked'] = (time_df[[f'{d}_Clocked_Hrs' for d in days]] > 0).sum(axis=1)
         
         # --- 2. Parse Ops Sheet Resiliently ---
         ops_bytes = ops_file.getvalue()
@@ -791,13 +846,12 @@ if time_file and ops_file:
             if not core_members_on_job:
                 continue
                 
-            # Divide revenue evenly by the number of core techs on the job
             split_revenue = row['Total Invoice Amount'] / len(core_members_on_job)
             
             for member in core_members_on_job:
                 new_row = row.copy()
                 new_row['Assigned Team Members'] = member
-                new_row['Total Invoice Amount'] = split_revenue # <--- Applies the split here
+                new_row['Total Invoice Amount'] = split_revenue
                 exploded_rows.append(new_row)
                 
         if exploded_rows:
@@ -805,7 +859,6 @@ if time_file and ops_file:
         else:
             ops_df = pd.DataFrame(columns=ops_df.columns)
 
-        # Force variable mirroring for downstream mapping
         ops_df['Name'] = ops_df['Assigned Team Members']
 
         # --- FIX 2: MORNING LAUNCH BIAS (Calculated Post-Explosion) ---
@@ -818,9 +871,7 @@ if time_file and ops_file:
             First_Status=('Earliest_Status', 'first')
         ).reset_index()
         
-        # Rename back to 'Assigned Team Members' for downstream UI compatibility
         bounds_df = bounds_df.rename(columns={'Name': 'Assigned Team Members'})
-        
         bounds_df['First Status Update'] = bounds_df['First_Punch'].dt.strftime('%I:%M %p')
         bounds_df['Last Status Update'] = bounds_df['Last_Punch'].dt.strftime('%I:%M %p')
         bounds_df['Total_Span_Hrs'] = (bounds_df['Last_Punch'] - bounds_df['First_Punch']).dt.total_seconds() / 3600.0
@@ -870,7 +921,6 @@ if time_file and ops_file:
             final_df['Simple_Installs_Count'] = final_df['Water_Heaters_Count'] = 0
             
         final_df['Total_Weekly_Job_Count'] = final_df['Simple_Installs_Count'] + final_df['Water_Heaters_Count']
-        final_df['Days_Worked'] = (final_df[[f'{d}_Clocked_Hrs' for d in days]] > 0).sum(axis=1)
         
         tech_rev_agg = ops_df.groupby('Name')['Total Invoice Amount'].sum().reset_index()
         tech_rev_agg.columns = ['Name', 'Total_Assigned_Revenue']
@@ -928,8 +978,6 @@ if time_file and ops_file:
             df_macro_pay.get('Business Unit') == 'Lowes - Simple Installs'
         ]
         
-        # Dropped the artificial $65/$110 floors for Simple Installs down to 0.0
-        # This ensures standard hourly techs bill at their actual logged time cost
         solo_labor_rates = [100.0, 0.0] 
         multi_labor_rates = [175.0, 0.0] 
         
@@ -949,21 +997,15 @@ if time_file and ops_file:
         df_macro_pay['Flat_Rate_Labor'] = df_macro_pay['Cost_Burden_Sub']
         df_macro_pay['Logged_Time_Pay'] = df_macro_pay['#ID'].map(ops_df.groupby('#ID')['Allocated_Job_Pay'].sum().to_dict()).fillna(0.0)
         
-        # Base Labor Payload Assumption
         df_macro_pay['Assumed_Labor_Payload'] = np.where(
             (df_macro_pay.get('Business Unit') == 'Lowes - Simple Installs') & df_macro_pay['Is_Contractor'],
             df_macro_pay['Total Invoice Amount'],
             np.maximum(df_macro_pay['Flat_Rate_Labor'], df_macro_pay['Logged_Time_Pay'])
         )
         
-        # --- NEW OVERRIDE: Piece-Rate Simple Installs Rule ---
-        # Identifies if Bryan or Erik are on the job
         df_macro_pay['Has_Bryan_Erik'] = df_macro_pay['Assigned Team Members'].str.lower().str.contains('bryan|erik', na=False)
-        
-        # Calculates 34% of the total un-split invoice + $44 per helper
         df_macro_pay['BE_Simple_Install_Pay'] = (df_macro_pay['Total Invoice Amount'] * 0.34) + (np.maximum(0, df_macro_pay['Tech_Count'] - 1) * 44.0)
         
-        # Applies the override specifically to Simple Installs where they are present
         df_macro_pay['Assumed_Labor_Payload'] = np.where(
             (df_macro_pay.get('Business Unit') == 'Lowes - Simple Installs') & df_macro_pay['Has_Bryan_Erik'],
             df_macro_pay['BE_Simple_Install_Pay'],
@@ -1181,7 +1223,7 @@ if time_file and ops_file:
                 
             df_prof_totals = df_macro_pay.copy()
             if selected_bu_filter != "All Sectors":
-                df_prof_totals = df_prof_totals[df_prof_totals.get('Business Unit') == selected_bu_filter]
+                df_prof_totals = df_prof_totals[df_prof_totals.get('Business Unit'] == selected_bu_filter]
                 
             if not df_prof_totals.empty:
                 gross_revenue_sum = df_prof_totals['Total Invoice Amount'].sum()
@@ -1609,12 +1651,23 @@ if time_file and ops_file:
                     create_copy_button(final_yield_df, "geographic_revenue_yield_drive_hour")
                 else: st.info("Location Address column missing from raw ops datasets.")
 
+            if "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)" in test_choices:
+                st.markdown("### **🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)**")
+                route_eff = ops_df.groupby('Name').agg(Total_Revenue=('Total Invoice Amount', 'sum'), Total_Drive_Hrs=('Drive_Time_Hrs', 'sum')).reset_index()
+                route_eff['Rev per Drive Hour Raw'] = np.where(route_eff['Total_Drive_Hrs'] > 0, route_eff['Total_Revenue'] / route_eff['Total_Drive_Hrs'], 0.0)
+                route_eff = route_eff.sort_values(by='Rev per Drive Hour Raw', ascending=False)
+                route_eff['Total Assigned Revenue'] = route_eff['Total_Revenue'].apply(lambda x: f"${x:,.2f}")
+                route_eff['Total Drive Hours'] = route_eff['Total_Drive_Hrs'].apply(lambda x: f"{x:.1f} hrs")
+                route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"${x:.1f}/hr")
+                
+                st.dataframe(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True), use_container_width=True)
+
             if "🚛 End-of-Day (EOD) Payroll Slippage Auditor" in test_choices:
                 st.markdown("### **🚛 End-of-Day (EOD) Payroll Slippage Auditor**")
                 st.markdown("*(Flags instances where a technician remained clocked in for more than 90 minutes after completing their final job order)*")
                 
                 if 'sample_df' in locals() and not bounds_df.empty:
-                    sample_df['Short_Date'] = sample_df['Clock_In_dt'].dt.strftime('%m-%d-%Y')
+                    sample_df['Short_Date'] = pd.to_datetime(sample_df['Clock In Date/Time'], errors='coerce').dt.strftime('%m-%d-%Y')
                     ts_eod = sample_df.groupby(['User', 'Short_Date'])['Clock_Out_dt'].max().reset_index()
                     ts_eod.columns = ['Assigned Team Members', 'Short_Date', 'Actual_Clock_Out']
                     
