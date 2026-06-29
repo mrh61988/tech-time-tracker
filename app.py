@@ -1007,7 +1007,9 @@ if time_file and ops_file:
             'Total Efficiency': f"{blended_total_eff:.1f}%",
             'Total Unallocated Hours': format_hm(total_diff_hrs_sum)
         }])
-        bu_summary_df = pd.concat([bu_summary_df, total_row], ignore_index=True)
+        
+        # CONCAT FLIPPED: Total Row is inserted First so it locks to the top
+        bu_summary_df = pd.concat([total_row, bu_summary_df], ignore_index=True)
         display_dfs['Weekly'] = bu_summary_df
 
         # Secure financial and pay summary details
