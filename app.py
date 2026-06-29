@@ -185,12 +185,12 @@ def check_late(row):
     return False
 
 def check_contractor(tech_str):
-    CORE_TECHS = ['Bryan Pickett', 'Edward Lopez', 'Erik Tange', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
+    CORE_TECHS = ['Bryan Pickett', 'Edward Lopez', 'Erik Tange', 'Matt Hodges', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
     raw_members = [m.strip() for m in str(tech_str).split(',') if m.strip()]
     return not any(m in CORE_TECHS for m in raw_members)
 
 def get_first_core_tech(tech_str):
-    CORE_TECHS = ['Bryan Pickett', 'Edward Lopez', 'Erik Tange', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
+    CORE_TECHS = ['Bryan Pickett', 'Edward Lopez', 'Erik Tange', 'Matt Hodges', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
     raw_members = [m.strip() for m in str(tech_str).split(',') if m.strip()]
     core_members_on_job = [m for m in raw_members if m in CORE_TECHS]
     if core_members_on_job:
@@ -240,7 +240,7 @@ def get_assumed_pay(row):
         base_salary = 70000.0 / 52.0
         penalty_burden = st.session_state.get('sean_absence_penalty_global', 0.0)
         return max(0.0, base_salary - penalty_burden)
-    if 'michael owens' in nl:
+    if 'michael owens' in nl or 'matt hodges' in nl:
         return 65000.0 / 52.0
     if 'bryan' in nl or 'erik' in nl:
         return rev * 0.33
@@ -248,7 +248,7 @@ def get_assumed_pay(row):
     rate = 0.0
     if 'nate' in nl or 'nathan' in nl:
         rate = 22.50
-    elif any(n in nl for n in ['edward', 'matt', 'tanner']):
+    elif any(n in nl for n in ['edward', 'tanner']) or 'matt schlosser' in nl:
         rate = 25.00
         
     if rate > 0:
@@ -569,7 +569,7 @@ ops_file = st.sidebar.file_uploader("Upload Lowes Ops Export (CSV)", type=['csv'
 
 if time_file and ops_file:
     try:
-        CORE_TECHS = ['Bryan Pickett', 'Edward Lopez', 'Erik Tange', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
+        CORE_TECHS = ['Bryan Pickett', 'Edward Lopez', 'Erik Tange', 'Matt Hodges', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
         
         # --- 1. Parser Engine for Time Sheets ---
         time_bytes = time_file.getvalue()
@@ -1235,7 +1235,7 @@ if time_file and ops_file:
                     tech_name = row['Name']
                     nl = tech_name.lower()
                     pay_type = "Hourly"
-                    if "sean marble" in nl or "michael owens" in nl:
+                    if "sean marble" in nl or "michael owens" in nl or "matt hodges" in nl:
                         pay_type = "Salary"
                     elif "bryan" in nl or "erik" in nl:
                         pay_type = "Piece Rate"
@@ -1376,7 +1376,7 @@ if time_file and ops_file:
                     
                     rate = 0.0
                     if 'nate' in nl or 'nathan' in nl: rate = 22.50
-                    elif any(n in nl for n in ['edward', 'matt', 'tanner']): rate = 25.00
+                    elif any(n in nl for n in ['edward', 'tanner']) or 'matt schlosser' in nl: rate = 25.00
                     
                     if clocked > 40.0 and rate > 0:
                         ot_hours = clocked - 40.0
