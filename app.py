@@ -213,14 +213,13 @@ def highlight_matrix_overhead(s):
                 t_h = parse_hm(tech_str)
                 d_h = parse_hm(div_str.replace(')', ''))
                 
-                # Check if we are currently evaluating the Avg WH Time column
+                # Strict evaluation logic specifically targeting the Avg WH Time column
                 if hasattr(s, 'name') and s.name == 'Avg WH Time':
-                    # Strict evaluation: flag if tech time is greater than div time
                     if t_h > d_h and t_h > 0:
                         styles.append('background-color: #ffcccc; color: #990000;')
                         continue
                 else:
-                    # Original logic: flag if tech time is >25% higher than div time
+                    # Original logic: flag if tech average is >25% higher than division baseline
                     if t_h > d_h * 1.25 and t_h > 0:
                         styles.append('background-color: #ffcccc; color: #990000;')
                         continue
