@@ -110,13 +110,10 @@ def load_and_parse_ops(ops_bytes):
 st.markdown("""
 <style>
 @media print {
-    /* Enforce landscape orientation to maximize wide printable space layout margins */
     @page {
         size: landscape;
         margin: 0.4in !important;
     }
-
-    /* Hide structural utility blocks, upload buttons, tabs navigation bars, and panels from saved PDFs */
     header { display: none !important; }
     [data-testid="stHeader"] { display: none !important; }
     [data-testid="stSidebar"] { display: none !important; section[data-testid="stSidebar"] { display: none !important; } [data-testid="stSidebarCollapseButton"] { display: none !important; } }
@@ -126,7 +123,6 @@ st.markdown("""
     h1, .hide-on-print, .stAlert, iframe, button { display: none !important; }
     div[class*="stExpander"] { display: none !important; }
     
-    /* Flatten flex and grid containers to standard sequential blocks to block overlapping */
     div[class*="stVerticalBlock"], 
     div[data-testid="element-container"],
     div[data-testid="stHorizontalBlock"],
@@ -152,7 +148,6 @@ st.markdown("""
         margin-bottom: 8px !important;
     }
 
-    /* Unclamp core block layout canvas gutters to run margin-to-margin smoothly */
     div[data-testid="stAppViewBlockContainer"],
     .main .block-container,
     div[class*="block-container"] {
@@ -162,7 +157,6 @@ st.markdown("""
         margin: 0 !important;
     }
 
-    /* Forces summary KPI card layout objects to look clean side-by-side in Landscape */
     div[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) {
         display: flex !important;
         flex-direction: row !important;
@@ -179,7 +173,6 @@ st.markdown("""
         margin: 0 !important;
     }
     
-    /* Grants wide tables and dataframes maximum layout canvas real estate */
     div[data-testid="stTable"], 
     div[data-testid="stTable"] > div,
     div[data-testid="stDataFrame"],
@@ -289,14 +282,6 @@ def check_contractor(tech_str):
     raw_members = [m.strip() for m in str(tech_str).split(',') if m.strip()]
     return not any(m in CORE_TECHS for m in raw_members)
 
-def get_first_core_tech(tech_str):
-    CORE_TECHS = ['Bryan Pickett', 'Edward Lopez', 'Erik Tange', 'Matt Hodges', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
-    raw_members = [m.strip() for m in str(tech_str).split(',') if m.strip()]
-    core_members_on_job = [m for m in raw_members if m in CORE_TECHS]
-    if core_members_on_job:
-        return core_members_on_job[0]
-    return None
-
 def parse_az_city(addr):
     s = str(addr).lower()
     for c in ["prescott", "chandler", "scottsdale", "phoenix", "goodyear", "mesa", "glendale", "gilbert", "tempe", "peoria", "surprise", "buckeye", "avondale", "tucson", "marana", "maricopa", "sierra vista", "green valley"]:
@@ -312,14 +297,11 @@ def highlight_matrix_overhead(s):
                 tech_str, div_str = val.split(' (Div: ')
                 t_h = parse_hm(tech_str)
                 d_h = parse_hm(div_str.replace(')', ''))
-                
-                # Strict evaluation logic specifically targeting the Avg WH Time column
                 if hasattr(s, 'name') and s.name == 'Avg WH Time':
                     if t_h > d_h and t_h > 0:
                         styles.append('background-color: #ffcccc; color: #990000;')
                         continue
                 else:
-                    # Original logic: flag if tech average is >25% higher than division baseline
                     if t_h > d_h * 1.25 and t_h > 0:
                         styles.append('background-color: #ffcccc; color: #990000;')
                         continue
@@ -403,7 +385,6 @@ def highlight_low_margins(row):
             pass
     return styles
 
-# PROTECTED HOURLY ANALYSIS PAY DELEGATOR LAYER SECURED
 def get_adjusted_table_pay(row):
     if isinstance(row, bool) or 'Name' not in row: return 0.0
     nl = str(row['Name']).lower()
@@ -412,7 +393,6 @@ def get_adjusted_table_pay(row):
         return max(0.0, base_pay)
     return base_pay
 
-# NATIVE SYSTEM CLIPBOARD DATA EXPORTER (DEFINED AT GLOBAL SCOPE LEVEL)
 def create_copy_button(df, raw_key):
     safe_key = "".join([c if c.isalnum() else "_" for c in raw_key])
     tsv_str = df.to_csv(sep='\t', index=False)
@@ -455,7 +435,6 @@ def create_copy_button(df, raw_key):
     """
     st.components.v1.html(button_html, height=38)
 
-# --- ADVANCED TIMELINE MATRICES ---
 def run_baselines_matrix(ops_df):
     st.markdown("<h4>Advanced Team Processing Baselines Matrix</h4>", unsafe_allow_html=True)
     st.markdown("*(Technician tracking averages sorted by highest un-blended weekly duration totals. Store times ignore direct-to-site jobs)*")
@@ -577,12 +556,10 @@ def run_baselines_matrix(ops_df):
             create_copy_button(lsi_matrix_df, copy_key)
         else: st.success("✅ Zero individual Simple Install jobs exceeded the division baseline average.")
 
-# --- MAIN BLOCK REPORT ENGINE ---
 def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     st.header("📊 Ops Manager Tools (Benchmarking & Performance)")
     
-    # Render baseline execution trackers natively at the head of the manager panel
     run_baselines_matrix(ops_df)
     st.markdown("<br><hr><br>", unsafe_allow_html=True)
     
@@ -681,7 +658,6 @@ if time_file and ops_file:
     try:
         CORE_TECHS = ['Bryan Pickett', 'Edward Lopez', 'Erik Tange', 'Matt Hodges', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
         
-        # --- NEW SIDEBAR TIME ADJUSTMENT UI ---
         st.sidebar.header("⏱️ Manual Time Adjustments")
         st.sidebar.markdown("*(Adjust weekly clocked hours. Use formats like `+1:30`, `-0:45`, or `1.5`)*")
         time_adjustments = {}
@@ -691,7 +667,6 @@ if time_file and ops_file:
                 adj_val = st.text_input(tech, key=f"adj_input_{tech}", placeholder="e.g. +1:30 or -0.5")
                 if adj_val:
                     time_adjustments[tech] = parse_adj_hm(adj_val)
-        # ----------------------------------------
         
         # --- 1. Parser Engine for Time Sheets ---
         time_bytes = time_file.getvalue()
@@ -739,17 +714,14 @@ if time_file and ops_file:
         
         time_df = time_df[time_df['Name'].isin(CORE_TECHS)]
         
-        # --- APPLY SIDEBAR ADJUSTMENTS TO TIMECARDS ---
         for tech, adj in time_adjustments.items():
             if tech in time_df['Name'].values:
                 time_df.loc[time_df['Name'] == tech, 'Total_Weekly_Clocked_Hrs'] += adj
-        # ----------------------------------------------
         
         days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
         
-        # --- 2. Parse Ops Sheet Resiliently (DYNAMIC SCHEMA RESOLUTION) ---
+        # --- 2. Parse Ops Sheet Resiliently ---
         ops_bytes = ops_file.getvalue()
-        
         ops_df, store_time_cols, drive_time_cols, prog_time_cols, time_cols, available_ts_cols = load_and_parse_ops(ops_bytes)
             
         ops_df['Total Invoice Amount'] = pd.to_numeric(ops_df.get('Total Invoice Amount', pd.Series([0]*len(ops_df))), errors='coerce').fillna(0.0)
@@ -759,7 +731,6 @@ if time_file and ops_file:
         ops_df['In_Progress_Time_Hrs'] = ops_df[prog_time_cols].sum(axis=1) / 3600.0 if prog_time_cols else 0.0
         ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0 if time_cols else 0.0
 
-        # TIMESTAMPS CRITICAL LIFECYCLE DISPATCH HOOK
         if available_ts_cols:
             ops_df['Job_Date'] = ops_df[available_ts_cols].replace('-', np.nan).bfill(axis=1).iloc[:, 0]
         else:
@@ -802,7 +773,6 @@ if time_file and ops_file:
         unexploded_ops = ops_df.copy()
         raw_unsplit_volume = unexploded_ops['Total Invoice Amount'].sum()
         
-        # --- SUGGESTION 1: UPSTREAM DATA INTEGRITY SENTINEL ENGINE ---
         validation_warnings = []
         for _, r in unexploded_ops.iterrows():
             raw_members = [m.strip() for m in str(r['Assigned Team Members']).split(',') if m.strip()]
@@ -812,24 +782,7 @@ if time_file and ops_file:
                     jid = int(r['#ID']) if ('#ID' in r and pd.notna(r['#ID'])) else "Unknown"
                     validation_warnings.append(f"⚠️ **Upstream Discrepancy Warning:** {member} is listed on Water Heater job ID **#{jid}** (${r['Total Invoice Amount']:,.2f}) which impacts individual lines of business metric splits.")
         
-        # Calculate morning deployment timelines mapped tightly to the first internal employee listed
-        ops_for_bounds = ops_df.copy()
-        ops_for_bounds['Assigned Team Members'] = ops_for_bounds['Assigned Team Members'].apply(get_first_core_tech)
-        ops_for_bounds = ops_for_bounds.dropna(subset=['Assigned Team Members', 'Earliest_Start'])
-
-        ops_sorted = ops_for_bounds.sort_values(['Assigned Team Members', 'Earliest_Start'])
-        bounds_df = ops_sorted.groupby(['Assigned Team Members', 'Short_Date']).agg(
-            First_Punch=('Earliest_Start', 'min'),
-            Last_Punch=('Estimated_End', 'max'),
-            First_Status=('Earliest_Status', 'first')
-        ).reset_index()
-        bounds_df['First Status Update'] = bounds_df['First_Punch'].dt.strftime('%I:%M %p')
-        bounds_df['Last Status Update'] = bounds_df['Last_Punch'].dt.strftime('%I:%M %p')
-        bounds_df['Total_Span_Hrs'] = (bounds_df['Last_Punch'] - bounds_df['First_Punch']).dt.total_seconds() / 3600.0
-        bounds_df['Total Time'] = bounds_df['Total_Span_Hrs'].apply(format_hm)
-        
-        delayed_launches_df = bounds_df[bounds_df.apply(check_late, axis=1)].copy()
-
+        # --- FIX 1: REVENUE SPLIT & ROW EXPLOSION ---
         exploded_rows = []
         for idx, row in ops_df.iterrows():
             raw_members = [m.strip() for m in str(row['Assigned Team Members']).split(',') if m.strip()]
@@ -838,10 +791,13 @@ if time_file and ops_file:
             if not core_members_on_job:
                 continue
                 
+            # Divide revenue evenly by the number of core techs on the job
+            split_revenue = row['Total Invoice Amount'] / len(core_members_on_job)
+            
             for member in core_members_on_job:
                 new_row = row.copy()
                 new_row['Assigned Team Members'] = member
-                new_row['Total Invoice Amount'] = row['Total Invoice Amount']
+                new_row['Total Invoice Amount'] = split_revenue # <--- Applies the split here
                 exploded_rows.append(new_row)
                 
         if exploded_rows:
@@ -849,10 +805,29 @@ if time_file and ops_file:
         else:
             ops_df = pd.DataFrame(columns=ops_df.columns)
 
-        # Force variable mirroring properties mapping strings safely inside row items columns
+        # Force variable mirroring for downstream mapping
         ops_df['Name'] = ops_df['Assigned Team Members']
 
-        # Recalculate duration aggregates safely dynamically post-explosion
+        # --- FIX 2: MORNING LAUNCH BIAS (Calculated Post-Explosion) ---
+        ops_for_bounds = ops_df.dropna(subset=['Name', 'Earliest_Start']).copy()
+        ops_sorted = ops_for_bounds.sort_values(['Name', 'Earliest_Start'])
+        
+        bounds_df = ops_sorted.groupby(['Name', 'Short_Date']).agg(
+            First_Punch=('Earliest_Start', 'min'),
+            Last_Punch=('Estimated_End', 'max'),
+            First_Status=('Earliest_Status', 'first')
+        ).reset_index()
+        
+        # Rename back to 'Assigned Team Members' for downstream UI compatibility
+        bounds_df = bounds_df.rename(columns={'Name': 'Assigned Team Members'})
+        
+        bounds_df['First Status Update'] = bounds_df['First_Punch'].dt.strftime('%I:%M %p')
+        bounds_df['Last Status Update'] = bounds_df['Last_Punch'].dt.strftime('%I:%M %p')
+        bounds_df['Total_Span_Hrs'] = (bounds_df['Last_Punch'] - bounds_df['First_Punch']).dt.total_seconds() / 3600.0
+        bounds_df['Total Time'] = bounds_df['Total_Span_Hrs'].apply(format_hm)
+        
+        delayed_launches_df = bounds_df[bounds_df.apply(check_late, axis=1)].copy()
+
         ops_df['Store_Time_Hrs'] = ops_df[store_time_cols].sum(axis=1) / 3600.0 if store_time_cols else 0.0
         ops_df['Drive_Time_Hrs'] = ops_df[drive_time_cols].sum(axis=1) / 3600.0 if drive_time_cols else 0.0
         ops_df['In_Progress_Time_Hrs'] = ops_df[prog_time_cols].sum(axis=1) / 3600.0 if prog_time_cols else 0.0
@@ -902,7 +877,6 @@ if time_file and ops_file:
         final_df = pd.merge(final_df, tech_rev_agg, on='Name', how='left').fillna(0.0)
         final_df['Rev_Per_Clocked_Hr'] = np.where(final_df['Total_Weekly_Clocked_Hrs'] > 0, final_df['Total_Assigned_Revenue'] / final_df['Total_Weekly_Clocked_Hrs'], 0.0)
 
-        # Evaluate absences / burden rules dynamically
         sean_timecard = final_df[final_df['Name'] == 'Sean Marble']
         if not sean_timecard.empty:
             sean_row = sean_timecard.iloc[0]
@@ -922,7 +896,6 @@ if time_file and ops_file:
         final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
         final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
 
-        # Calculate the raw efficiencies
         final_df['LSI_Eff_Raw'] = np.where(final_df['Assumed_LSI_Clocked'] > 0, (final_df['Simple_Installs_Hrs'] / final_df['Assumed_LSI_Clocked']) * 100, 0.0)
         final_df['WH_Eff_Raw'] = np.where(final_df['Assumed_WH_Clocked'] > 0, (final_df['Water_Heaters_Hrs'] / final_df['Assumed_WH_Clocked']) * 100, 0.0)
 
@@ -949,21 +922,29 @@ if time_file and ops_file:
         df_macro_pay['Tech_Count'] = df_macro_pay['Assigned Team Members'].apply(lambda x: len([m.strip() for m in str(x).split(',') if m.strip()]))
         df_macro_pay['Is_Contractor'] = df_macro_pay['Assigned Team Members'].apply(check_contractor)
         
-        df_macro_pay['Cost_Burden_Sub'] = np.where(
+        # --- FIX 3: STANDARDIZE HELPER COST BURDENS ---
+        bu_conditions = [
             df_macro_pay.get('Business Unit') == 'Lowes - Water Heaters',
-            np.where(df_macro_pay['Tech_Count'] > 1, 175.0, 100.0),
-            0.0
+            df_macro_pay.get('Business Unit') == 'Lowes - Simple Installs'
+        ]
+        
+        solo_labor_rates = [100.0, 65.0] 
+        multi_labor_rates = [175.0, 110.0] 
+        
+        base_labor = np.select(bu_conditions, solo_labor_rates, default=0.0)
+        multi_labor = np.select(bu_conditions, multi_labor_rates, default=0.0)
+        
+        df_macro_pay['Cost_Burden_Sub'] = np.where(
+            df_macro_pay['Tech_Count'] > 1, 
+            multi_labor, 
+            base_labor
         )
         
         df_macro_pay['Prod_Cost'] = pd.to_numeric(df_macro_pay.get('Total Product Cost [tax inc]', pd.Series([0]*len(df_macro_pay))), errors='coerce').fillna(0.0)
         df_macro_pay['Serv_Cost'] = pd.to_numeric(df_macro_pay.get('Invoice - Total Service Cost', pd.Series([0]*len(df_macro_pay))), errors='coerce').fillna(0.0)
         df_macro_pay['Combined_Lowe_Costs'] = np.maximum(0.0, (df_macro_pay['Prod_Cost'] + df_macro_pay['Serv_Cost']) - df_macro_pay['Cost_Burden_Sub'])
         
-        df_macro_pay['Flat_Rate_Labor'] = np.where(
-            df_macro_pay.get('Business Unit') == 'Lowes - Water Heaters',
-            np.where(df_macro_pay['Tech_Count'] > 1, 175.0, 100.0),
-            0.0
-        )
+        df_macro_pay['Flat_Rate_Labor'] = df_macro_pay['Cost_Burden_Sub']
         df_macro_pay['Logged_Time_Pay'] = df_macro_pay['#ID'].map(ops_df.groupby('#ID')['Allocated_Job_Pay'].sum().to_dict()).fillna(0.0)
         
         df_macro_pay['Assumed_Labor_Payload'] = np.where(
@@ -999,7 +980,6 @@ if time_file and ops_file:
         final_df['Simple Installs'] = final_df['Simple_Installs_Hrs'].apply(format_hm)
         final_df['Water Heaters'] = final_df['Water_Heaters_Hrs'].apply(format_hm)
         
-        # Avoid misleading 0% efficiency flags by explicitly masking non-assigned vectors with N/A strings
         final_df['Simple Installs Eff'] = np.where(final_df['Simple_Installs_Count'] > 0, final_df['LSI_Eff_Raw'].map(lambda x: f"{x:.1f}%"), "-")
         final_df['Water Heaters Eff'] = np.where(final_df['Water_Heaters_Count'] > 0, final_df['WH_Eff_Raw'].map(lambda x: f"{x:.1f}%"), "-")
         
@@ -1017,7 +997,6 @@ if time_file and ops_file:
         bu_summary_df['Total Efficiency'] = bu_summary_df['Total Efficiency'].apply(lambda x: f"{x:.1f}%")
         bu_summary_df['Total Unallocated Hours'] = final_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
         
-        # --- CALCULATE & APPEND DETAILED TOTAL DIVISION ROW ---
         total_clocked_sum = final_df['Total_Weekly_Clocked_Hrs'].sum()
         total_lsi_jobs_sum = final_df['Simple_Installs_Count'].sum()
         total_lsi_hrs_sum = final_df['Simple_Installs_Hrs'].sum()
@@ -1049,11 +1028,9 @@ if time_file and ops_file:
             'Total Unallocated Hours': format_hm(total_diff_hrs_sum)
         }])
         
-        # CONCAT FLIPPED: Total Row is inserted First so it locks to the top
         bu_summary_df = pd.concat([total_row, bu_summary_df], ignore_index=True)
         display_dfs['Weekly'] = bu_summary_df
 
-        # Secure financial and pay summary details
         total_assumed_pay_adjusted = max(0.0, df_macro_pay['Assumed_Labor_Payload'].sum() - sean_penalty_value)
         pay_ratio_pct_adjusted = (total_assumed_pay_adjusted / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
 
@@ -1086,7 +1063,6 @@ if time_file and ops_file:
         with tabs[0]:
             st.markdown('<h3>Weekly Efficiency Summary</h3>', unsafe_allow_html=True)
             
-            # Render Upstream Integrity Warning Banner if clerical logging slips occur
             if validation_warnings:
                 with st.expander("⚠️ Upstream Data Integrity Notices", expanded=True):
                     for warning in validation_warnings:
@@ -1100,7 +1076,6 @@ if time_file and ops_file:
             </div>
             """, height=45)
 
-            # === HEADERS: OPERATIONAL METRICS EXECUTIVE SCORECARD ===
             st.markdown("### 🏢 Division Operational Health & Productivity Scorecard")
             
             div_health_col1, div_health_col2, div_health_col3, div_health_col4 = st.columns(4)
@@ -1133,7 +1108,6 @@ if time_file and ops_file:
                 
             create_copy_button(display_dfs['Weekly'], "weekly_summary")
             
-            # === MACRO DASHBOARD PANEL ===
             st.markdown("<br><hr><h3>📊 Macro Financial Performance Dashboard</h3>", unsafe_allow_html=True)
             
             dash_metric_col1, dash_metric_col2, dash_metric_col3 = st.columns(3)
@@ -1178,7 +1152,6 @@ if time_file and ops_file:
                 st.dataframe(show_rev_per_hour_sorted.reset_index(drop=True), use_container_width=True)
                 create_copy_button(show_rev_per_hour_sorted.reset_index(drop=True), "pay_ratio_per_clocked")
                 
-            # ⭐ Division True Net Profitability Margin Auditor
             st.markdown("<br><hr><h3>💵 Division True Net Profitability Margin Auditor</h3>", unsafe_allow_html=True)
             st.markdown("*(Evaluates net profitability metrics across selected sectors factoring contract structures, costs backouts and non-negative thresholds)*")
             
@@ -1254,7 +1227,6 @@ if time_file and ops_file:
                         st.table(prof_register_df)
                     create_copy_button(prof_register_df, "sortable_job_margins_register")
 
-            # ⭐ Lowe's Combined Cost Performance Matrix
             if 'Business Unit' in df_macro_pay.columns:
                 st.markdown("<br><hr><h3>📦 Lowe's Combined Cost Performance Matrix</h3>", unsafe_allow_html=True)
                 st.markdown("*(Isolates combined material and service expenses metrics and maps accurate Net Profit thresholds by sector inclusive of contractor fields)*")
@@ -1284,7 +1256,6 @@ if time_file and ops_file:
                 st.dataframe(show_cc, use_container_width=True)
                 create_copy_button(show_cc, "product_vs_service_cost_breakdown")
             
-            # --- RENDER DISPATCH METRICS & SCORECARDS IN THE WEEKLY SUMMARY CANVAS ---
             st.markdown("<br><hr>", unsafe_allow_html=True)
             show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key="summary_tab")
             
