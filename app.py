@@ -827,6 +827,7 @@ if time_file and ops_file:
         daily_route['Name'] = daily_route['Assigned Team Members']
         
         final_df = pd.merge(time_df, job_time_pivot, on='Name', how='left').fillna(0)
+        final_df = pd.merge(final_df, job_count_pivot, on='Name', how='left').fillna(0)
         if not bu_pivot.empty: final_df = pd.merge(final_df, bu_pivot[['Name', 'Simple_Installs_Hrs', 'Water_Heaters_Hrs', 'Simple_Installs_Count', 'Water_Heaters_Count']], on='Name', how='left').fillna(0)
         else:
             final_df['Simple_Installs_Hrs'] = final_df['Water_Heaters_Hrs'] = 0.0
