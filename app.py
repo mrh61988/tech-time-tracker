@@ -333,7 +333,7 @@ def get_assumed_pay(row):
     if 'michael owens' in nl or 'matt hodges' in nl:
         return 65000.0 / 52.0
     if 'bryan' in nl or 'erik' in nl:
-        return rev * 0.33
+        return rev * 0.34
         
     rate = 0.0
     if 'nate' in nl or 'nathan' in nl:
@@ -914,7 +914,7 @@ if time_file and ops_file:
         ops_df['Allocated_Job_Pay'] = ops_df['Computed_Row_Pay'] * ops_df['Job_Time_Weight']
         ops_df['Allocated_Job_Pay'] = np.where(
             ops_df['Name'].str.lower().str.contains('bryan') | ops_df['Name'].str.lower().str.contains('erik'),
-            ops_df['Total Invoice Amount'] * 0.33,
+            ops_df['Total Invoice Amount'] * 0.34,
             ops_df['Allocated_Job_Pay']
         )
 
@@ -928,8 +928,10 @@ if time_file and ops_file:
             df_macro_pay.get('Business Unit') == 'Lowes - Simple Installs'
         ]
         
-        solo_labor_rates = [100.0, 65.0] 
-        multi_labor_rates = [175.0, 110.0] 
+        # Dropped the artificial $65/$110 floors for Simple Installs down to 0.0
+        # This ensures standard hourly techs bill at their actual logged time cost
+        solo_labor_rates = [100.0, 0.0] 
+        multi_labor_rates = [175.0, 0.0] 
         
         base_labor = np.select(bu_conditions, solo_labor_rates, default=0.0)
         multi_labor = np.select(bu_conditions, multi_labor_rates, default=0.0)
@@ -947,11 +949,27 @@ if time_file and ops_file:
         df_macro_pay['Flat_Rate_Labor'] = df_macro_pay['Cost_Burden_Sub']
         df_macro_pay['Logged_Time_Pay'] = df_macro_pay['#ID'].map(ops_df.groupby('#ID')['Allocated_Job_Pay'].sum().to_dict()).fillna(0.0)
         
+        # Base Labor Payload Assumption
         df_macro_pay['Assumed_Labor_Payload'] = np.where(
             (df_macro_pay.get('Business Unit') == 'Lowes - Simple Installs') & df_macro_pay['Is_Contractor'],
             df_macro_pay['Total Invoice Amount'],
             np.maximum(df_macro_pay['Flat_Rate_Labor'], df_macro_pay['Logged_Time_Pay'])
         )
+        
+        # --- NEW OVERRIDE: Piece-Rate Simple Installs Rule ---
+        # Identifies if Bryan or Erik are on the job
+        df_macro_pay['Has_Bryan_Erik'] = df_macro_pay['Assigned Team Members'].str.lower().str.contains('bryan|erik', na=False)
+        
+        # Calculates 34% of the total un-split invoice + $44 per helper
+        df_macro_pay['BE_Simple_Install_Pay'] = (df_macro_pay['Total Invoice Amount'] * 0.34) + (np.maximum(0, df_macro_pay['Tech_Count'] - 1) * 44.0)
+        
+        # Applies the override specifically to Simple Installs where they are present
+        df_macro_pay['Assumed_Labor_Payload'] = np.where(
+            (df_macro_pay.get('Business Unit') == 'Lowes - Simple Installs') & df_macro_pay['Has_Bryan_Erik'],
+            df_macro_pay['BE_Simple_Install_Pay'],
+            df_macro_pay['Assumed_Labor_Payload']
+        )
+        
         df_macro_pay['Net_Profit_Raw'] = df_macro_pay['Total Invoice Amount'] - df_macro_pay['Combined_Lowe_Costs'] - df_macro_pay['Assumed_Labor_Payload']
             
         display_dfs = {}
