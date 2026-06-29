@@ -91,7 +91,7 @@ def load_and_parse_timesheet(time_bytes):
             sample_df['Duration_Hrs'] = sample_df['Duration_Hrs'].fillna(0.0)
             sample_df['Day_of_Week'] = sample_df['Day_of_Week'].fillna('Thu')
             
-            # --- STEP 2: AUTOMATIC OVERRIDE DEDUPLICATION ---
+            # --- STEP 2: AUTOMATIC OVERRIDE DEDUREPLICATION ---
             # If a day contains an explicit manual adjustment AND a generic automated stamp, drop the error
             if 'Clock In Date/Time' in sample_df.columns and 'Native_Duration' in sample_df.columns:
                 sample_df['Is_Manual_Edit'] = (
@@ -1223,7 +1223,7 @@ if time_file and ops_file:
                 
             df_prof_totals = df_macro_pay.copy()
             if selected_bu_filter != "All Sectors":
-                df_prof_totals = df_prof_totals[df_prof_totals.get('Business Unit'] == selected_bu_filter]
+                df_prof_totals = df_prof_totals[df_prof_totals.get('Business Unit') == selected_bu_filter]
                 
             if not df_prof_totals.empty:
                 gross_revenue_sum = df_prof_totals['Total Invoice Amount'].sum()
@@ -1475,7 +1475,7 @@ if time_file and ops_file:
                 route_eff = route_eff.sort_values(by='Rev per Drive Hour Raw', ascending=False)
                 route_eff['Total Assigned Revenue'] = route_eff['Total_Revenue'].apply(lambda x: f"${x:,.2f}")
                 route_eff['Total Drive Hours'] = route_eff['Total_Drive_Hrs'].apply(lambda x: f"{x:.1f} hrs")
-                route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"{x:.1f}/hr")
+                route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"${x:.1f}/hr")
                 
                 st.dataframe(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True), use_container_width=True)
 
@@ -1662,7 +1662,7 @@ if time_file and ops_file:
                 
                 st.dataframe(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True), use_container_width=True)
 
-            if "🚛 End-of-Day (EOD) Payroll Slippage Auditor" in test_choices:
+            if "QN End-of-Day (EOD) Payroll Slippage Auditor" in test_choices:
                 st.markdown("### **🚛 End-of-Day (EOD) Payroll Slippage Auditor**")
                 st.markdown("*(Flags instances where a technician remained clocked in for more than 90 minutes after completing their final job order)*")
                 
