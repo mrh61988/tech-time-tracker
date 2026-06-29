@@ -633,8 +633,10 @@ if time_file and ops_file:
         for col in time_cols:
             if col not in ops_df.columns:
                 ops_df[col] = 0
-            ops_df[col] = pd.to_numeric(ops_df[col], errors='coerce').fillna(0)
-            
+            else:
+                clean_times = ops_df[col].astype(str).replace('-', '00:00:00')
+                ops_df[col] = pd.to_timedelta(clean_times, errors='coerce').dt.total_seconds().fillna(0)
+                
         ops_df['Total Invoice Amount'] = pd.to_numeric(ops_df.get('Total Invoice Amount', pd.Series([0])), errors='coerce').fillna(0.0)
         
         ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
