@@ -54,25 +54,57 @@ def load_and_parse_timesheet(time_bytes):
     return time_df, pd.DataFrame()
 
 @st.cache_data
-def load_and_parse_ops(ops_bytes, time_cols):
-    """Caches and executes precision timedelta parsing for operations job durations."""
+def load_and_parse_ops(ops_bytes):
+    """Caches and executes precision timedelta parsing utilizing dynamic schema mapping to prevent header changes from breaking the app."""
     try:
         ops_df = pd.read_csv(io.BytesIO(ops_bytes), header=0)
-        if 'Assigned Team Members' not in ops_df.columns:
+        # Scan to see if standard identifier rows exist, otherwise assume header offset
+        if not any('assigned' in str(c).lower() and 'team' in str(c).lower() for c in ops_df.columns):
             ops_df = pd.read_csv(io.BytesIO(ops_bytes), header=1)
     except:
         ops_df = pd.read_csv(io.BytesIO(ops_bytes), header=1)
         
+    # --- DYNAMIC SCHEMA NORMALIZATION (SCHEMA PROTECTION) ---
+    cols = ops_df.columns.astype(str).tolist()
+    
+    # 1. Normalize Core Functional Columns
+    rename_map = {}
+    for c in cols:
+        cl = c.lower()
+        if 'assigned' in cl and 'team' in cl and 'members' in cl: rename_map[c] = 'Assigned Team Members'
+        elif 'invoice' in cl and 'amount' in cl: rename_map[c] = 'Total Invoice Amount'
+        elif 'business' in cl and 'unit' in cl: rename_map[c] = 'Business Unit'
+        elif 'location' in cl and 'address' in cl: rename_map[c] = 'Location Address'
+        elif 'product' in cl and 'cost' in cl: rename_map[c] = 'Total Product Cost [tax inc]'
+        elif 'service' in cl and 'cost' in cl and 'invoice' in cl: rename_map[c] = 'Invoice - Total Service Cost'
+        
+    ops_df = ops_df.rename(columns=rename_map)
+    
+    # Safety fallback if utterly unidentifiable
+    if 'Assigned Team Members' not in ops_df.columns:
+        ops_df['Assigned Team Members'] = None
+        
     ops_df = ops_df.dropna(subset=['Assigned Team Members'])
     
+    # 2. Identify Duration Columns Dynamically
+    cols = ops_df.columns.astype(str).tolist()
+    store_time_cols = [c for c in cols if 'store' in c.lower() and 'time' in c.lower() and 'timestamp' not in c.lower()]
+    drive_time_cols = [c for c in cols if 'way' in c.lower() and 'time' in c.lower() and 'timestamp' not in c.lower()]
+    prog_time_cols = [c for c in cols if 'progress' in c.lower() and 'time' in c.lower() and 'timestamp' not in c.lower()]
+    
+    time_cols = store_time_cols + drive_time_cols + prog_time_cols
+    
     for col in time_cols:
-        if col not in ops_df.columns:
-            ops_df[col] = 0
-        else:
-            clean_times = ops_df[col].astype(str).replace('-', '00:00:00')
-            ops_df[col] = pd.to_timedelta(clean_times, errors='coerce').dt.total_seconds().fillna(0)
-            
-    return ops_df
+        clean_times = ops_df[col].astype(str).replace('-', '00:00:00')
+        ops_df[col] = pd.to_timedelta(clean_times, errors='coerce').dt.total_seconds().fillna(0)
+        
+    # 3. Identify Timestamp Status Columns Dynamically
+    store_ts_cols = [c for c in cols if 'store' in c.lower() and 'timestamp' in c.lower()]
+    drive_ts_cols = [c for c in cols if 'way' in c.lower() and 'timestamp' in c.lower()]
+    prog_ts_cols = [c for c in cols if 'progress' in c.lower() and 'timestamp' in c.lower()]
+    ts_cols = store_ts_cols + drive_ts_cols + prog_ts_cols
+    
+    return ops_df, store_time_cols, drive_time_cols, prog_time_cols, time_cols, ts_cols
 
 # --- CSS FOR CLEAN LANDSCAPE FULL-WIDTH MULTI-PAGE PRINTING ---
 st.markdown("""
@@ -715,28 +747,32 @@ if time_file and ops_file:
         
         days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
         
-        # --- 2. Parse Ops Sheet Resiliently ---
+        # --- 2. Parse Ops Sheet Resiliently (DYNAMIC SCHEMA RESOLUTION) ---
         ops_bytes = ops_file.getvalue()
-        time_cols = ['Lowes Store - Completed Total Time in Status', 'On The Way - Completed Total Time in Status', 'In Progress - Completed Total Time in Status', 'On The Way - Completed Total Time in Status.1', 'In Progress - Completed Total Time in Status.1']
-        ops_df = load_and_parse_ops(ops_bytes, time_cols)
+        
+        ops_df, store_time_cols, drive_time_cols, prog_time_cols, time_cols, available_ts_cols = load_and_parse_ops(ops_bytes)
             
-        ops_df['Total Invoice Amount'] = pd.to_numeric(ops_df.get('Total Invoice Amount', pd.Series([0])), errors='coerce').fillna(0.0)
+        ops_df['Total Invoice Amount'] = pd.to_numeric(ops_df.get('Total Invoice Amount', pd.Series([0]*len(ops_df))), errors='coerce').fillna(0.0)
         
-        ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
-        ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On The Way - Completed Total Time in Status.1', 0)) / 3600.0
-        ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
-        ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
+        ops_df['Store_Time_Hrs'] = ops_df[store_time_cols].sum(axis=1) / 3600.0 if store_time_cols else 0.0
+        ops_df['Drive_Time_Hrs'] = ops_df[drive_time_cols].sum(axis=1) / 3600.0 if drive_time_cols else 0.0
+        ops_df['In_Progress_Time_Hrs'] = ops_df[prog_time_cols].sum(axis=1) / 3600.0 if prog_time_cols else 0.0
+        ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0 if time_cols else 0.0
 
-        # TIMESTAMPS CRITICAL LIFECYCLE DISPATCH HOOK DEFINED ON LAUNCH BASE FOR BOTH PIPELINES
-        ts_cols = ['Lowes Store - Start Timestamp', 'On The Way - Start Timestamp', 'In Progress - Start Timestamp', 'On The Way - Start Timestamp.1', 'In Progress - Start Timestamp.1']
-        available_ts_cols = [c for c in ts_cols if c in ops_df.columns]
-        
-        # INTERCEPT AND REPLACE STRING HYPHENS WITH REAL NAT/NAN VALUES SO DIRECT-TO-SITE RUNS DONT FAIL BFILL
-        ops_df['Job_Date'] = ops_df[available_ts_cols].replace('-', np.nan).bfill(axis=1).iloc[:, 0]
+        # TIMESTAMPS CRITICAL LIFECYCLE DISPATCH HOOK
+        if available_ts_cols:
+            ops_df['Job_Date'] = ops_df[available_ts_cols].replace('-', np.nan).bfill(axis=1).iloc[:, 0]
+        else:
+            ops_df['Job_Date'] = np.nan
         
         for c in available_ts_cols: ops_df[c + '_dt'] = pd.to_datetime(ops_df[c].astype(str).str.split(' GMT').str[0], errors='coerce')
         available_ts_dt_cols = [c + '_dt' for c in available_ts_cols]
-        ops_df['Earliest_Start'] = ops_df[available_ts_dt_cols].min(axis=1)
+        
+        if available_ts_dt_cols:
+            ops_df['Earliest_Start'] = ops_df[available_ts_dt_cols].min(axis=1)
+        else:
+            ops_df['Earliest_Start'] = pd.NaT
+            
         ops_df['Estimated_End'] = ops_df['Earliest_Start'] + pd.to_timedelta(ops_df['Total_Job_Time_Hours'] * 3600, unit='s')
         ops_df['Job_Date_Parsed'] = pd.to_datetime(ops_df['Job_Date'].astype(str).str.split(' GMT').str[0], errors='coerce')
         ops_df['Day_of_Week'] = ops_df['Job_Date_Parsed'].dt.day_name().str[:3]
@@ -752,11 +788,15 @@ if time_file and ops_file:
                         min_t = t
                         best_c = c
             return best_c
+            
         ops_df['Earliest_Status_Col'] = ops_df.apply(get_first_status_col, axis=1)
+        
         def map_status(col):
-            if 'Store' in str(col): return 'Lowes Store'
-            if 'Way' in str(col): return 'On The Way'
+            cl = str(col).lower()
+            if 'store' in cl: return 'Lowes Store'
+            if 'way' in cl: return 'On The Way'
             return 'In Progress'
+            
         ops_df['Earliest_Status'] = ops_df['Earliest_Status_Col'].apply(map_status)
 
         unexploded_ops = ops_df.copy()
@@ -768,8 +808,9 @@ if time_file and ops_file:
             raw_members = [m.strip() for m in str(r['Assigned Team Members']).split(',') if m.strip()]
             core_members_on_job = [m for m in raw_members if m in CORE_TECHS]
             for member in core_members_on_job:
-                if member in ['Bryan Pickett', 'Sean Marble', 'Erik Tange'] and r['Business Unit'] == 'Lowes - Water Heaters':
-                    validation_warnings.append(f"⚠️ **Upstream Discrepancy Warning:** {member} is listed on Water Heater job ID **#{int(r['#ID'])}** (${r['Total Invoice Amount']:,.2f}) which impacts individual lines of business metric splits.")
+                if member in ['Bryan Pickett', 'Sean Marble', 'Erik Tange'] and r.get('Business Unit') == 'Lowes - Water Heaters':
+                    jid = int(r['#ID']) if ('#ID' in r and pd.notna(r['#ID'])) else "Unknown"
+                    validation_warnings.append(f"⚠️ **Upstream Discrepancy Warning:** {member} is listed on Water Heater job ID **#{jid}** (${r['Total Invoice Amount']:,.2f}) which impacts individual lines of business metric splits.")
         
         # Calculate morning deployment timelines mapped tightly to the first internal employee listed
         ops_for_bounds = ops_df.copy()
@@ -811,10 +852,11 @@ if time_file and ops_file:
         # Force variable mirroring properties mapping strings safely inside row items columns
         ops_df['Name'] = ops_df['Assigned Team Members']
 
-        ops_df['Store_Time_Hrs'] = ops_df['Lowes Store - Completed Total Time in Status'] / 3600.0
-        ops_df['Drive_Time_Hrs'] = (ops_df['On The Way - Completed Total Time in Status'] + ops_df.get('On The Way - Completed Total Time in Status.1', 0)) / 3600.0
-        ops_df['In_Progress_Time_Hrs'] = (ops_df['In Progress - Completed Total Time in Status'] + ops_df.get('In Progress - Completed Total Time in Status.1', 0)) / 3600.0
-        ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0
+        # Recalculate duration aggregates safely dynamically post-explosion
+        ops_df['Store_Time_Hrs'] = ops_df[store_time_cols].sum(axis=1) / 3600.0 if store_time_cols else 0.0
+        ops_df['Drive_Time_Hrs'] = ops_df[drive_time_cols].sum(axis=1) / 3600.0 if drive_time_cols else 0.0
+        ops_df['In_Progress_Time_Hrs'] = ops_df[prog_time_cols].sum(axis=1) / 3600.0 if prog_time_cols else 0.0
+        ops_df['Total_Job_Time_Hours'] = ops_df[time_cols].sum(axis=1) / 3600.0 if time_cols else 0.0
 
         if 'Business Unit' in ops_df.columns:
             bu_agg = ops_df.groupby(['Name', 'Business Unit']).agg(Total_Job_Time_Hours=('Total_Job_Time_Hours', 'sum'), BU_Job_Count=('Total_Job_Time_Hours', 'size')).reset_index()
@@ -880,10 +922,9 @@ if time_file and ops_file:
         final_df['Assumed_LSI_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['LSI_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
         final_df['Assumed_WH_Clocked'] = np.where(final_df['Total_Goal_Hrs'] > 0, final_df['Total_Weekly_Clocked_Hrs'] * (final_df['WH_Goal_Hrs'] / final_df['Total_Goal_Hrs']), 0.0)
 
-        # ----- BUG FIX: CALCULATE THE RAW EFFICIENCIES BEFORE FORMATTING STRINGS -----
+        # Calculate the raw efficiencies
         final_df['LSI_Eff_Raw'] = np.where(final_df['Assumed_LSI_Clocked'] > 0, (final_df['Simple_Installs_Hrs'] / final_df['Assumed_LSI_Clocked']) * 100, 0.0)
         final_df['WH_Eff_Raw'] = np.where(final_df['Assumed_WH_Clocked'] > 0, (final_df['Water_Heaters_Hrs'] / final_df['Assumed_WH_Clocked']) * 100, 0.0)
-        # -------------------------------------------------------------------------------
 
         rev_per_hour_df_calc = final_df.copy()
         rev_per_hour_df_calc['Assumed Pay Amount'] = rev_per_hour_df_calc.apply(get_adjusted_table_pay, axis=1)
@@ -909,7 +950,7 @@ if time_file and ops_file:
         df_macro_pay['Is_Contractor'] = df_macro_pay['Assigned Team Members'].apply(check_contractor)
         
         df_macro_pay['Cost_Burden_Sub'] = np.where(
-            df_macro_pay['Business Unit'] == 'Lowes - Water Heaters',
+            df_macro_pay.get('Business Unit') == 'Lowes - Water Heaters',
             np.where(df_macro_pay['Tech_Count'] > 1, 175.0, 100.0),
             0.0
         )
@@ -919,14 +960,14 @@ if time_file and ops_file:
         df_macro_pay['Combined_Lowe_Costs'] = np.maximum(0.0, (df_macro_pay['Prod_Cost'] + df_macro_pay['Serv_Cost']) - df_macro_pay['Cost_Burden_Sub'])
         
         df_macro_pay['Flat_Rate_Labor'] = np.where(
-            df_macro_pay['Business Unit'] == 'Lowes - Water Heaters',
+            df_macro_pay.get('Business Unit') == 'Lowes - Water Heaters',
             np.where(df_macro_pay['Tech_Count'] > 1, 175.0, 100.0),
             0.0
         )
         df_macro_pay['Logged_Time_Pay'] = df_macro_pay['#ID'].map(ops_df.groupby('#ID')['Allocated_Job_Pay'].sum().to_dict()).fillna(0.0)
         
         df_macro_pay['Assumed_Labor_Payload'] = np.where(
-            (df_macro_pay['Business Unit'] == 'Lowes - Simple Installs') & df_macro_pay['Is_Contractor'],
+            (df_macro_pay.get('Business Unit') == 'Lowes - Simple Installs') & df_macro_pay['Is_Contractor'],
             df_macro_pay['Total Invoice Amount'],
             np.maximum(df_macro_pay['Flat_Rate_Labor'], df_macro_pay['Logged_Time_Pay'])
         )
@@ -1016,25 +1057,28 @@ if time_file and ops_file:
         total_assumed_pay_adjusted = max(0.0, df_macro_pay['Assumed_Labor_Payload'].sum() - sean_penalty_value)
         pay_ratio_pct_adjusted = (total_assumed_pay_adjusted / raw_unsplit_volume * 100) if raw_unsplit_volume > 0 else 0.0
 
-        bu_gross_rev = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].sum().reset_index()
-        bu_gross_rev.columns = ['Business Unit', 'Gross Invoiced Revenue Raw']
-        total_macro_sum = bu_gross_rev['Gross Invoiced Revenue Raw'].sum() if bu_gross_rev['Gross Invoiced Revenue Raw'].sum() > 0 else 1.0
-        bu_gross_rev['Rev Share %'] = (bu_gross_rev['Gross Invoiced Revenue Raw'] / total_macro_sum * 100).apply(lambda x: f"{x:.1f}%")
-        
-        bu_pay_split = df_macro_pay.groupby('Business Unit')['Assumed_Labor_Payload'].sum().reset_index().rename(columns={'Assumed_Labor_Payload': 'Assumed Pay Raw'})
-        for idx, r in bu_pay_split.iterrows():
-            if r['Business Unit'] == 'Lowes - Simple Installs':
-                bu_pay_split.loc[idx, 'Assumed Pay Raw'] = max(0.0, bu_pay_split.loc[idx, 'Assumed Pay Raw'] - sean_penalty_value)
-                
-        bu_financial_matrix = pd.merge(bu_gross_rev, bu_pay_split, on='Business Unit', how='left').fillna(0.0)
-        bu_financial_matrix['Assumed Pay'] = bu_financial_matrix['Assumed Pay Raw'].apply(lambda x: f"${x:,.2f}")
-        bu_financial_matrix['Pay % of Revenue'] = np.where(
-            bu_financial_matrix['Gross Invoiced Revenue Raw'] > 0,
-            (bu_financial_matrix['Assumed Pay Raw'] / bu_financial_matrix['Gross Invoiced Revenue Raw']) * 100,
-            0.0
-        )
-        bu_financial_matrix['Pay % of Revenue'] = bu_financial_matrix['Pay % of Revenue'].apply(lambda x: f"{x:.1f}%")
-        bu_financial_matrix['Gross Invoiced Revenue'] = bu_financial_matrix['Gross Invoiced Revenue Raw'].apply(lambda x: f"${x:,.2f}")
+        if 'Business Unit' in unexploded_ops.columns:
+            bu_gross_rev = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].sum().reset_index()
+            bu_gross_rev.columns = ['Business Unit', 'Gross Invoiced Revenue Raw']
+            total_macro_sum = bu_gross_rev['Gross Invoiced Revenue Raw'].sum() if bu_gross_rev['Gross Invoiced Revenue Raw'].sum() > 0 else 1.0
+            bu_gross_rev['Rev Share %'] = (bu_gross_rev['Gross Invoiced Revenue Raw'] / total_macro_sum * 100).apply(lambda x: f"{x:.1f}%")
+            
+            bu_pay_split = df_macro_pay.groupby('Business Unit')['Assumed_Labor_Payload'].sum().reset_index().rename(columns={'Assumed_Labor_Payload': 'Assumed Pay Raw'})
+            for idx, r in bu_pay_split.iterrows():
+                if r['Business Unit'] == 'Lowes - Simple Installs':
+                    bu_pay_split.loc[idx, 'Assumed Pay Raw'] = max(0.0, bu_pay_split.loc[idx, 'Assumed Pay Raw'] - sean_penalty_value)
+                    
+            bu_financial_matrix = pd.merge(bu_gross_rev, bu_pay_split, on='Business Unit', how='left').fillna(0.0)
+            bu_financial_matrix['Assumed Pay'] = bu_financial_matrix['Assumed Pay Raw'].apply(lambda x: f"${x:,.2f}")
+            bu_financial_matrix['Pay % of Revenue'] = np.where(
+                bu_financial_matrix['Gross Invoiced Revenue Raw'] > 0,
+                (bu_financial_matrix['Assumed Pay Raw'] / bu_financial_matrix['Gross Invoiced Revenue Raw']) * 100,
+                0.0
+            )
+            bu_financial_matrix['Pay % of Revenue'] = bu_financial_matrix['Pay % of Revenue'].apply(lambda x: f"{x:.1f}%")
+            bu_financial_matrix['Gross Invoiced Revenue'] = bu_financial_matrix['Gross Invoiced Revenue Raw'].apply(lambda x: f"${x:,.2f}")
+        else:
+            bu_financial_matrix = pd.DataFrame()
 
         tab_names = ["Weekly Summary", "Manager Overview", "Individual Tech Report", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "🧪 Test Section"]
         tabs = st.tabs(tab_names)
@@ -1102,16 +1146,17 @@ if time_file and ops_file:
                 
             m_col1, m_col2 = st.columns([1.2, 1.8])
             with m_col1:
-                st.markdown("<br>**📈 Gross Invoiced Revenue & Payroll by Business Unit**", unsafe_allow_html=True)
-                st.dataframe(bu_financial_matrix[['Business Unit', 'Gross Invoiced Revenue', 'Rev Share %', 'Assumed Pay', 'Pay % of Revenue']].reset_index(drop=True), use_container_width=True)
-                create_copy_button(bu_financial_matrix[['Business Unit', 'Gross Invoiced Revenue', 'Rev Share %', 'Assumed Pay', 'Pay % of Revenue']], "bu_rev_and_pay")
-                
-                st.markdown("<br>**🎯 Average Ticket Size per BU**", unsafe_allow_html=True)
-                bu_avg_ticket = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].mean().reset_index()
-                bu_avg_ticket.columns = ['Business Unit', 'Average Ticket Size Raw']
-                bu_avg_ticket['Average Ticket Size'] = bu_avg_ticket['Average Ticket Size Raw'].apply(lambda x: f"${x:,.2f}")
-                st.dataframe(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True), use_container_width=True)
-                create_copy_button(bu_avg_ticket[['Business Unit', 'Average Ticket Size']], "bu_avg_ticket")
+                if not bu_financial_matrix.empty:
+                    st.markdown("<br>**📈 Gross Invoiced Revenue & Payroll by Business Unit**", unsafe_allow_html=True)
+                    st.dataframe(bu_financial_matrix[['Business Unit', 'Gross Invoiced Revenue', 'Rev Share %', 'Assumed Pay', 'Pay % of Revenue']].reset_index(drop=True), use_container_width=True)
+                    create_copy_button(bu_financial_matrix[['Business Unit', 'Gross Invoiced Revenue', 'Rev Share %', 'Assumed Pay', 'Pay % of Revenue']], "bu_rev_and_pay")
+                    
+                    st.markdown("<br>**🎯 Average Ticket Size per BU**", unsafe_allow_html=True)
+                    bu_avg_ticket = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].mean().reset_index()
+                    bu_avg_ticket.columns = ['Business Unit', 'Average Ticket Size Raw']
+                    bu_avg_ticket['Average Ticket Size'] = bu_avg_ticket['Average Ticket Size Raw'].apply(lambda x: f"${x:,.2f}")
+                    st.dataframe(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True), use_container_width=True)
+                    create_copy_button(bu_avg_ticket[['Business Unit', 'Average Ticket Size']], "bu_avg_ticket")
             with m_col2:
                 st.markdown("**📈 Pay Ratio per Clocked Hour**", unsafe_allow_html=True)
                 rev_per_hour_df = final_df.copy()
@@ -1145,7 +1190,7 @@ if time_file and ops_file:
                 
             df_prof_totals = df_macro_pay.copy()
             if selected_bu_filter != "All Sectors":
-                df_prof_totals = df_prof_totals[df_prof_totals['Business Unit'] == selected_bu_filter]
+                df_prof_totals = df_prof_totals[df_prof_totals.get('Business Unit') == selected_bu_filter]
                 
             if not df_prof_totals.empty:
                 gross_revenue_sum = df_prof_totals['Total Invoice Amount'].sum()
@@ -1172,7 +1217,7 @@ if time_file and ops_file:
                 
                 df_prof_filtered = df_macro_pay.copy()
                 if selected_bu_filter != "All Sectors":
-                    df_prof_filtered = df_prof_filtered[df_prof_filtered['Business Unit'] == selected_bu_filter]
+                    df_prof_filtered = df_prof_filtered[df_prof_filtered.get('Business Unit') == selected_bu_filter]
                 df_prof_filtered = df_prof_filtered[~df_prof_filtered['Is_Contractor']]
                 
                 if not df_prof_filtered.empty:
@@ -1188,7 +1233,7 @@ if time_file and ops_file:
                     for _, r in df_prof_filtered.iterrows():
                         prof_register_rows.append({
                             "Job ID": str(int(r['#ID'])),
-                            "Line of Business": r['Business Unit'],
+                            "Line of Business": r.get('Business Unit', 'Unknown'),
                             "Crew Assigned": r['Assigned Team Members'],
                             "Gross Invoice": f"${r['Total Invoice Amount']:,.2f}",
                             "Total Combined Cost": f"${r['Combined_Lowe_Costs']:,.2f}",
@@ -1210,33 +1255,34 @@ if time_file and ops_file:
                     create_copy_button(prof_register_df, "sortable_job_margins_register")
 
             # ⭐ Lowe's Combined Cost Performance Matrix
-            st.markdown("<br><hr><h3>📦 Lowe's Combined Cost Performance Matrix</h3>", unsafe_allow_html=True)
-            st.markdown("*(Isolates combined material and service expenses metrics and maps accurate Net Profit thresholds by sector inclusive of contractor fields)*")
-            cc_matrix = df_macro_pay.groupby('Business Unit').agg(
-                Jobs=('#ID', 'count'),
-                Gross_Invoiced_Raw=('Total Invoice Amount', 'sum'),
-                Combined_Cost_Total_Raw=('Combined_Lowe_Costs', 'sum'),
-                Assumed_Labor_Payload_Raw=('Assumed_Labor_Payload', 'sum'),
-                Net_Profit_Total_Raw=('Net_Profit_Raw', 'sum')
-            ).reset_index()
-            
-            for idx, r in cc_matrix.iterrows():
-                if r['Business Unit'] == 'Lowes - Simple Installs':
-                    cc_matrix.loc[idx, 'Assumed_Labor_Payload_Raw'] = max(0.0, cc_matrix.loc[idx, 'Assumed_Labor_Payload_Raw'] - sean_penalty_value)
-                    cc_matrix.loc[idx, 'Net_Profit_Total_Raw'] = cc_matrix.loc[idx, 'Gross_Invoiced_Raw'] - cc_matrix.loc[idx, 'Combined_Cost_Total_Raw'] - cc_matrix.loc[idx, 'Assumed_Labor_Payload_Raw']
-            
-            cc_matrix['Cost Ratio % vs Rev'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Combined_Cost_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
-            cc_matrix['Cost Ratio % vs Rev'] = cc_matrix['Cost Ratio % vs Rev'].apply(lambda x: f"{x:.1f}%")
-            cc_matrix['Net Profit (%)'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Net_Profit_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
-            cc_matrix['Net Profit (%)'] = cc_matrix['Net Profit (%)'].apply(lambda x: f"{x:.1f}%")
-            cc_matrix['Gross Invoiced Revenue'] = cc_matrix['Gross_Invoiced_Raw'].apply(lambda x: f"${x:,.2f}")
-            cc_matrix['Total Combined Cost'] = cc_matrix['Combined_Cost_Total_Raw'].apply(lambda x: f"${x:,.2f}")
-            cc_matrix['Tech Wage Burden'] = cc_matrix['Assumed_Labor_Payload_Raw'].apply(lambda x: f"${x:,.2f}")
-            cc_matrix['Net Profit ($)'] = cc_matrix['Net_Profit_Total_Raw'].apply(lambda x: f"${x:,.2f}")
-            
-            show_cc = cc_matrix[['Business Unit', 'Jobs', 'Gross Invoiced Revenue', 'Total Combined Cost', 'Cost Ratio % vs Rev', 'Tech Wage Burden', 'Net Profit ($)', 'Net Profit (%)']].rename(columns={'Jobs': 'Jobs Assigned'})
-            st.dataframe(show_cc, use_container_width=True)
-            create_copy_button(show_cc, "product_vs_service_cost_breakdown")
+            if 'Business Unit' in df_macro_pay.columns:
+                st.markdown("<br><hr><h3>📦 Lowe's Combined Cost Performance Matrix</h3>", unsafe_allow_html=True)
+                st.markdown("*(Isolates combined material and service expenses metrics and maps accurate Net Profit thresholds by sector inclusive of contractor fields)*")
+                cc_matrix = df_macro_pay.groupby('Business Unit').agg(
+                    Jobs=('#ID', 'count'),
+                    Gross_Invoiced_Raw=('Total Invoice Amount', 'sum'),
+                    Combined_Cost_Total_Raw=('Combined_Lowe_Costs', 'sum'),
+                    Assumed_Labor_Payload_Raw=('Assumed_Labor_Payload', 'sum'),
+                    Net_Profit_Total_Raw=('Net_Profit_Raw', 'sum')
+                ).reset_index()
+                
+                for idx, r in cc_matrix.iterrows():
+                    if r['Business Unit'] == 'Lowes - Simple Installs':
+                        cc_matrix.loc[idx, 'Assumed_Labor_Payload_Raw'] = max(0.0, cc_matrix.loc[idx, 'Assumed_Labor_Payload_Raw'] - sean_penalty_value)
+                        cc_matrix.loc[idx, 'Net_Profit_Total_Raw'] = cc_matrix.loc[idx, 'Gross_Invoiced_Raw'] - cc_matrix.loc[idx, 'Combined_Cost_Total_Raw'] - cc_matrix.loc[idx, 'Assumed_Labor_Payload_Raw']
+                
+                cc_matrix['Cost Ratio % vs Rev'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Combined_Cost_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
+                cc_matrix['Cost Ratio % vs Rev'] = cc_matrix['Cost Ratio % vs Rev'].apply(lambda x: f"{x:.1f}%")
+                cc_matrix['Net Profit (%)'] = np.where(cc_matrix['Gross_Invoiced_Raw'] > 0, (cc_matrix['Net_Profit_Total_Raw'] / cc_matrix['Gross_Invoiced_Raw'] * 100), 0.0)
+                cc_matrix['Net Profit (%)'] = cc_matrix['Net Profit (%)'].apply(lambda x: f"{x:.1f}%")
+                cc_matrix['Gross Invoiced Revenue'] = cc_matrix['Gross_Invoiced_Raw'].apply(lambda x: f"${x:,.2f}")
+                cc_matrix['Total Combined Cost'] = cc_matrix['Combined_Cost_Total_Raw'].apply(lambda x: f"${x:,.2f}")
+                cc_matrix['Tech Wage Burden'] = cc_matrix['Assumed_Labor_Payload_Raw'].apply(lambda x: f"${x:,.2f}")
+                cc_matrix['Net Profit ($)'] = cc_matrix['Net_Profit_Total_Raw'].apply(lambda x: f"${x:,.2f}")
+                
+                show_cc = cc_matrix[['Business Unit', 'Jobs', 'Gross Invoiced Revenue', 'Total Combined Cost', 'Cost Ratio % vs Rev', 'Tech Wage Burden', 'Net Profit ($)', 'Net Profit (%)']].rename(columns={'Jobs': 'Jobs Assigned'})
+                st.dataframe(show_cc, use_container_width=True)
+                create_copy_button(show_cc, "product_vs_service_cost_breakdown")
             
             # --- RENDER DISPATCH METRICS & SCORECARDS IN THE WEEKLY SUMMARY CANVAS ---
             st.markdown("<br><hr>", unsafe_allow_html=True)
@@ -1290,8 +1336,12 @@ if time_file and ops_file:
                     day_clocked = final_df_d_clocked
                     day_job = final_df_d_job
                     day_eff = (day_job / day_clocked * 100) if day_clocked > 0 else 0.0
-                    day_lsi = ops_df[(ops_df['Day_of_Week'] == d) & (ops_df['Business Unit'] == 'Lowes - Simple Installs')].shape[0]
-                    day_wh = ops_df[(ops_df['Day_of_Week'] == d) & (ops_df['Business Unit'] == 'Lowes - Water Heaters')].shape[0]
+                    
+                    if 'Business Unit' in ops_df.columns:
+                        day_lsi = ops_df[(ops_df['Day_of_Week'] == d) & (ops_df['Business Unit'] == 'Lowes - Simple Installs')].shape[0]
+                        day_wh = ops_df[(ops_df['Day_of_Week'] == d) & (ops_df['Business Unit'] == 'Lowes - Water Heaters')].shape[0]
+                    else: day_lsi, day_wh = 0, 0
+                    
                     total_bu = day_lsi + day_wh
                     lsi_ratio = (day_lsi / total_bu * 100) if total_bu > 0 else 0
                     if total_bu > 0:
@@ -1346,7 +1396,7 @@ if time_file and ops_file:
 
             if "¼ The Lowe's Store Staging Efficiency Scorecard" in test_choices:
                 st.markdown("### **¼ The Lowe's Store Staging Efficiency Scorecard**")
-                store_cols = [c for c in ops_df.columns if 'store' in c.lower() and 'time' not in c.lower() and 'timestamp' not in c.lower()]
+                store_cols = [c for c in ops_df.columns if 'store' in c.lower() and 'time' in c.lower() and 'timestamp' not in c.lower()]
                 if store_cols:
                     store_stats = ops_df.groupby(store_cols[0])['Store_Time_Hrs'].mean().reset_index()
                     store_stats.columns = ['Store Identifier', 'Avg Delay Length (Hrs)']
@@ -1359,10 +1409,11 @@ if time_file and ops_file:
                 with m_col1:
                     total_rev = unexploded_ops['Total Invoice Amount'].sum()
                     st.metric(label="Division Gross Invoiced Volume", value=f"${total_rev:,.2f}")
-                    bu_avg_ticket = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].mean().reset_index()
-                    bu_avg_ticket.columns = ['Business Unit', 'Average Ticket Size Raw']
-                    bu_avg_ticket['Average Ticket Size'] = bu_avg_ticket['Average Ticket Size Raw'].apply(lambda x: f"${x:,.2f}")
-                    st.dataframe(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True), use_container_width=True)
+                    if 'Business Unit' in unexploded_ops.columns:
+                        bu_avg_ticket = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].mean().reset_index()
+                        bu_avg_ticket.columns = ['Business Unit', 'Average Ticket Size Raw']
+                        bu_avg_ticket['Average Ticket Size'] = bu_avg_ticket['Average Ticket Size Raw'].apply(lambda x: f"${x:,.2f}")
+                        st.dataframe(bu_avg_ticket[['Business Unit', 'Average Ticket Size']].reset_index(drop=True), use_container_width=True)
                 with m_col2:
                     st.markdown("**📈 Pay Ratio per Clocked Hour**")
                     rev_per_hour_df = final_df.copy()
@@ -1379,11 +1430,12 @@ if time_file and ops_file:
             if "📊 Business Unit Revenue Velocity" in test_choices:
                 st.markdown("### **📊 Business Unit Revenue Velocity**")
                 bu_rev = unexploded_ops['Total Invoice Amount'].sum()
-                bu_rev_df = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].sum().reset_index()
-                bu_rev_df['Revenue Share %'] = (bu_rev_df['Total Invoice Amount'] / unexploded_ops['Total Invoice Amount'].sum()) * 100
-                bu_rev_df['Total Revenue'] = bu_rev_df['Total Invoice Amount'].apply(lambda x: f"${x:,.2f}")
-                bu_rev_df['Revenue Share %'] = bu_rev_df['Revenue Share %'].apply(lambda x: f"{x:.1f}%")
-                st.dataframe(bu_rev_df[['Business Unit', 'Total Revenue', 'Revenue Share %']].reset_index(drop=True), use_container_width=True)
+                if 'Business Unit' in unexploded_ops.columns:
+                    bu_rev_df = unexploded_ops.groupby('Business Unit')['Total Invoice Amount'].sum().reset_index()
+                    bu_rev_df['Revenue Share %'] = (bu_rev_df['Total Invoice Amount'] / unexploded_ops['Total Invoice Amount'].sum()) * 100
+                    bu_rev_df['Total Revenue'] = bu_rev_df['Total Invoice Amount'].apply(lambda x: f"${x:,.2f}")
+                    bu_rev_df['Revenue Share %'] = bu_rev_df['Revenue Share %'].apply(lambda x: f"{x:.1f}%")
+                    st.dataframe(bu_rev_df[['Business Unit', 'Total Revenue', 'Revenue Share %']].reset_index(drop=True), use_container_width=True)
 
             if "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)" in test_choices:
                 st.markdown("### **🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)**")
@@ -1432,7 +1484,7 @@ if time_file and ops_file:
                     team_jobs['Job Duration'] = team_jobs['Total_Job_Time_Hours'].apply(format_hm)
                     team_jobs['Helper Cost'] = team_jobs['Helper_Labor_Cost'].apply(lambda x: f"${x:,.2f}")
                     team_jobs['Man-Hours'] = team_jobs['Total_Man_Hours'].apply(format_hm)
-                    show_team_jobs = team_jobs[['#ID', 'Assigned Team Members', 'Business Unit', 'Total Revenue', 'Job Duration', 'Man-Hours', 'Helper Cost']].rename(columns={'#ID': 'Job ID'})
+                    show_team_jobs = team_jobs[['#ID', 'Assigned Team Members', 'Business Unit', 'Total Revenue', 'Job Duration', 'Man-Hours', 'Helper Cost']].rename(columns={'#ID': 'Job ID'}) if 'Business Unit' in team_jobs.columns else team_jobs[['#ID', 'Assigned Team Members', 'Total Revenue', 'Job Duration', 'Man-Hours', 'Helper Cost']].rename(columns={'#ID': 'Job ID'})
                     st.dataframe(show_team_jobs, use_container_width=True)
                     create_copy_button(show_team_jobs, "granular_team_log")
                 else:
@@ -1502,7 +1554,7 @@ if time_file and ops_file:
                         whale_summary.append({
                             "Job ID": str(jid),
                             "Assigned Crew Members": r['Assigned Team Members'],
-                            "Business Unit Sector": r['Business Unit'] if 'Business Unit' in r else "Unknown",
+                            "Business Unit Sector": r.get('Business Unit', 'Unknown'),
                             "Ticket Invoiced Revenue": f"${r['Total Invoice Amount']:,.2f}"
                         })
                     whale_summary_df = pd.DataFrame(whale_summary)
