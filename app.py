@@ -1365,7 +1365,7 @@ if time_file and ops_file:
                 st.markdown(f"#### **{tech}**")
                 tech_data = final_df[final_df['Name'] == tech].iloc[0]
                 report_data = []
-                for full_day, short_day in {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}.items():
+                for full_day, short_day in {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun}._items():
                     report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(final_df[final_df['Name'] == tech].iloc[0][short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])})
                 report_data.append({"Day": "TOTAL WEEKLY", "Jobs": int(tech_data['Total_Weekly_Job_Count']), "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']), "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']), "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])})
                 manager_day_df = pd.DataFrame(report_data)
@@ -1802,40 +1802,43 @@ if time_file and ops_file:
                     import json
                     import time
 
-                    with st.spinner("🌍 Mapping exact job locations... (Takes a brief moment on the first run)"):
+                    unique_addresses = df_map['Location Address'].dropna().unique()
+                    st.info(f"📍 Found {len(unique_addresses)} unique work addresses in your operational data.")
+                    
+                    # Manual user-triggered execution gate to avoid greedy execution hang-ups
+                    if st.button("🚀 Render Exact Job Dispatch Map"):
+                        progress_bar = st.progress(0.0)
+                        status_text = st.empty()
                         
-                        @st.cache_data(show_spinner=False)
-                        def get_coordinates_built_in(address_list):
-                            """Fetches coordinates using Python's native libraries to avoid pip installs."""
-                            lats, lons = [], []
-                            for addr in address_list:
-                                try:
-                                    search_addr = str(addr)
-                                    if " AZ" not in search_addr.upper() and "ARIZONA" not in search_addr.upper():
-                                        search_addr += ", AZ"
-                                    
-                                    encoded_addr = urllib.parse.quote(search_addr)
-                                    url = f"https://nominatim.openstreetmap.org/search?q={encoded_addr}&format=json&limit=1"
-                                    
-                                    req = urllib.request.Request(url, headers={'User-Agent': 'tech_time_tracker_built_in'})
-                                    
-                                    with urllib.request.urlopen(req) as response:
-                                        data = json.loads(response.read().decode())
-                                        if data:
-                                            lats.append(float(data[0]['lat']))
-                                            lons.append(float(data[0]['lon']))
-                                        else:
-                                            lats.append(np.nan)
-                                            lons.append(np.nan)
-                                            
-                                    time.sleep(1)
-                                except Exception:
-                                    lats.append(np.nan)
-                                    lons.append(np.nan)
-                            return lats, lons
-
-                        unique_addresses = df_map['Location Address'].dropna().unique()
-                        lats, lons = get_coordinates_built_in(tuple(unique_addresses))
+                        lats, lons = [], []
+                        for idx, addr in enumerate(unique_addresses):
+                            status_text.text(f"Processing address {idx + 1} of {len(unique_addresses)}...")
+                            progress_bar.progress((idx + 1) / len(unique_addresses))
+                            try:
+                                search_addr = str(addr)
+                                if " AZ" not in search_addr.upper() and "ARIZONA" not in search_addr.upper():
+                                    search_addr += ", AZ"
+                                
+                                encoded_addr = urllib.parse.quote(search_addr)
+                                url = f"https://nominatim.openstreetmap.org/search?q={encoded_addr}&format=json&limit=1"
+                                req = urllib.request.Request(url, headers={'User-Agent': 'tech_time_tracker_built_in_v2'})
+                                
+                                with urllib.request.urlopen(req) as response:
+                                    data = json.loads(response.read().decode())
+                                    if data:
+                                        lats.append(float(data[0]['lat']))
+                                        lons.append(float(data[0]['lon']))
+                                    else:
+                                        lats.append(np.nan)
+                                        lons.append(np.nan)
+                                        
+                                time.sleep(1) # Strict compliance with free tier geocoding API rate limits
+                            except Exception:
+                                lats.append(np.nan)
+                                lons.append(np.nan)
+                        
+                        status_text.empty()
+                        progress_bar.empty()
                         
                         coord_map = dict(zip(unique_addresses, zip(lats, lons)))
                         df_map['latitude'] = df_map['Location Address'].map(lambda x: coord_map.get(x, (np.nan, np.nan))[0])
@@ -1845,9 +1848,9 @@ if time_file and ops_file:
                         
                         if not map_points.empty:
                             st.map(map_points[['latitude', 'longitude']], use_container_width=True)
-                            st.success(f"✅ Successfully mapped {len(map_points)} exact job locations.")
+                            st.success(f"✅ Successfully mapped {len(map_points)} distinct field coordinates.")
                         else:
-                            st.error("Could not convert addresses to map points. Verify that your file contains valid street data.")
+                            st.error("No valid matching points found. Please make sure the addresses are full street names.")
                 else:
                     st.info("Location Address column header field parameter missing from raw ops data sheets.")
 
@@ -1889,7 +1892,7 @@ if time_file and ops_file:
                 
                 st.dataframe(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True), use_container_width=True)
 
-            if "🚛 End-of-Day (EOD) Payroll Slippage Auditor" in test_choices:
+            if "阻 End-of-Day (EOD) Payroll Slippage Auditor" in test_choices:
                 st.markdown("### **🚛 End-of-Day (EOD) Payroll Slippage Auditor**")
                 st.markdown("*(Flags instances where a technician remained clocked in for more than 90 minutes after completing their final job order)*")
                 
