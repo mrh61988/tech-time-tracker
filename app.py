@@ -1814,11 +1814,9 @@ if time_file and ops_file:
                                     if " AZ" not in search_addr.upper() and "ARIZONA" not in search_addr.upper():
                                         search_addr += ", AZ"
                                     
-                                    # Encode address for web URL safety
                                     encoded_addr = urllib.parse.quote(search_addr)
                                     url = f"https://nominatim.openstreetmap.org/search?q={encoded_addr}&format=json&limit=1"
                                     
-                                    # Create web request with a standard app identity header
                                     req = urllib.request.Request(url, headers={'User-Agent': 'tech_time_tracker_built_in'})
                                     
                                     with urllib.request.urlopen(req) as response:
@@ -1830,23 +1828,19 @@ if time_file and ops_file:
                                             lats.append(np.nan)
                                             lons.append(np.nan)
                                             
-                                    # Polite pause to satisfy free API usage requirements
                                     time.sleep(1)
                                 except Exception:
                                     lats.append(np.nan)
                                     lons.append(np.nan)
                             return lats, lons
 
-                        # Extract unique addresses to keep things running fast
                         unique_addresses = df_map['Location Address'].dropna().unique()
-                        lats, lons = get_coordinates_built_in(unique_addresses)
+                        lats, lons = get_coordinates_built_in(tuple(unique_addresses))
                         
-                        # Match the coordinates back into the data rows
                         coord_map = dict(zip(unique_addresses, zip(lats, lons)))
                         df_map['latitude'] = df_map['Location Address'].map(lambda x: coord_map.get(x, (np.nan, np.nan))[0])
                         df_map['longitude'] = df_map['Location Address'].map(lambda x: coord_map.get(x, (np.nan, np.nan))[1])
                         
-                        # Drop rows that couldn't be pinpointed on a map
                         map_points = df_map.dropna(subset=['latitude', 'longitude']).copy()
                         
                         if not map_points.empty:
