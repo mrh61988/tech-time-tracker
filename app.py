@@ -1396,8 +1396,165 @@ if time_file and ops_file:
                 create_copy_button(display_dfs[short_day].reset_index(drop=True), f"day_tab_{short_day}")
 
         with tabs[10]:
-            test_choices = st.multiselect("Select active data views to mount inside Test Section:", ["🏆 The Golden Ratio Margin Predictor", "🔄 The Context-Switching Penalty Alert", "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", "¼ The Lowe's Store Staging Efficiency Scorecard", "📊 Macro Financial Performance Dashboard", "📊 Business Unit Revenue Velocity", "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)", "🗺️ Route Optimization Flags", "🦺 Multi-Tech Labor Yield vs. Solo Runs", "📅 Lowe's Store Staging Delays by Day of the Week", "📊 Overtime ROI Cost-Benefit Auditor", "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard", "🗺️ Interactive Territory Density and Hotspot Mapping", "🗺️ Geographic Revenue Yield per Drive Hour", "🚛 End-of-Day (EOD) Payroll Slippage Auditor"], default=["🏆 The Golden Ratio Margin Predictor"], key="sandbox_view_choices")
+            test_choices = st.multiselect(
+                "Select active data views to mount inside Test Section:", 
+                [
+                    "🏆 The Golden Ratio Margin Predictor", 
+                    "🔄 The Context-Switching Penalty Alert", 
+                    "🕵️ The Ghost Punch & Payroll Discrepancy Auditor", 
+                    "¼ The Lowe's Store Staging Efficiency Scorecard", 
+                    "📊 Macro Financial Performance Dashboard", 
+                    "📊 Business Unit Revenue Velocity", 
+                    "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)", 
+                    "🗺️ Route Optimization Flags", 
+                    "🦺 Multi-Tech Labor Yield vs. Solo Runs", 
+                    "📅 Lowe's Store Staging Delays by Day of the Week", 
+                    "📊 Overtime ROI Cost-Benefit Auditor", 
+                    "🏆 Single-Job \"Whale Alert\" Revenue Leaderboard", 
+                    "🗺️ Interactive Territory Density and Hotspot Mapping", 
+                    "🗺️ Geographic Revenue Yield per Drive Hour", 
+                    "🚛 End-of-Day (EOD) Payroll Slippage Auditor",
+                    "🤖 AI Outlier & Anomalous Duration Detector",
+                    "🚙 Dynamic Machine Learning Drive Time Forecast",
+                    "🎖️ Gamification Leaderboards & Digital Badges"
+                ], 
+                default=["🏆 The Golden Ratio Margin Predictor"], 
+                key="sandbox_view_choices"
+            )
             
+            if "🤖 AI Outlier & Anomalous Duration Detector" in test_choices:
+                st.markdown("### **🤖 AI Outlier & Anomalous Duration Detector**")
+                st.markdown("*(Isolates completion windows that are statistically impossible or indicate severe operational delay using Isolation Forests or Z-Score fallbacks)*")
+                df_outlier = ops_df.copy()
+                df_outlier['Is_Duration_Anomaly'] = False
+                df_outlier['Anomaly_Reason'] = ""
+                
+                if 'Business Unit' in df_outlier.columns:
+                    for bu in df_outlier['Business Unit'].unique():
+                        bu_mask = df_outlier['Business Unit'] == bu
+                        bu_slice = df_outlier[bu_mask]
+                        
+                        if len(bu_slice) >= 4:
+                            try:
+                                from sklearn.ensemble import IsolationForest
+                                clf = IsolationForest(contamination=0.08, random_state=42)
+                                preds = clf.fit_predict(bu_slice[['Total_Job_Time_Hours']])
+                                df_outlier.loc[bu_mask & (preds == -1), 'Is_Duration_Anomaly'] = True
+                            except ImportError:
+                                mean_t = bu_slice['Total_Job_Time_Hours'].mean()
+                                std_t = bu_slice['Total_Job_Time_Hours'].std()
+                                if std_t > 0:
+                                    z_scores = (bu_slice['Total_Job_Time_Hours'] - mean_t) / std_t
+                                    df_outlier.loc[bu_mask & (z_scores.abs() > 2.0), 'Is_Duration_Anomaly'] = True
+                            
+                            mean_val = bu_slice['Total_Job_Time_Hours'].mean()
+                            df_outlier.loc[bu_mask & df_outlier['Is_Duration_Anomaly'] & (df_outlier['Total_Job_Time_Hours'] > mean_val), 'Anomaly_Reason'] = "⚠️ Suspiciously High Window"
+                            df_outlier.loc[bu_mask & df_outlier['Is_Duration_Anomaly'] & (df_outlier['Total_Job_Time_Hours'] < mean_val), 'Anomaly_Reason'] = "🚨 Fast-Punch / App Abuse Suspect"
+                    
+                    anomalies = df_outlier[df_outlier['Is_Duration_Anomaly']].copy()
+                    if not anomalies.empty:
+                        anomalies['Job Time'] = anomalies['Total_Job_Time_Hours'].apply(format_hm)
+                        st.dataframe(anomalies[['#ID', 'Name', 'Business Unit', 'Job Time', 'Anomaly_Reason']].rename(columns={'#ID': 'Job ID'}), use_container_width=True)
+                        create_copy_button(anomalies[['#ID', 'Name', 'Business Unit', 'Job Time', 'Anomaly_Reason']], "duration_anomalies_export")
+                    else:
+                        st.success("✅ No statistical outliers detected in the current dataset.")
+                else:
+                    st.info("Requires Business Unit data to calculate statistical cohorts.")
+
+            if "🚙 Dynamic Machine Learning Drive Time Forecast" in test_choices:
+                st.markdown("### **🚙 Dynamic Machine Learning Drive Time Forecast**")
+                st.markdown("*(Predicts expected drive times dynamically by building a spatial-temporal profile per AZ city/hub, flagging anomalous travel routing)*")
+                df_drive = ops_df.copy()
+                
+                if 'Location Address' in df_drive.columns:
+                    df_drive['Destination_Hub'] = df_drive['Location Address'].apply(parse_az_city)
+                    df_drive['Hour_of_Day'] = pd.to_datetime(df_drive['Earliest_Start']).dt.hour.fillna(8).astype(int)
+                    df_drive['Predicted_Drive_Hrs'] = 0.0
+                    
+                    try:
+                        from sklearn.linear_model import LinearRegression
+                        from sklearn.preprocessing import OneHotEncoder
+                        
+                        X_raw = df_drive[['Destination_Hub', 'Hour_of_Day']].copy()
+                        y = df_drive['Drive_Time_Hrs'].values
+                        
+                        encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+                        X_encoded = encoder.fit_transform(X_raw[['Destination_Hub']])
+                        X_features = np.column_stack((X_encoded, X_raw['Hour_of_Day'].values))
+                        
+                        model = LinearRegression()
+                        model.fit(X_features, y)
+                        df_drive['Predicted_Drive_Hrs'] = model.predict(X_features)
+                    except ImportError:
+                        profile_map = df_drive.groupby(['Destination_Hub', 'Hour_of_Day'])['Drive_Time_Hrs'].mean().to_dict()
+                        global_avg = df_drive['Drive_Time_Hrs'].mean() if not df_drive.empty else 0.5
+                        df_drive['Predicted_Drive_Hrs'] = df_drive.apply(
+                            lambda r: profile_map.get((r['Destination_Hub'], r['Hour_of_Day']), global_avg), axis=1
+                        )
+                    
+                    df_drive['Is_Drive_Anomaly'] = df_drive['Drive_Time_Hrs'] > (df_drive['Predicted_Drive_Hrs'] + 0.75)
+                    drive_anomalies = df_drive[df_drive['Is_Drive_Anomaly']].copy()
+                    
+                    if not drive_anomalies.empty:
+                        drive_anomalies['Actual Drive'] = drive_anomalies['Drive_Time_Hrs'].apply(format_hm)
+                        drive_anomalies['Predicted Drive'] = drive_anomalies['Predicted_Drive_Hrs'].apply(format_hm)
+                        drive_anomalies['Variance'] = (drive_anomalies['Drive_Time_Hrs'] - drive_anomalies['Predicted_Drive_Hrs']).apply(lambda x: f"+{format_hm(x)}")
+                        
+                        st.dataframe(drive_anomalies[['#ID', 'Name', 'Destination_Hub', 'Actual Drive', 'Predicted Drive', 'Variance']].rename(columns={'#ID': 'Job ID'}), use_container_width=True)
+                        create_copy_button(drive_anomalies[['#ID', 'Name', 'Destination_Hub', 'Actual Drive', 'Predicted Drive', 'Variance']], "drive_anomalies_export")
+                    else:
+                        st.success("✅ Travel routes align closely with expected geographic spatial-temporal forecasts.")
+                else:
+                    st.info("Requires Location Address column to map and route destinations.")
+
+            if "🎖️ Gamification Leaderboards & Digital Badges" in test_choices:
+                st.markdown("### **🎖️ Gamification Leaderboards & Digital Badges**")
+                st.markdown("*(Awards digital achievements based on division-leading metrics in efficiency, punctuality, and volume)*")
+                
+                if 'display_dfs' in locals() and 'Weekly' in display_dfs:
+                    badge_rows = []
+                    weekly_df = display_dfs['Weekly']
+                    
+                    for _, r in weekly_df.iterrows():
+                        tech_name = r['Name']
+                        if tech_name == 'TOTAL DIVISION': 
+                            continue
+                        
+                        badges = []
+                        
+                        # 1. Master Installer
+                        try:
+                            eff_val = float(str(r.get('Total Efficiency', '0%')).replace('%', ''))
+                            if eff_val >= 75.0:
+                                badges.append("🏆 **Master Installer**")
+                        except: pass
+                        
+                        # 2. Punctuality Star
+                        if not delayed_launches_df.empty:
+                            if len(delayed_launches_df[delayed_launches_df['Assigned Team Members'] == tech_name]) == 0:
+                                badges.append("⭐ **Punctuality Star**")
+                        else: 
+                            badges.append("⭐ **Punctuality Star**")
+                            
+                        # 3. Road Warrior
+                        if int(r.get('Total Jobs', 0)) >= 8:
+                            badges.append("🚛 **Road Warrior**")
+                            
+                        if not badges: 
+                            badges.append("🎖️ *Baseline Competency*")
+                            
+                        badge_rows.append({
+                            "Technician": tech_name,
+                            "Jobs Completed": int(r.get('Total Jobs', 0)),
+                            "Total Efficiency": r.get('Total Efficiency', '-'),
+                            "Earned Badges": " &nbsp;•&nbsp; ".join(badges)
+                        })
+                    
+                    badge_df = pd.DataFrame(badge_rows).sort_values(by="Jobs Completed", ascending=False)
+                    st.markdown(badge_df.style.hide(axis="index").to_html(), unsafe_allow_html=True)
+                else:
+                    st.info("Weekly Summary data is missing to calculate gamification badges.")
+
             if "🏆 The Golden Ratio Margin Predictor" in test_choices:
                 st.markdown("### **🏆 The Golden Ratio Margin Predictor**")
                 golden_data = []
