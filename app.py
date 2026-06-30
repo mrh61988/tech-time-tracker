@@ -1365,7 +1365,7 @@ if time_file and ops_file:
                 st.markdown(f"#### **{tech}**")
                 tech_data = final_df[final_df['Name'] == tech].iloc[0]
                 report_data = []
-                for full_day, short_day in {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun}._items():
+                for full_day, short_day in {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}.items():
                     report_data.append({"Day": full_day, "Jobs": int(tech_data[short_day + '_Job_Count']), "Clocked Time": format_hm(tech_data[short_day + '_Clocked_Hrs']), "Job Time": format_hm(final_df[final_df['Name'] == tech].iloc[0][short_day + '_Job_Hrs']), "Difference": format_hm(tech_data[short_day + '_Diff_Hrs'])})
                 report_data.append({"Day": "TOTAL WEEKLY", "Jobs": int(tech_data['Total_Weekly_Job_Count']), "Clocked Time": format_hm(tech_data['Total_Weekly_Clocked_Hrs']), "Job Time": format_hm(tech_data['Total_Weekly_Job_Hrs']), "Difference": format_hm(tech_data['Total_Weekly_Diff_Hrs'])})
                 manager_day_df = pd.DataFrame(report_data)
@@ -1892,7 +1892,7 @@ if time_file and ops_file:
                 
                 st.dataframe(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True), use_container_width=True)
 
-            if "阻 End-of-Day (EOD) Payroll Slippage Auditor" in test_choices:
+            if "🚛 End-of-Day (EOD) Payroll Slippage Auditor" in test_choices:
                 st.markdown("### **🚛 End-of-Day (EOD) Payroll Slippage Auditor**")
                 st.markdown("*(Flags instances where a technician remained clocked in for more than 90 minutes after completing their final job order)*")
                 
