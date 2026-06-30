@@ -225,7 +225,7 @@ def load_and_parse_ops(ops_bytes):
     cols = ops_df.columns.astype(str).tolist()
     store_time_cols = [c for c in cols if 'store' in c.lower() and 'time' in c.lower() and 'timestamp' not in c.lower()]
     drive_time_cols = [c for c in cols if 'way' in c.lower() and 'time' in c.lower() and 'timestamp' not in c.lower()]
-    prog_time_cols = [c for c in cols if 'progress' in c.lower() and 'time' in c.lower() and 'timestamp' not in c.lower()]
+    prog_time_cols = [c for c in cols if 'progress' in c.lower() receiver in c.lower() and 'time' in c.lower() and 'timestamp' not in c.lower()]
     
     time_cols = store_time_cols + drive_time_cols + prog_time_cols
     
@@ -1793,33 +1793,69 @@ if time_file and ops_file:
 
             if "🗺️ Interactive Territory Density and Hotspot Mapping" in test_choices:
                 st.markdown("### **🗺️ Interactive Territory Density and Hotspot Mapping**")
-                st.markdown("*(Applies custom AZ coordinate positioning metrics to visually analyze geographic dispatch cluster density)*")
-                
-                AZ_COORDS = {
-                    "Phoenix": [33.4484, -112.0740], "Scottsdale": [33.4942, -111.9261], "Chandler": [33.3062, -111.8413],
-                    "Goodyear": [33.4353, -112.3582], "Prescott": [34.5400, -112.4685], "Mesa": [33.4152, -111.8315],
-                    "Glendale": [33.5387, -112.1860], "Gilbert": [33.3528, -111.7890], "Tempe": [33.4255, -111.9400],
-                    "Peoria": [33.5806, -112.2374], "Surprise": [33.6292, -112.3679], "Avondale": [33.4356, -112.3496],
-                    "Tucson": [32.2226, -110.9747], "Marana": [32.4367, -111.2254], "Sierra Vista": [31.5545, -110.3037],
-                    "Green Valley": [31.8543, -110.9937], "Maricopa": [33.0581, -112.0476], "Tolleson": [33.4500, -112.2593]
-                }
+                st.markdown("*(Translates exact street addresses into precise coordinates using Python's built-in tools—no installation required)*")
                 
                 df_map = ops_df.copy()
                 if 'Location Address' in df_map.columns:
-                    df_map['Parsed_City'] = df_map['Location Address'].apply(parse_az_city)
-                    map_points = []
-                    for idx, r in df_map.iterrows():
-                        base_coords = AZ_COORDS.get(r['Parsed_City'], [33.4484, -112.0740])
-                        np.random.seed(int(r['#ID']) if pd.notna(r['#ID']) else idx)
-                        lat_jit = base_coords[0] + np.random.uniform(-0.025, 0.025)
-                        lon_jit = base_coords[1] + np.random.uniform(-0.025, 0.025)
-                        map_points.append({"latitude": lat_jit, "longitude": lon_jit})
+                    import urllib.request
+                    import urllib.parse
+                    import json
+                    import time
+
+                    with st.spinner("🌍 Mapping exact job locations... (Takes a brief moment on the first run)"):
                         
-                    if map_points:
-                        st.map(pd.DataFrame(map_points), use_container_width=True)
-                        st.success(f"Successfully mapped {len(map_points)} active field work dispatches across Arizona sub-territories.")
-                    else: st.info("Unable to identify locations inside loaded variables.")
-                else: st.info("Location Address column header field parameter missing from raw ops data sheets.")
+                        @st.cache_data(show_spinner=False)
+                        def get_coordinates_built_in(address_list):
+                            """Fetches coordinates using Python's native libraries to avoid pip installs."""
+                            lats, lons = [], []
+                            for addr in address_list:
+                                try:
+                                    search_addr = str(addr)
+                                    if " AZ" not in search_addr.upper() and "ARIZONA" not in search_addr.upper():
+                                        search_addr += ", AZ"
+                                    
+                                    # Encode address for web URL safety
+                                    encoded_addr = urllib.parse.quote(search_addr)
+                                    url = f"https://nominatim.openstreetmap.org/search?q={encoded_addr}&format=json&limit=1"
+                                    
+                                    # Create web request with a standard app identity header
+                                    req = urllib.request.Request(url, headers={'User-Agent': 'tech_time_tracker_built_in'})
+                                    
+                                    with urllib.request.urlopen(req) as response:
+                                        data = json.loads(response.read().decode())
+                                        if data:
+                                            lats.append(float(data[0]['lat']))
+                                            lons.append(float(data[0]['lon']))
+                                        else:
+                                            lats.append(np.nan)
+                                            lons.append(np.nan)
+                                            
+                                    # Polite pause to satisfy free API usage requirements
+                                    time.sleep(1)
+                                except Exception:
+                                    lats.append(np.nan)
+                                    lons.append(np.nan)
+                            return lats, lons
+
+                        # Extract unique addresses to keep things running fast
+                        unique_addresses = df_map['Location Address'].dropna().unique()
+                        lats, lons = get_coordinates_built_in(unique_addresses)
+                        
+                        # Match the coordinates back into the data rows
+                        coord_map = dict(zip(unique_addresses, zip(lats, lons)))
+                        df_map['latitude'] = df_map['Location Address'].map(lambda x: coord_map.get(x, (np.nan, np.nan))[0])
+                        df_map['longitude'] = df_map['Location Address'].map(lambda x: coord_map.get(x, (np.nan, np.nan))[1])
+                        
+                        # Drop rows that couldn't be pinpointed on a map
+                        map_points = df_map.dropna(subset=['latitude', 'longitude']).copy()
+                        
+                        if not map_points.empty:
+                            st.map(map_points[['latitude', 'longitude']], use_container_width=True)
+                            st.success(f"✅ Successfully mapped {len(map_points)} exact job locations.")
+                        else:
+                            st.error("Could not convert addresses to map points. Verify that your file contains valid street data.")
+                else:
+                    st.info("Location Address column header field parameter missing from raw ops data sheets.")
 
             if "🗺️ Geographic Revenue Yield per Drive Hour" in test_choices:
                 st.markdown("### **🗺️ Geographic Revenue Yield per Drive Hour**")
