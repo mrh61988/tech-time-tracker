@@ -225,7 +225,7 @@ def load_and_parse_ops(ops_bytes):
     cols = ops_df.columns.astype(str).tolist()
     store_time_cols = [c for c in cols if 'store' in c.lower() and 'time' in c.lower() and 'timestamp' not in c.lower()]
     drive_time_cols = [c for c in cols if 'way' in c.lower() and 'time' in c.lower() and 'timestamp' not in c.lower()]
-    prog_time_cols = [c for c in cols if 'progress' in c.lower() receiver in c.lower() and 'time' in c.lower() and 'timestamp' not in c.lower()]
+    prog_time_cols = [c for c in cols if 'progress' in c.lower() and 'time' in c.lower() and 'timestamp' not in c.lower()]
     
     time_cols = store_time_cols + drive_time_cols + prog_time_cols
     
@@ -705,7 +705,7 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
         gold_star_df = final_df[(final_df['Daily_Avg_Diff_Hrs'] < 1.5) & (final_df['Days_Worked'] > 0)].copy()
         if not gold_star_df.empty:
             gold_star_df = gold_star_df.sort_values(by='Daily_Avg_Diff_Hrs', ascending=True)
-            gold_star_df['Total Clocked'] = gold_star_df['Total_Weekly_Clocked_Hrs'].apply(format_hm)
+            gold_star_df['Total Clocked'] = gold_star_df['Total_Weekly_Clocked_Hrs'].copy().apply(format_hm)
             gold_star_df['Total Job Time'] = gold_star_df['Total_Weekly_Job_Hrs'].apply(format_hm)
             gold_star_df['Daily Avg Diff'] = gold_star_df['Daily_Avg_Diff_Hrs'].apply(format_hm)
             gold_star_df['Total Diff'] = gold_star_df['Total_Weekly_Diff_Hrs'].apply(format_hm)
@@ -1672,7 +1672,7 @@ if time_file and ops_file:
                 route_eff = route_eff.sort_values(by='Rev per Drive Hour Raw', ascending=False)
                 route_eff['Total Assigned Revenue'] = route_eff['Total_Revenue'].apply(lambda x: f"${x:,.2f}")
                 route_eff['Total Drive Hours'] = route_eff['Total_Drive_Hrs'].apply(lambda x: f"{x:.1f} hrs")
-                route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"{x:.1f}/hr")
+                route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"${x:.1f}/hr")
                 
                 st.dataframe(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True), use_container_width=True)
 
