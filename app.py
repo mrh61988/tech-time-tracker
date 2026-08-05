@@ -718,6 +718,43 @@ def run_job_type_breakdown_matrix(ops_df):
     st.dataframe(display_df.reset_index(drop=True), use_container_width=True)
     create_copy_button(display_df, "job_type_breakdown_matrix")
 
+def run_job_subtype_breakdown_matrix(ops_df):
+    st.markdown("<h4>📋 Advanced Job Sub-Type (Title) Length Breakdown</h4>", unsafe_allow_html=True)
+    st.markdown("*(Comprehensive breakdown of average, minimum, and maximum job duration lengths across specific job titles and tasks)*")
+    
+    cols_lower = [str(c).lower().strip() for c in ops_df.columns]
+    subtype_col = None
+    
+    for target in ['title', 'job title', 'task', 'service type', 'description', 'work order type', 'item description', 'job type']:
+        if target in cols_lower:
+            subtype_col = ops_df.columns[cols_lower.index(target)]
+            break
+            
+    if not subtype_col:
+        st.warning("⚠️ Could not identify a 'Title' or 'Task' column in the uploaded ops data to generate the sub-type breakdown. Please verify your export columns.")
+        return
+        
+    job_type_stats = ops_df.groupby(subtype_col).agg(
+        Total_Jobs=('#ID', 'count') if '#ID' in ops_df.columns else (subtype_col, 'count'),
+        Avg_Job_Time=('Total_Job_Time_Hours', 'mean'),
+        Min_Job_Time=('Total_Job_Time_Hours', 'min'),
+        Max_Job_Time=('Total_Job_Time_Hours', 'max'),
+        Avg_Store_Time=('Store_Time_Hrs', lambda x: x[x > 0].mean() if len(x[x > 0]) > 0 else 0.0)
+    ).reset_index()
+    
+    job_type_stats['Avg Job Length'] = job_type_stats['Avg_Job_Time'].apply(format_hm)
+    job_type_stats['Min Job Length'] = job_type_stats['Min_Job_Time'].apply(format_hm)
+    job_type_stats['Max Job Length'] = job_type_stats['Max_Job_Time'].apply(format_hm)
+    job_type_stats['Avg Store Delay'] = job_type_stats['Avg_Store_Time'].apply(format_hm)
+    
+    job_type_stats = job_type_stats.sort_values('Total_Jobs', ascending=False)
+    
+    display_df = job_type_stats[[subtype_col, 'Total_Jobs', 'Avg Job Length', 'Min Job Length', 'Max Job Length', 'Avg Store Delay']]
+    display_df = display_df.rename(columns={subtype_col: 'Job Title / Task', 'Total_Jobs': 'Total Dispatches Closed'})
+    
+    st.dataframe(display_df.reset_index(drop=True), use_container_width=True)
+    create_copy_button(display_df, "job_subtype_breakdown_matrix")
+
 def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     st.header("📊 Ops Manager Tools (Benchmarking & Performance)")
@@ -726,6 +763,9 @@ def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed
     st.markdown("<br><hr><br>", unsafe_allow_html=True)
     
     run_job_type_breakdown_matrix(ops_df)
+    st.markdown("<br><hr><br>", unsafe_allow_html=True)
+    
+    run_job_subtype_breakdown_matrix(ops_df)
     st.markdown("<br><hr><br>", unsafe_allow_html=True)
     
     col_left, col_right = st.columns(2)
@@ -1091,7 +1131,7 @@ if time_file and ops_file:
             final_df[f'{day} Jobs'] = final_df[day + '_Job_Count'].astype(int)
             final_df[f'{day} Clocked'] = final_df[day + '_Clocked_Hrs'].apply(format_hm)
             final_df[f'{day} Job Time'] = final_df[day + '_Job_Hrs'].apply(format_hm)
-            final_df[f'{day} Diff'] = final_df[day + '_Diff_Hrs'].apply(format_hm)
+            final_df[f'{day} Diff'] = final_df[f'{day} Diff_Hrs'].apply(format_hm)
             
             day_df = pd.DataFrame()
             day_df['Name'] = final_df['Name']
@@ -1554,21 +1594,18 @@ if time_file and ops_file:
                         
                         badges = []
                         
-                        # 1. Master Installer
                         try:
                             eff_val = float(str(r.get('Total Efficiency', '0%')).replace('%', ''))
                             if eff_val >= 75.0:
                                 badges.append("🏆 **Master Installer**")
                         except: pass
                         
-                        # 2. Punctuality Star
                         if not delayed_launches_df.empty:
                             if len(delayed_launches_df[delayed_launches_df['Assigned Team Members'] == tech_name]) == 0:
                                 badges.append("⭐ **Punctuality Star**")
                         else: 
                             badges.append("⭐ **Punctuality Star**")
                             
-                        # 3. Road Warrior
                         if int(r.get('Total Jobs', 0)) >= 8:
                             badges.append("🚛 **Road Warrior**")
                             
@@ -1837,7 +1874,6 @@ if time_file and ops_file:
                     unique_addresses = df_map['Location Address'].dropna().unique()
                     st.info(f"📍 Found {len(unique_addresses)} unique work addresses in your operational data.")
                     
-                    # Manual user-triggered execution gate to avoid greedy execution hang-ups
                     if st.button("🚀 Render Exact Job Dispatch Map"):
                         progress_bar = st.progress(0.0)
                         status_text = st.empty()
@@ -1864,7 +1900,7 @@ if time_file and ops_file:
                                         lats.append(np.nan)
                                         lons.append(np.nan)
                                         
-                                time.sleep(1) # Strict compliance with free tier geocoding API rate limits
+                                time.sleep(1)
                             except Exception:
                                 lats.append(np.nan)
                                 lons.append(np.nan)
@@ -1944,7 +1980,7 @@ if time_file and ops_file:
                 
                 cols_lower = [str(c).lower().strip() for c in ops_df.columns]
                 subtype_col = None
-                for target in ['job title', 'task', 'service type', 'description', 'work order type', 'item description', 'job type']:
+                for target in ['title', 'job title', 'task', 'service type', 'description', 'work order type', 'item description', 'job type']:
                     if target in cols_lower:
                         subtype_col = ops_df.columns[cols_lower.index(target)]
                         break
@@ -1988,8 +2024,7 @@ if time_file and ops_file:
                     else:
                         st.info("No job duration data available for sub-types to calculate speeds.")
                 else:
-                    st.info("⚠️ Could not identify a 'Job Title' or 'Task' column in the uploaded ops data to generate the sub-type breakdown. Please verify your export columns.")
-
+                    st.info("⚠️ Could not identify a 'Title' or 'Task' column in the uploaded ops data to generate the sub-type breakdown. Please verify your export columns.")
 
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
