@@ -588,9 +588,9 @@ def run_baselines_matrix(ops_df):
     wh_jobs = ops_df[ops_df['Business Unit'] == 'Lowes - Water Heaters']
     lsi_jobs = ops_df[ops_df['Business Unit'] == 'Lowes - Simple Installs']
     
-    div_avg_total = ops_df['Total_Job_Time_Hours'].mean() if not ops_df.empty else 0.0
-    div_wh_baseline = wh_jobs['Total_Job_Time_Hours'].mean() if not wh_jobs.empty else 3.5
-    div_lsi_baseline = lsi_jobs['Total_Job_Time_Hours'].mean() if not lsi_jobs.empty else 2.0
+    div_avg_total = ops_df[ops_df['Total_Job_Time_Hours'] > 0]['Total_Job_Time_Hours'].mean() if not ops_df.empty else 0.0
+    div_wh_baseline = wh_jobs[wh_jobs['Total_Job_Time_Hours'] > 0]['Total_Job_Time_Hours'].mean() if not wh_jobs.empty else 3.5
+    div_lsi_baseline = lsi_jobs[lsi_jobs['Total_Job_Time_Hours'] > 0]['Total_Job_Time_Hours'].mean() if not lsi_jobs.empty else 2.0
     
     wh_jobs_with_store = wh_jobs[wh_jobs['Store_Time_Hrs'] > 0]
     lsi_jobs_with_store = lsi_jobs[lsi_jobs['Store_Time_Hrs'] > 0]
@@ -612,9 +612,9 @@ def run_baselines_matrix(ops_df):
         t_wh = tech_jobs[tech_jobs['Business Unit'] == 'Lowes - Water Heaters']
         t_lsi = tech_jobs[tech_jobs['Business Unit'] == 'Lowes - Simple Installs']
         
-        avg_total_val = tech_jobs['Total_Job_Time_Hours'].mean() if not tech_jobs.empty else np.nan
-        avg_wh_val = t_wh['Total_Job_Time_Hours'].mean() if not t_wh.empty else np.nan
-        avg_lsi_val = t_lsi['Total_Job_Time_Hours'].mean() if not t_lsi.empty else np.nan
+        avg_total_val = tech_jobs[tech_jobs['Total_Job_Time_Hours'] > 0]['Total_Job_Time_Hours'].mean() if not tech_jobs.empty else np.nan
+        avg_wh_val = t_wh[t_wh['Total_Job_Time_Hours'] > 0]['Total_Job_Time_Hours'].mean() if not t_wh.empty else np.nan
+        avg_lsi_val = t_lsi[t_lsi['Total_Job_Time_Hours'] > 0]['Total_Job_Time_Hours'].mean() if not t_lsi.empty else np.nan
         
         t_wh_store = t_wh[t_wh['Store_Time_Hrs'] > 0]
         t_lsi_store = t_lsi[t_lsi['Store_Time_Hrs'] > 0]
