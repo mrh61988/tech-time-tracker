@@ -1131,7 +1131,7 @@ if time_file and ops_file:
             final_df[f'{day} Jobs'] = final_df[day + '_Job_Count'].astype(int)
             final_df[f'{day} Clocked'] = final_df[day + '_Clocked_Hrs'].apply(format_hm)
             final_df[f'{day} Job Time'] = final_df[day + '_Job_Hrs'].apply(format_hm)
-            final_df[f'{day} Diff'] = final_df[f'{day} Diff_Hrs'].apply(format_hm)
+            final_df[f'{day} Diff'] = final_df[day + '_Diff_Hrs'].apply(format_hm)
             
             day_df = pd.DataFrame()
             day_df['Name'] = final_df['Name']
@@ -2025,6 +2025,7 @@ if time_file and ops_file:
                         st.info("No job duration data available for sub-types to calculate speeds.")
                 else:
                     st.info("⚠️ Could not identify a 'Title' or 'Task' column in the uploaded ops data to generate the sub-type breakdown. Please verify your export columns.")
+
 
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
