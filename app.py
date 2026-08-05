@@ -2013,6 +2013,9 @@ if time_file and ops_file:
                 if subtype_col:
                     task_df = ops_df[ops_df['Total_Job_Time_Hours'] > 0].copy()
                     if not task_df.empty:
+                        
+                        # --- TABLE 1: By Job Sub-Type ---
+                        st.markdown("#### 🥇 Leaderboard by Job Task")
                         unique_tasks = sorted([str(x) for x in task_df[subtype_col].dropna().unique()])
                         selected_task = st.selectbox("Select a Job Sub-Type to Analyze:", unique_tasks, key="test_task_speed_selector")
                         
@@ -2029,6 +2032,7 @@ if time_file and ops_file:
                             tech_task_stats = task_subset.groupby('Name').agg(
                                 Jobs_Completed=('#ID', 'count') if '#ID' in task_df.columns else (subtype_col, 'count'),
                                 Items_Installed=('Item_Count', 'sum'),
+                                Avg_Job_Time=('Total_Job_Time_Hours', 'mean'),
                                 Avg_Time=('Time_Per_Item', 'mean'),
                                 Min_Time=('Time_Per_Item', 'min'),
                                 Max_Time=('Time_Per_Item', 'max')
@@ -2037,11 +2041,12 @@ if time_file and ops_file:
                             tech_task_stats = tech_task_stats.sort_values(by='Avg_Time', ascending=True)
                             
                             show_task_stats = tech_task_stats.copy()
+                            show_task_stats['Avg Time per Job'] = show_task_stats['Avg_Job_Time'].apply(format_hm)
                             show_task_stats['Avg Time per Item'] = show_task_stats['Avg_Time'].apply(format_hm)
                             show_task_stats['Min Time per Item'] = show_task_stats['Min_Time'].apply(format_hm)
                             show_task_stats['Max Time per Item'] = show_task_stats['Max_Time'].apply(format_hm)
                             
-                            final_show = show_task_stats[['Name', 'Jobs_Completed', 'Items_Installed', 'Avg Time per Item', 'Min Time per Item', 'Max Time per Item']].rename(columns={'Jobs_Completed': 'Jobs Performed', 'Items_Installed': 'Total Items Installed'})
+                            final_show = show_task_stats[['Name', 'Jobs_Completed', 'Items_Installed', 'Avg Time per Job', 'Avg Time per Item', 'Min Time per Item', 'Max Time per Item']].rename(columns={'Jobs_Completed': 'Jobs Performed', 'Items_Installed': 'Total Items Installed'})
                             
                             def highlight_fastest(row):
                                 if row.name == final_show.index[0]:
@@ -2054,6 +2059,45 @@ if time_file and ops_file:
                                 st.dataframe(final_show, use_container_width=True)
                                 
                             create_copy_button(final_show, "tech_task_speed")
+                            
+                        st.markdown("<br><hr><br>", unsafe_allow_html=True)
+                        
+                        # --- TABLE 2: By Technician ---
+                        st.markdown("#### 👷 Individual Technician Task Speed Profile")
+                        unique_techs = sorted([str(x) for x in task_df['Name'].dropna().unique()])
+                        selected_tech = st.selectbox("Select a Technician to View their Task Breakdown:", unique_techs, key="test_tech_speed_selector")
+                        
+                        if selected_tech:
+                            tech_subset = task_df[task_df['Name'] == selected_tech].copy()
+                            
+                            if subtitle_col:
+                                tech_subset['Item_Count'] = tech_subset[subtitle_col].apply(parse_item_count)
+                            else:
+                                tech_subset['Item_Count'] = 1
+                                
+                            tech_subset['Time_Per_Item'] = np.where(tech_subset['Item_Count'] > 0, tech_subset['Total_Job_Time_Hours'] / tech_subset['Item_Count'], tech_subset['Total_Job_Time_Hours'])
+                            
+                            task_tech_stats = tech_subset.groupby(subtype_col).agg(
+                                Jobs_Completed=('#ID', 'count') if '#ID' in task_df.columns else (subtype_col, 'count'),
+                                Items_Installed=('Item_Count', 'sum'),
+                                Avg_Job_Time=('Total_Job_Time_Hours', 'mean'),
+                                Avg_Time=('Time_Per_Item', 'mean'),
+                                Min_Time=('Time_Per_Item', 'min'),
+                                Max_Time=('Time_Per_Item', 'max')
+                            ).reset_index()
+                            
+                            task_tech_stats = task_tech_stats.sort_values(by='Jobs_Completed', ascending=False)
+                            
+                            show_tech_stats = task_tech_stats.copy()
+                            show_tech_stats['Avg Time per Job'] = show_tech_stats['Avg_Job_Time'].apply(format_hm)
+                            show_tech_stats['Avg Time per Item'] = show_tech_stats['Avg_Time'].apply(format_hm)
+                            show_tech_stats['Min Time per Item'] = show_tech_stats['Min_Time'].apply(format_hm)
+                            show_tech_stats['Max Time per Item'] = show_tech_stats['Max_Time'].apply(format_hm)
+                            
+                            final_show_tech = show_tech_stats[[subtype_col, 'Jobs_Completed', 'Items_Installed', 'Avg Time per Job', 'Avg Time per Item', 'Min Time per Item', 'Max Time per Item']].rename(columns={subtype_col: 'Job Title / Task', 'Jobs_Completed': 'Jobs Performed', 'Items_Installed': 'Total Items Installed'})
+                            
+                            st.dataframe(final_show_tech.reset_index(drop=True), use_container_width=True)
+                            create_copy_button(final_show_tech.reset_index(drop=True), "individual_tech_task_speed")
                     else:
                         st.info("No job duration data available for sub-types to calculate speeds.")
                 else:
