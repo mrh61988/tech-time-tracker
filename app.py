@@ -400,6 +400,18 @@ def parse_diff_to_hours(val):
         pass
     return 0.0
 
+def parse_item_count(val):
+    """Parses subtitle columns combining multi-item structures like '1/1' into an integer sum."""
+    if pd.isna(val) or str(val).strip() == '':
+        return 1
+    s = str(val).strip()
+    try:
+        if '/' in s:
+            return sum(int(x.strip()) for x in s.split('/') if x.strip().isdigit())
+        return int(float(s))
+    except:
+        return 1
+
 def check_late(row):
     if 'First_Punch' not in row or 'First_Status' not in row: return False
     fp = row['First_Punch']
@@ -720,7 +732,7 @@ def run_job_type_breakdown_matrix(ops_df):
 
 def run_job_subtype_breakdown_matrix(ops_df):
     st.markdown("<h4>📋 Advanced Job Sub-Type (Title) Length Breakdown</h4>", unsafe_allow_html=True)
-    st.markdown("*(Comprehensive breakdown of average, minimum, and maximum job duration lengths across specific job titles and tasks)*")
+    st.markdown("*(Comprehensive breakdown of average, minimum, and maximum job duration lengths across specific job titles and tasks. Analyzes true speed by calculating time strictly per item installed)*")
     
     cols_lower = [str(c).lower().strip() for c in ops_df.columns]
     subtype_col = None
@@ -734,23 +746,34 @@ def run_job_subtype_breakdown_matrix(ops_df):
         st.warning("⚠️ Could not identify a 'Title' or 'Task' column in the uploaded ops data to generate the sub-type breakdown. Please verify your export columns.")
         return
         
-    job_type_stats = ops_df.groupby(subtype_col).agg(
-        Total_Jobs=('#ID', 'count') if '#ID' in ops_df.columns else (subtype_col, 'count'),
-        Avg_Job_Time=('Total_Job_Time_Hours', 'mean'),
-        Min_Job_Time=('Total_Job_Time_Hours', 'min'),
-        Max_Job_Time=('Total_Job_Time_Hours', 'max'),
+    subtitle_col = ops_df.columns[cols_lower.index('subtitle')] if 'subtitle' in cols_lower else None
+    
+    calc_df = ops_df.copy()
+    if subtitle_col:
+        calc_df['Item_Count'] = calc_df[subtitle_col].apply(parse_item_count)
+    else:
+        calc_df['Item_Count'] = 1
+        
+    calc_df['Time_Per_Item'] = np.where(calc_df['Item_Count'] > 0, calc_df['Total_Job_Time_Hours'] / calc_df['Item_Count'], calc_df['Total_Job_Time_Hours'])
+        
+    job_type_stats = calc_df.groupby(subtype_col).agg(
+        Total_Jobs=('#ID', 'count') if '#ID' in calc_df.columns else (subtype_col, 'count'),
+        Total_Items=('Item_Count', 'sum'),
+        Avg_Job_Time=('Time_Per_Item', 'mean'),
+        Min_Job_Time=('Time_Per_Item', 'min'),
+        Max_Job_Time=('Time_Per_Item', 'max'),
         Avg_Store_Time=('Store_Time_Hrs', lambda x: x[x > 0].mean() if len(x[x > 0]) > 0 else 0.0)
     ).reset_index()
     
-    job_type_stats['Avg Job Length'] = job_type_stats['Avg_Job_Time'].apply(format_hm)
-    job_type_stats['Min Job Length'] = job_type_stats['Min_Job_Time'].apply(format_hm)
-    job_type_stats['Max Job Length'] = job_type_stats['Max_Job_Time'].apply(format_hm)
+    job_type_stats['Avg Time per Item'] = job_type_stats['Avg_Job_Time'].apply(format_hm)
+    job_type_stats['Min Time per Item'] = job_type_stats['Min_Job_Time'].apply(format_hm)
+    job_type_stats['Max Time per Item'] = job_type_stats['Max_Job_Time'].apply(format_hm)
     job_type_stats['Avg Store Delay'] = job_type_stats['Avg_Store_Time'].apply(format_hm)
     
     job_type_stats = job_type_stats.sort_values('Total_Jobs', ascending=False)
     
-    display_df = job_type_stats[[subtype_col, 'Total_Jobs', 'Avg Job Length', 'Min Job Length', 'Max Job Length', 'Avg Store Delay']]
-    display_df = display_df.rename(columns={subtype_col: 'Job Title / Task', 'Total_Jobs': 'Total Dispatches Closed'})
+    display_df = job_type_stats[[subtype_col, 'Total_Jobs', 'Total_Items', 'Avg Time per Item', 'Min Time per Item', 'Max Time per Item', 'Avg Store Delay']]
+    display_df = display_df.rename(columns={subtype_col: 'Job Title / Task', 'Total_Jobs': 'Total Dispatches Closed', 'Total_Items': 'Total Items Installed'})
     
     st.dataframe(display_df.reset_index(drop=True), use_container_width=True)
     create_copy_button(display_df, "job_subtype_breakdown_matrix")
@@ -1976,7 +1999,7 @@ if time_file and ops_file:
 
             if "⏱️ Technician Task Speed Leaderboard (Sub-Type)" in test_choices:
                 st.markdown("### **⏱️ Technician Task Speed Leaderboard (Sub-Type)**")
-                st.markdown("*(Breaks down specific job titles and compares average completion times across technicians to pinpoint the fastest executor)*")
+                st.markdown("*(Breaks down specific job titles and compares average completion times across technicians to pinpoint the fastest executor. Accounts for multi-item quantities!)*")
                 
                 cols_lower = [str(c).lower().strip() for c in ops_df.columns]
                 subtype_col = None
@@ -1985,6 +2008,8 @@ if time_file and ops_file:
                         subtype_col = ops_df.columns[cols_lower.index(target)]
                         break
                         
+                subtitle_col = ops_df.columns[cols_lower.index('subtitle')] if 'subtitle' in cols_lower else None
+                        
                 if subtype_col:
                     task_df = ops_df[ops_df['Total_Job_Time_Hours'] > 0].copy()
                     if not task_df.empty:
@@ -1992,23 +2017,31 @@ if time_file and ops_file:
                         selected_task = st.selectbox("Select a Job Sub-Type to Analyze:", unique_tasks, key="test_task_speed_selector")
                         
                         if selected_task:
-                            task_subset = task_df[task_df[subtype_col] == selected_task]
+                            task_subset = task_df[task_df[subtype_col] == selected_task].copy()
+                            
+                            if subtitle_col:
+                                task_subset['Item_Count'] = task_subset[subtitle_col].apply(parse_item_count)
+                            else:
+                                task_subset['Item_Count'] = 1
+                                
+                            task_subset['Time_Per_Item'] = np.where(task_subset['Item_Count'] > 0, task_subset['Total_Job_Time_Hours'] / task_subset['Item_Count'], task_subset['Total_Job_Time_Hours'])
                             
                             tech_task_stats = task_subset.groupby('Name').agg(
                                 Jobs_Completed=('#ID', 'count') if '#ID' in task_df.columns else (subtype_col, 'count'),
-                                Avg_Time=('Total_Job_Time_Hours', 'mean'),
-                                Min_Time=('Total_Job_Time_Hours', 'min'),
-                                Max_Time=('Total_Job_Time_Hours', 'max')
+                                Items_Installed=('Item_Count', 'sum'),
+                                Avg_Time=('Time_Per_Item', 'mean'),
+                                Min_Time=('Time_Per_Item', 'min'),
+                                Max_Time=('Time_Per_Item', 'max')
                             ).reset_index()
                             
                             tech_task_stats = tech_task_stats.sort_values(by='Avg_Time', ascending=True)
                             
                             show_task_stats = tech_task_stats.copy()
-                            show_task_stats['Avg Time'] = show_task_stats['Avg_Time'].apply(format_hm)
-                            show_task_stats['Min Time'] = show_task_stats['Min_Time'].apply(format_hm)
-                            show_task_stats['Max Time'] = show_task_stats['Max_Time'].apply(format_hm)
+                            show_task_stats['Avg Time per Item'] = show_task_stats['Avg_Time'].apply(format_hm)
+                            show_task_stats['Min Time per Item'] = show_task_stats['Min_Time'].apply(format_hm)
+                            show_task_stats['Max Time per Item'] = show_task_stats['Max_Time'].apply(format_hm)
                             
-                            final_show = show_task_stats[['Name', 'Jobs_Completed', 'Avg Time', 'Min Time', 'Max Time']].rename(columns={'Jobs_Completed': 'Times Performed'})
+                            final_show = show_task_stats[['Name', 'Jobs_Completed', 'Items_Installed', 'Avg Time per Item', 'Min Time per Item', 'Max Time per Item']].rename(columns={'Jobs_Completed': 'Jobs Performed', 'Items_Installed': 'Total Items Installed'})
                             
                             def highlight_fastest(row):
                                 if row.name == final_show.index[0]:
