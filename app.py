@@ -2070,6 +2070,20 @@ if time_file and ops_file:
                         if selected_tech:
                             tech_subset = task_df[task_df['Name'] == selected_tech].copy()
                             
+                            tech_wh_jobs = tech_subset[tech_subset['Business Unit'] == 'Lowes - Water Heaters'] if 'Business Unit' in tech_subset.columns else pd.DataFrame()
+                            tech_lsi_jobs = tech_subset[tech_subset['Business Unit'] == 'Lowes - Simple Installs'] if 'Business Unit' in tech_subset.columns else pd.DataFrame()
+                            
+                            wh_avg_val = tech_wh_jobs['Total_Job_Time_Hours'].mean() if (not tech_wh_jobs.empty and pd.notna(tech_wh_jobs['Total_Job_Time_Hours'].mean())) else 0.0
+                            lsi_avg_val = tech_lsi_jobs['Total_Job_Time_Hours'].mean() if (not tech_lsi_jobs.empty and pd.notna(tech_lsi_jobs['Total_Job_Time_Hours'].mean())) else 0.0
+                            
+                            m_col1, m_col2 = st.columns(2)
+                            with m_col1:
+                                st.metric(label="🛢️ Avg Water Heater Job Time", value=format_hm(wh_avg_val))
+                            with m_col2:
+                                st.metric(label="🔧 Avg Simple Install Job Time", value=format_hm(lsi_avg_val))
+                                
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            
                             if subtitle_col:
                                 tech_subset['Item_Count'] = tech_subset[subtitle_col].apply(parse_item_count)
                             else:
