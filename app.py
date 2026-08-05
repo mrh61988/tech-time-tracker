@@ -412,7 +412,7 @@ def check_late(row):
     return False
 
 def check_contractor(tech_str):
-    CORE_TECHS = ['Bryan Pickett', 'Edward Lopez', 'Erik Tange', 'Mathew Hodges', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
+    CORE_TECHS = ['Bryan Pickett', 'Erik Tange', 'Mathew Hodges', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
     raw_members = [m.strip() for m in str(tech_str).split(',') if m.strip()]
     return not any(m in CORE_TECHS for m in raw_members)
 
@@ -472,7 +472,7 @@ def get_assumed_pay(row):
     rate = 0.0
     if 'nate' in nl or 'nathan' in nl:
         rate = 22.50
-    elif any(n in nl for n in ['edward', 'tanner']) or 'matt schlosser' in nl:
+    elif 'tanner' in nl or 'matt schlosser' in nl:
         rate = 25.00
         
     if rate > 0:
@@ -790,7 +790,7 @@ ops_file = st.sidebar.file_uploader("Upload Lowes Ops Export (CSV)", type=['csv'
 
 if time_file and ops_file:
     try:
-        CORE_TECHS = ['Bryan Pickett', 'Edward Lopez', 'Erik Tange', 'Mathew Hodges', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
+        CORE_TECHS = ['Bryan Pickett', 'Erik Tange', 'Mathew Hodges', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
         
         st.sidebar.header("⏱️ Manual Time Adjustments")
         st.sidebar.markdown("*(Adjust weekly clocked hours. Use formats like `+1:30`, `-0:45`, or `1.5`)*")
@@ -1749,7 +1749,7 @@ if time_file and ops_file:
                     
                     rate = 0.0
                     if 'nate' in nl or 'nathan' in nl: rate = 22.50
-                    elif any(n in nl for n in ['edward', 'tanner']) or 'matt schlosser' in nl: rate = 25.00
+                    elif 'tanner' in nl or 'matt schlosser' in nl: rate = 25.00
                     
                     if clocked > 40.0 and rate > 0:
                         ot_hours = clocked - 40.0
