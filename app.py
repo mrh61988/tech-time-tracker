@@ -690,11 +690,42 @@ def run_baselines_matrix(ops_df):
             create_copy_button(lsi_matrix_df, copy_key)
         else: st.success("✅ Zero individual Simple Install jobs exceeded the division baseline average.")
 
+def run_job_type_breakdown_matrix(ops_df):
+    st.markdown("<h4>📋 Advanced Job Type Length Breakdown</h4>", unsafe_allow_html=True)
+    st.markdown("*(Comprehensive breakdown of average, minimum, and maximum job duration lengths across all business units)*")
+    
+    if 'Business Unit' not in ops_df.columns:
+        st.warning("Business Unit data is not available to create this breakdown.")
+        return
+        
+    job_type_stats = ops_df.groupby('Business Unit').agg(
+        Total_Jobs=('#ID', 'count'),
+        Avg_Job_Time=('Total_Job_Time_Hours', 'mean'),
+        Min_Job_Time=('Total_Job_Time_Hours', 'min'),
+        Max_Job_Time=('Total_Job_Time_Hours', 'max'),
+        Avg_Store_Time=('Store_Time_Hrs', lambda x: x[x > 0].mean() if len(x[x > 0]) > 0 else 0.0)
+    ).reset_index()
+    
+    job_type_stats['Avg Job Length'] = job_type_stats['Avg_Job_Time'].apply(format_hm)
+    job_type_stats['Min Job Length'] = job_type_stats['Min_Job_Time'].apply(format_hm)
+    job_type_stats['Max Job Length'] = job_type_stats['Max_Job_Time'].apply(format_hm)
+    job_type_stats['Avg Store Delay'] = job_type_stats['Avg_Store_Time'].apply(format_hm)
+    
+    job_type_stats = job_type_stats.sort_values('Total_Jobs', ascending=False)
+    display_df = job_type_stats[['Business Unit', 'Total_Jobs', 'Avg Job Length', 'Min Job Length', 'Max Job Length', 'Avg Store Delay']]
+    display_df = display_df.rename(columns={'Business Unit': 'Job Type', 'Total_Jobs': 'Total Dispatches Closed'})
+    
+    st.dataframe(display_df.reset_index(drop=True), use_container_width=True)
+    create_copy_button(display_df, "job_type_breakdown_matrix")
+
 def show_advanced_reporting(unexploded_ops, ops_df, final_df, bounds_df, delayed_launches_df, daily_route, tab_key):
     st.markdown('<div class="hide-on-print"><br><hr><br></div>', unsafe_allow_html=True)
     st.header("📊 Ops Manager Tools (Benchmarking & Performance)")
     
     run_baselines_matrix(ops_df)
+    st.markdown("<br><hr><br>", unsafe_allow_html=True)
+    
+    run_job_type_breakdown_matrix(ops_df)
     st.markdown("<br><hr><br>", unsafe_allow_html=True)
     
     col_left, col_right = st.columns(2)
@@ -1416,7 +1447,8 @@ if time_file and ops_file:
                     "🚛 End-of-Day (EOD) Payroll Slippage Auditor",
                     "🤖 AI Outlier & Anomalous Duration Detector",
                     "🚙 Dynamic Machine Learning Drive Time Forecast",
-                    "🎖️ Gamification Leaderboards & Digital Badges"
+                    "🎖️ Gamification Leaderboards & Digital Badges",
+                    "⏱️ Technician Task Speed Leaderboard (Sub-Type)"
                 ], 
                 default=["🏆 The Golden Ratio Margin Predictor"], 
                 key="sandbox_view_choices"
@@ -1881,17 +1913,6 @@ if time_file and ops_file:
                     create_copy_button(final_yield_df, "geographic_revenue_yield_drive_hour")
                 else: st.info("Location Address column missing from raw ops datasets.")
 
-            if "🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)" in test_choices:
-                st.markdown("### **🗺️ Revenue Yield per Drive Hour (Geo-Routing Efficiency)**")
-                route_eff = ops_df.groupby('Name').agg(Total_Revenue=('Total Invoice Amount', 'sum'), Total_Drive_Hrs=('Drive_Time_Hrs', 'sum')).reset_index()
-                route_eff['Rev per Drive Hour Raw'] = np.where(route_eff['Total_Drive_Hrs'] > 0, route_eff['Total_Revenue'] / route_eff['Total_Drive_Hrs'], 0.0)
-                route_eff = route_eff.sort_values(by='Rev per Drive Hour Raw', ascending=False)
-                route_eff['Total Assigned Revenue'] = route_eff['Total_Revenue'].apply(lambda x: f"${x:,.2f}")
-                route_eff['Total Drive Hours'] = route_eff['Total_Drive_Hrs'].apply(lambda x: f"{x:.1f} hrs")
-                route_eff['Revenue per Drive Hour'] = route_eff['Rev per Drive Hour Raw'].apply(lambda x: f"${x:.1f}/hr")
-                
-                st.dataframe(route_eff[['Name', 'Total Assigned Revenue', 'Total Drive Hours', 'Revenue per Drive Hour']].reset_index(drop=True), use_container_width=True)
-
             if "🚛 End-of-Day (EOD) Payroll Slippage Auditor" in test_choices:
                 st.markdown("### **🚛 End-of-Day (EOD) Payroll Slippage Auditor**")
                 st.markdown("*(Flags instances where a technician remained clocked in for more than 90 minutes after completing their final job order)*")
@@ -1916,6 +1937,59 @@ if time_file and ops_file:
                         create_copy_button(show_slippage, "eod_slippage_auditor")
                     else:
                         st.success("✅ Excellent shift close alignment. All technician timecards match close-of-work operational profiles.")
+
+            if "⏱️ Technician Task Speed Leaderboard (Sub-Type)" in test_choices:
+                st.markdown("### **⏱️ Technician Task Speed Leaderboard (Sub-Type)**")
+                st.markdown("*(Breaks down specific job titles and compares average completion times across technicians to pinpoint the fastest executor)*")
+                
+                cols_lower = [str(c).lower().strip() for c in ops_df.columns]
+                subtype_col = None
+                for target in ['job title', 'task', 'service type', 'description', 'work order type', 'item description', 'job type']:
+                    if target in cols_lower:
+                        subtype_col = ops_df.columns[cols_lower.index(target)]
+                        break
+                        
+                if subtype_col:
+                    task_df = ops_df[ops_df['Total_Job_Time_Hours'] > 0].copy()
+                    if not task_df.empty:
+                        unique_tasks = sorted([str(x) for x in task_df[subtype_col].dropna().unique()])
+                        selected_task = st.selectbox("Select a Job Sub-Type to Analyze:", unique_tasks, key="test_task_speed_selector")
+                        
+                        if selected_task:
+                            task_subset = task_df[task_df[subtype_col] == selected_task]
+                            
+                            tech_task_stats = task_subset.groupby('Name').agg(
+                                Jobs_Completed=('#ID', 'count') if '#ID' in task_df.columns else (subtype_col, 'count'),
+                                Avg_Time=('Total_Job_Time_Hours', 'mean'),
+                                Min_Time=('Total_Job_Time_Hours', 'min'),
+                                Max_Time=('Total_Job_Time_Hours', 'max')
+                            ).reset_index()
+                            
+                            tech_task_stats = tech_task_stats.sort_values(by='Avg_Time', ascending=True)
+                            
+                            show_task_stats = tech_task_stats.copy()
+                            show_task_stats['Avg Time'] = show_task_stats['Avg_Time'].apply(format_hm)
+                            show_task_stats['Min Time'] = show_task_stats['Min_Time'].apply(format_hm)
+                            show_task_stats['Max Time'] = show_task_stats['Max_Time'].apply(format_hm)
+                            
+                            final_show = show_task_stats[['Name', 'Jobs_Completed', 'Avg Time', 'Min Time', 'Max Time']].rename(columns={'Jobs_Completed': 'Times Performed'})
+                            
+                            def highlight_fastest(row):
+                                if row.name == final_show.index[0]:
+                                    return ['background-color: #e6f4ea; color: #137333; font-weight: bold;'] * len(row)
+                                return [''] * len(row)
+
+                            try:
+                                st.dataframe(final_show.style.apply(highlight_fastest, axis=1), use_container_width=True)
+                            except Exception:
+                                st.dataframe(final_show, use_container_width=True)
+                                
+                            create_copy_button(final_show, "tech_task_speed")
+                    else:
+                        st.info("No job duration data available for sub-types to calculate speeds.")
+                else:
+                    st.info("⚠️ Could not identify a 'Job Title' or 'Task' column in the uploaded ops data to generate the sub-type breakdown. Please verify your export columns.")
+
 
     except Exception as e:
         st.error(f"An error occurred while processing the files: Please ensure you uploaded the correct CSV formats. Exact error: {e}")
