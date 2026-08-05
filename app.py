@@ -2014,6 +2014,35 @@ if time_file and ops_file:
                     task_df = ops_df[ops_df['Total_Job_Time_Hours'] > 0].copy()
                     if not task_df.empty:
                         
+                        # --- TABLE 0: Division-Wide Task Averages ---
+                        st.markdown("#### 🏢 Division-Wide Task Averages")
+                        division_task_stats = task_df.copy()
+                        if subtitle_col:
+                            division_task_stats['Item_Count'] = division_task_stats[subtitle_col].apply(parse_item_count)
+                        else:
+                            division_task_stats['Item_Count'] = 1
+                            
+                        division_task_stats['Time_Per_Item'] = np.where(division_task_stats['Item_Count'] > 0, division_task_stats['Total_Job_Time_Hours'] / division_task_stats['Item_Count'], division_task_stats['Total_Job_Time_Hours'])
+                        
+                        div_task_grouped = division_task_stats.groupby(subtype_col).agg(
+                            Jobs_Completed=('#ID', 'count') if '#ID' in task_df.columns else (subtype_col, 'count'),
+                            Items_Installed=('Item_Count', 'sum'),
+                            Avg_Job_Time=('Total_Job_Time_Hours', 'mean'),
+                            Avg_Time=('Time_Per_Item', 'mean')
+                        ).reset_index()
+                        
+                        div_task_grouped = div_task_grouped.sort_values(by='Jobs_Completed', ascending=False)
+                        
+                        show_div_task = div_task_grouped.copy()
+                        show_div_task['Avg Time per Job'] = show_div_task['Avg_Job_Time'].apply(format_hm)
+                        show_div_task['Avg Time per Item'] = show_div_task['Avg_Time'].apply(format_hm)
+                        
+                        final_div_task = show_div_task[[subtype_col, 'Jobs_Completed', 'Items_Installed', 'Avg Time per Job', 'Avg Time per Item']].rename(columns={subtype_col: 'Job Title / Task', 'Jobs_Completed': 'Total Jobs', 'Items_Installed': 'Total Items'})
+                        st.dataframe(final_div_task.reset_index(drop=True), use_container_width=True)
+                        create_copy_button(final_div_task, "division_wide_task_averages")
+
+                        st.markdown("<br><hr><br>", unsafe_allow_html=True)
+                        
                         # --- TABLE 1: By Job Sub-Type ---
                         st.markdown("#### 🥇 Leaderboard by Job Task")
                         unique_tasks = sorted([str(x) for x in task_df[subtype_col].dropna().unique()])
