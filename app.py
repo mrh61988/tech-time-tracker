@@ -944,7 +944,7 @@ if time_file and ops_file:
             raw_members = [m.strip() for m in str(r['Assigned Team Members']).split(',') if m.strip()]
             core_members_on_job = [m for m in raw_members if m in CORE_TECHS]
             for member in core_members_on_job:
-                if member in ['Bryan Pickett', 'Sean Marble', 'Erik Tange'] and r.get('Business Unit') == 'Lowes - Water Heaters':
+                if member in ['Bryan Pickett', 'Erik Tange'] and r.get('Business Unit') == 'Lowes - Water Heaters':
                     jid = int(r['#ID']) if ('#ID' in r and pd.notna(r['#ID'])) else "Unknown"
                     validation_warnings.append(f"⚠️ **Upstream Discrepancy Warning:** {member} is listed on Water Heater job ID **#{jid}** (${r['Total Invoice Amount']:,.2f}) which impacts individual lines of business metric splits.")
         
