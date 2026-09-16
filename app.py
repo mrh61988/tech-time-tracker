@@ -424,7 +424,7 @@ def check_late(row):
     return False
 
 def check_contractor(tech_str):
-    CORE_TECHS = ['Bryan Pickett', 'Erik Tange', 'Mathew Hodges', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
+    CORE_TECHS = ['Bill Black', 'Bryan Pickett', 'Erik Tange', 'Jonathan Knight', 'Mathew Hodges', 'Matt Schlosser', 'Michael Owens', 'Sean Marble', 'Tanner LaForge', 'Will Cox']
     raw_members = [m.strip() for m in str(tech_str).split(',') if m.strip()]
     return not any(m in CORE_TECHS for m in raw_members)
 
@@ -482,9 +482,9 @@ def get_assumed_pay(row):
         return rev * 0.34
         
     rate = 0.0
-    if 'nate' in nl or 'nathan' in nl:
-        rate = 22.50
-    elif 'tanner' in nl or 'matt schlosser' in nl:
+    if 'jonathan knight' in nl:
+        rate = 23.00
+    elif 'tanner' in nl or 'matt schlosser' in nl or 'bill black' in nl or 'will cox' in nl:
         rate = 25.00
         
     if rate > 0:
@@ -884,7 +884,7 @@ ops_file = st.sidebar.file_uploader("Upload Lowes Ops Export (CSV)", type=['csv'
 
 if time_file and ops_file:
     try:
-        CORE_TECHS = ['Bryan Pickett', 'Erik Tange', 'Mathew Hodges', 'Matt Schlosser', 'Michael Owens', 'Nathan Smith', 'Sean Marble', 'Tanner LaForge']
+        CORE_TECHS = ['Bill Black', 'Bryan Pickett', 'Erik Tange', 'Jonathan Knight', 'Mathew Hodges', 'Matt Schlosser', 'Michael Owens', 'Sean Marble', 'Tanner LaForge', 'Will Cox']
         
         st.sidebar.header("⏱️ Manual Time Adjustments")
         st.sidebar.markdown("*(Adjust weekly clocked hours. Use formats like `+1:30`, `-0:45`, or `1.5`)*")
@@ -1152,7 +1152,7 @@ if time_file and ops_file:
         for day in days:
             final_df[day + '_Diff_Hrs'] = final_df[day + '_Clocked_Hrs'] - final_df[day + '_Job_Hrs']
             final_df[f'{day} Jobs'] = final_df[day + '_Job_Count'].astype(int)
-            final_df[f'{day} Clocked'] = final_df[day + '_Clocked_Hrs'].apply(format_hm)
+            final_df[f'{day} Clocked'] = final_df[f'{day} Clocked'] = final_df[day + '_Clocked_Hrs'].apply(format_hm)
             final_df[f'{day} Job Time'] = final_df[day + '_Job_Hrs'].apply(format_hm)
             final_df[f'{day} Diff'] = final_df[day + '_Diff_Hrs'].apply(format_hm)
             
@@ -1840,8 +1840,8 @@ if time_file and ops_file:
                     nl = name.lower()
                     
                     rate = 0.0
-                    if 'nate' in nl or 'nathan' in nl: rate = 22.50
-                    elif 'tanner' in nl or 'matt schlosser' in nl: rate = 25.00
+                    if 'jonathan knight' in nl: rate = 23.00
+                    elif 'tanner' in nl or 'matt schlosser' in nl or 'bill black' in nl or 'will cox' in nl: rate = 25.00
                     
                     if clocked > 40.0 and rate > 0:
                         ot_hours = clocked - 40.0
